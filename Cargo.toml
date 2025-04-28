@@ -1,0 +1,28 @@
+[workspace]
+members = [
+    "programs/*"
+]
+resolver = "2"
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+[profile.release.build-override]
+opt-level = 3
+incremental = false
+codegen-units = 1
+
+[workspace.dependencies]
+anchor-lang = "0.31.1"
+anchor-spl = "0.31.1"
+spl-token-2022 = { version = "7.0.0", features = ["no-entrypoint"] }
+solana-program = "2.1"
+solana-security-txt = "1.1.1"
+cfg-if = "1.0"
+earn = { git = "https://github.com/m0-foundation/solana-m", rev = "0463fb0" }
+
+[toolchain]
+anchor_version = "0.31.1"    # `anchor-cli` version to use(requires `avm`)
+solana_version = "2.1"     # Solana version to use(applies to all Solana tools)
+package_manager = "yarn"     # JS package manager to use
