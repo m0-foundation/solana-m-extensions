@@ -20,7 +20,7 @@ solana_security_txt::security_txt! {
     // Optional Fields
     preferred_languages: "en",
     source_code: "<insert source code url>",
-    auditors: "<insert auditor name(s)>",
+    auditors: "<insert auditor name(s)>"
 }
 
 declare_id!("3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da");
@@ -31,8 +31,8 @@ pub mod scaled_ui_ext {
 
     // Admin instructions
 
-    pub fn initialize(ctx: Context<Initialize>, earn_authority: Pubkey) -> Result<()> {
-        instructions::initialize::handler(ctx, earn_authority)
+    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+        instructions::initialize::handler(ctx)
     }
 
     pub fn set_m_mint(ctx: Context<SetMMint>) -> Result<()> {

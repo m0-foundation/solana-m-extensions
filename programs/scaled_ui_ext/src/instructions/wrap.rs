@@ -11,10 +11,7 @@ use crate::{
     },
     utils::{amount_to_principal, sync_multiplier, mint_tokens, transfer_tokens},
 };
-use earn::{
-    state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
-    ID as EARN_PROGRAM,
-};
+use earn::state::Global as EarnGlobal;
 
 #[derive(Accounts)]
 pub struct Wrap<'info> {

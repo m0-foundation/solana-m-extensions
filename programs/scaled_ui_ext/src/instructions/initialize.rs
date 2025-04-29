@@ -2,7 +2,7 @@
 
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022};
+use anchor_spl::{token_interface::{Mint, Token2022}, token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey};
 use spl_token_2022::extension::{
     BaseStateWithExtensions, ExtensionType, StateWithExtensions,
     scaled_ui_amount::ScaledUiAmountConfig,
@@ -66,7 +66,7 @@ pub struct Initialize<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx: Context<Initialize>, earn_authority: Pubkey) -> Result<()> {
+pub fn handler(ctx: Context<Initialize>) -> Result<()> {
     let m_vault_bump = Pubkey::find_program_address(&[M_VAULT_SEED], ctx.program_id).1;
 
     // Validate the ext_mint_authority PDA is the mint authority for the ext mint
@@ -77,8 +77,10 @@ pub fn handler(ctx: Context<Initialize>, earn_authority: Pubkey) -> Result<()> {
 
     // Validate that the ext mint has the ScaledUiAmount extension and
     // that the ext mint authority is the extension authority
+    let ext_account_info= &ctx.accounts.ext_mint.to_account_info();
+    let ext_data = ext_account_info.try_borrow_data()?;
     let ext_mint_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(
-        &ctx.accounts.ext_mint.to_account_info().try_borrow_data()?
+        &ext_data
     )?;
     let extensions = ext_mint_data.get_extension_types()?;
 
@@ -88,7 +90,7 @@ pub fn handler(ctx: Context<Initialize>, earn_authority: Pubkey) -> Result<()> {
 
     let scaled_ui_config = ext_mint_data
         .get_extension::<ScaledUiAmountConfig>()?;
-    if scaled_ui_config.authority != ext_mint_authority {
+    if scaled_ui_config.authority != OptionalNonZeroPubkey(ext_mint_authority) {
         return err!(ExtError::InvalidMint);
     }
     
