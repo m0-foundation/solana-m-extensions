@@ -15,6 +15,9 @@ use earn::state::Global as EarnGlobal;
 
 #[derive(Accounts)]
 pub struct Wrap<'info> {
+    #[account(
+        constraint = signer.key() != Pubkey::default() && global_account.wrap_authorities.contains(&signer.key()) @ ExtError::NotAuthorized,
+    )]
     pub signer: Signer<'info>,
 
     pub m_mint: InterfaceAccount<'info, Mint>,

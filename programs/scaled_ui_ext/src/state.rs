@@ -15,8 +15,8 @@ pub struct ExtGlobal {
     pub bump: u8,
     pub m_vault_bump: u8,
     pub ext_mint_authority_bump: u8,
+    pub wrap_authorities: [Pubkey; 10], // wrap authorities
 }
-
 
 #[constant]
 pub const MINT_AUTHORITY_SEED: &[u8] = b"ext_mint_authority";

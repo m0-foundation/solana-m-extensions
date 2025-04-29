@@ -66,7 +66,7 @@ pub struct Initialize<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx: Context<Initialize>) -> Result<()> {
+pub fn handler(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
     let m_vault_bump = Pubkey::find_program_address(&[M_VAULT_SEED], ctx.program_id).1;
 
     // Validate the ext_mint_authority PDA is the mint authority for the ext mint
@@ -106,6 +106,19 @@ pub fn handler(ctx: Context<Initialize>) -> Result<()> {
         &ctx.accounts.token_2022
     )?;
 
+    // Validate and create the wrap authorities array
+    if wrap_authorities.len() > 10 {
+        return err!(ExtError::InvalidParam);
+    }
+
+    let mut wrap_authorities_array = [Pubkey::default(); 10];
+    for (i, authority) in wrap_authorities.iter().enumerate() {
+        if wrap_authorities_array.contains(authority) {
+            return err!(ExtError::InvalidParam);
+        }
+        wrap_authorities_array[i] = *authority;
+    }
+
     // Initialize the ExtGlobal account
     ctx.accounts.global_account.set_inner(ExtGlobal {
         admin: ctx.accounts.admin.key(),
@@ -115,6 +128,7 @@ pub fn handler(ctx: Context<Initialize>) -> Result<()> {
         bump: ctx.bumps.global_account,
         m_vault_bump,
         ext_mint_authority_bump: ctx.bumps.ext_mint_authority,
+        wrap_authorities: wrap_authorities_array,
     });
 
     Ok(())
