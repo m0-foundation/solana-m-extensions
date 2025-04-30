@@ -41,6 +41,7 @@ pub struct Initialize<'info> {
     pub m_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
+        mut,
         mint::token_program = token_2022,
         mint::decimals = m_mint.decimals,
         constraint = ext_mint.supply == 0 @ ExtError::InvalidMint,
@@ -77,21 +78,23 @@ pub fn handler(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Resul
 
     // Validate that the ext mint has the ScaledUiAmount extension and
     // that the ext mint authority is the extension authority
-    let ext_account_info= &ctx.accounts.ext_mint.to_account_info();
-    let ext_data = ext_account_info.try_borrow_data()?;
-    let ext_mint_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(
-        &ext_data
-    )?;
-    let extensions = ext_mint_data.get_extension_types()?;
+    { // explicit scope to drop the borrow at the end of the code block
+        let ext_account_info= &ctx.accounts.ext_mint.to_account_info();
+        let ext_data = ext_account_info.try_borrow_data()?;
+        let ext_mint_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(
+            &ext_data
+        )?;
+        let extensions = ext_mint_data.get_extension_types()?;
 
-    if !extensions.contains(&ExtensionType::ScaledUiAmount) {
-        return err!(ExtError::InvalidMint);
-    }
+        if !extensions.contains(&ExtensionType::ScaledUiAmount) {
+            return err!(ExtError::InvalidMint);
+        }
 
-    let scaled_ui_config = ext_mint_data
-        .get_extension::<ScaledUiAmountConfig>()?;
-    if scaled_ui_config.authority != OptionalNonZeroPubkey(ext_mint_authority) {
-        return err!(ExtError::InvalidMint);
+        let scaled_ui_config = ext_mint_data
+            .get_extension::<ScaledUiAmountConfig>()?;
+        if scaled_ui_config.authority != OptionalNonZeroPubkey(ext_mint_authority) {
+            return err!(ExtError::InvalidMint);
+        }
     }
     
     // Sync the ScaledUiAmount multiplier with the M Index
