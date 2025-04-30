@@ -5,6 +5,10 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{
     burn, mint_to, transfer_checked, Burn, Mint, MintTo, Token2022, TokenAccount, TransferChecked,
 };
+use spl_token_2022::extension::{
+    BaseStateWithExtensions, StateWithExtensions,
+    scaled_ui_amount::{PodF64, UnixTimestamp, ScaledUiAmountConfig},
+};
 use earn::state::Global as EarnGlobal;
 use solana_program::program::invoke_signed;
 use crate::constants::{INDEX_SCALE_F64, INDEX_SCALE_U64};
@@ -150,6 +154,23 @@ pub fn sync_multiplier<'info>(
     let multiplier: f64 = (m_earn_global_account.index as f64) / INDEX_SCALE_F64;
     let timestamp: i64 = m_earn_global_account.timestamp as i64;
 
+    // Compare against the current multiplier
+    // If the multiplier is the same, we don't need to update
+    { // explicit scope to drop the borrow at the end of the code block
+        let ext_account_info= &mint.to_account_info();
+        let ext_data = ext_account_info.try_borrow_data()?;
+        let ext_mint_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(
+            &ext_data
+        )?;
+        let scaled_ui_config = ext_mint_data
+            .get_extension::<ScaledUiAmountConfig>()?;
+
+        if scaled_ui_config.new_multiplier == PodF64::from(multiplier) 
+            && scaled_ui_config.new_multiplier_effective_timestamp == UnixTimestamp::from(timestamp) {
+            return Ok(multiplier);
+        }
+    }
+
     update_scaled_ui_multiplier(mint, multiplier, timestamp, authority, authority_seeds, token_program)?;
 
     return Ok(multiplier)
@@ -161,11 +182,16 @@ pub fn amount_to_principal(
 ) -> u64 {
     // We want to avoid precision errors with floating point numbers
     // Therefore, we use integer math.
-    let index = (multiplier * INDEX_SCALE_F64).trunc() as u64;
+    let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
 
     // Calculate the principal from the amount and index, rounding down
     // TODO mirror EVM rounding behavior
-    (amount * INDEX_SCALE_U64) / index
+    let principal: u64 = (amount as u128)
+        .checked_mul(INDEX_SCALE_U64 as u128).expect("amount * INDEX_SCALE_U64 overflow")
+        .checked_div(index).expect("amount * INDEX_SCALE_U64 / index underflow")
+        .try_into().expect("conversion overflow");
+    
+    principal
 }
 
 pub fn principal_to_amount(
@@ -174,9 +200,13 @@ pub fn principal_to_amount(
 ) -> u64 {
     // We want to avoid precision errors with floating point numbers
     // Therefore, we use integer math.
-    let index = (multiplier * INDEX_SCALE_F64).trunc() as u64;
+    let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
 
     // Calculate the amount from the principal and index, rounding down
     // TODO mirror EVM rounding behavior``
-    (principal * index) / INDEX_SCALE_U64
+    let amount: u64 = index.checked_mul(principal as u128).expect("index * principal overflow")
+        .checked_div(INDEX_SCALE_U64 as u128).expect("index * principal / INDEX_SCALE_U64 underflow")
+        .try_into().expect("conversion overflow");
+
+    amount
 }
