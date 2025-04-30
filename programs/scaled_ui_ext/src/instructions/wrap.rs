@@ -9,7 +9,7 @@ use crate::{
         ExtGlobal, EXT_GLOBAL_SEED,
         MINT_AUTHORITY_SEED, M_VAULT_SEED,
     },
-    utils::{amount_to_principal, sync_multiplier, mint_tokens, transfer_tokens},
+    utils::{amount_to_principal_down, sync_multiplier, mint_tokens, transfer_tokens},
 };
 use earn::state::Global as EarnGlobal;
 
@@ -103,7 +103,7 @@ pub fn handler(ctx: Context<Wrap>, amount: u64) -> Result<()> {
     // Calculate the amount of ext tokens to mint based
     // on the amount of m tokens wrapped
     // TODO handle rounding
-    let principal = amount_to_principal(amount, multiplier);
+    let principal = amount_to_principal_down(amount, multiplier);
 
     // Mint the amount of ext tokens to the user
     mint_tokens(

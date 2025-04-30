@@ -11,7 +11,7 @@ use crate::{
         M_VAULT_SEED,
         MINT_AUTHORITY_SEED,
     },
-    utils::{amount_to_principal, burn_tokens, sync_multiplier, transfer_tokens_from_program},
+    utils::{amount_to_principal_down, burn_tokens, sync_multiplier, transfer_tokens_from_program},
 };
 use earn::state::Global as EarnGlobal;
 
@@ -95,7 +95,7 @@ pub fn handler(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
     // Calculate the principal amount of ext tokens to burn
     // from the amount of m tokens to unwrap
     // TODO handle rounding
-    let principal = amount_to_principal(amount, multiplier);
+    let principal = amount_to_principal_down(amount, multiplier);
 
     // Burn the amount of ext tokens from the user
     burn_tokens(

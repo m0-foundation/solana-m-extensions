@@ -176,7 +176,7 @@ pub fn sync_multiplier<'info>(
     return Ok(multiplier)
 }
 
-pub fn amount_to_principal(
+pub fn amount_to_principal_down(
     amount: u64,
     multiplier: f64
 ) -> u64 {
@@ -185,7 +185,6 @@ pub fn amount_to_principal(
     let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
 
     // Calculate the principal from the amount and index, rounding down
-    // TODO mirror EVM rounding behavior
     let principal: u64 = (amount as u128)
         .checked_mul(INDEX_SCALE_U64 as u128).expect("amount * INDEX_SCALE_U64 overflow")
         .checked_div(index).expect("amount * INDEX_SCALE_U64 / index underflow")
@@ -194,7 +193,27 @@ pub fn amount_to_principal(
     principal
 }
 
-pub fn principal_to_amount(
+pub fn amount_to_principal_up(
+    amount: u64,
+    multiplier: f64
+) -> u64 {
+    // We want to avoid precision errors with floating point numbers
+    // Therefore, we use integer math.
+    let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
+
+    // Calculate the principal from the amount and index, rounding up
+    let principal: u64 = (amount as u128)
+        .checked_mul(INDEX_SCALE_U64 as u128).expect("amount * INDEX_SCALE_U64 overflow")
+        .checked_add(
+            index.checked_sub(1u128).expect("index - 1 underflow")
+        ).expect("amount * INDEX_SCALE_U64 + index overflow")
+        .checked_div(index).expect("amount * INDEX_SCALE_U64 + index / index underflow")
+        .try_into().expect("conversion overflow");
+
+    principal
+}
+
+pub fn principal_to_amount_down(
     principal: u64,
     multiplier: f64
 ) -> u64 {
@@ -203,9 +222,27 @@ pub fn principal_to_amount(
     let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
 
     // Calculate the amount from the principal and index, rounding down
-    // TODO mirror EVM rounding behavior``
     let amount: u64 = index.checked_mul(principal as u128).expect("index * principal overflow")
         .checked_div(INDEX_SCALE_U64 as u128).expect("index * principal / INDEX_SCALE_U64 underflow")
+        .try_into().expect("conversion overflow");
+
+    amount
+}
+
+pub fn principal_to_amount_up(
+    principal: u64,
+    multiplier: f64
+) -> u64 {
+    // We want to avoid precision errors with floating point numbers
+    // Therefore, we use integer math.
+    let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
+
+    // Calculate the amount from the principal and index, rounding up
+    let amount: u64 = index.checked_mul(principal as u128).expect("index * principal overflow")
+        .checked_add(
+            INDEX_SCALE_U64 as u128 - 1u128
+        ).expect("index * principal + INDEX_SCALE_U64 - 1 overflow")
+        .checked_div(INDEX_SCALE_U64 as u128).expect("index * principal + INDEX_SCALE_U64 - 1 / INDEX_SCALE_U64 underflow")
         .try_into().expect("conversion overflow");
 
     amount
