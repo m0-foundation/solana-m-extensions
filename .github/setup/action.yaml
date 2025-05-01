@@ -1,0 +1,65 @@
+name: setup
+description: 'Installing tooling and dependencies for running tests'
+inputs:
+  node-version:
+    description: 'Node.js version'
+    required: false
+    default: '22'
+  solana-version:
+    description: 'Solana version'
+    required: false
+    default: '2.1.0'
+  anchor-version:
+    description: 'Anchor version'
+    required: false
+    default: 'v0.31.1'
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        components: rustc
+
+    - name: Cache Cargo dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Cache Solana CLI
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/solana/
+          ~/.local/share/solana/
+        key: solana-cli-${{ inputs.solana-version }}
+
+    - name: Install Solana CLI
+      run: |
+        mkdir -p ~/.local/share/solana
+        sh -c "$(curl -sSfL https://release.solana.com/v${{ inputs.solana-version }}/install)"
+        echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+      shell: bash
+
+    - name: Cache node_modules
+      uses: actions/cache@v3
+      with:
+        path: ./node_modules/
+        key: node-modules-${{ inputs.node-version }}
+
+    - name: Install Anchor CLI
+      run: npm i -g @coral-xyz/anchor-cli@${{ inputs.anchor-version }}
+      shell: bash
+
+    - name: Install Node Dependencies
+      run: npm i -g yarn && yarn install
+      shell: bash
+
+    - name: Build programs
+      run: anchor build
+      shell: bash

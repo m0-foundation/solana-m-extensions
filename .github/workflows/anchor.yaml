@@ -1,0 +1,29 @@
+name: program-tests
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+# concurrency configuration to cancel in-progress runs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scaled-ui-ext-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Environment
+        uses: ./.github/setup
+
+      - name: Run tests
+        run: yarn run jest --preset ts-jest --verbose tests/unit/scaled_ui_ext.test.ts
+        shell: bash
