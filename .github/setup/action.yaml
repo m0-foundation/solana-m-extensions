@@ -57,7 +57,7 @@ runs:
       shell: bash
 
     - name: Install Node Dependencies
-      run: npm i -g yarn tsup && yarn install
+      run: npm i -g yarn typescript tsup && yarn install
       shell: bash
 
     - name: Build programs
