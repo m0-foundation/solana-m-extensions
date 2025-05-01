@@ -10,9 +10,9 @@ inputs:
     required: false
     default: '2.1.0'
   anchor-version:
-    description: 'Anchor version'
+    description: 'Anchor CLI version'
     required: false
-    default: '^0.31'
+    default: '0.31.1'
 runs:
   using: 'composite'
   steps:
