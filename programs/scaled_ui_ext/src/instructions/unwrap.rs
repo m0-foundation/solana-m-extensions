@@ -8,7 +8,7 @@ use crate::{
     state::{
         ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED
     },
-    utils::{amount_to_principal_down, burn_tokens, check_solvency, sync_multiplier, transfer_tokens_from_program},
+    utils::{amount_to_principal_up, burn_tokens, check_solvency, sync_multiplier, transfer_tokens_from_program},
 };
 use earn::state::Global as EarnGlobal;
 
@@ -89,7 +89,7 @@ pub fn handler(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
     )?;
 
     let multiplier = sync_multiplier(
-        &ctx.accounts.ext_mint,
+        &mut ctx.accounts.ext_mint,
         &ctx.accounts.m_earn_global_account,
         &ctx.accounts.ext_mint_authority,
         authority_seeds,
@@ -98,8 +98,10 @@ pub fn handler(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
 
     // Calculate the principal amount of ext tokens to burn
     // from the amount of m tokens to unwrap
-    // TODO handle rounding
-    let principal = amount_to_principal_down(amount, multiplier);
+    let mut principal = amount_to_principal_up(amount, multiplier);
+    if principal > ctx.accounts.from_ext_token_account.amount {
+        principal = ctx.accounts.from_ext_token_account.amount;
+    }
 
     // Burn the amount of ext tokens from the user
     burn_tokens(

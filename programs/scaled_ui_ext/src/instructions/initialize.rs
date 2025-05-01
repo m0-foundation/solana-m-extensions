@@ -101,7 +101,7 @@ pub fn handler(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Resul
     // We don't need to check collateralization here because
     // the ext mint must have a supply of 0 to start
     sync_multiplier(
-        &ctx.accounts.ext_mint,
+        &mut ctx.accounts.ext_mint,
         &ctx.accounts.m_earn_global_account,
         &ctx.accounts.ext_mint_authority,
     &[&[

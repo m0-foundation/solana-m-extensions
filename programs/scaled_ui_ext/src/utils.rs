@@ -142,7 +142,11 @@ pub fn check_solvency<'info>(
     let vault_amount = vault_m_token_account.amount;
 
     // Calculate the amount of tokens needed to be solvent
-    let required_amount = principal_to_amount_down(ext_mint.supply, multiplier);
+    // Reduce it by one to avoid rounding errors
+    let mut required_amount = principal_to_amount_down(ext_mint.supply, multiplier);
+    if required_amount > 0 {
+        required_amount -= 1;
+    }
 
     // Check if the vault has enough tokens
     if vault_amount < required_amount {
@@ -153,7 +157,7 @@ pub fn check_solvency<'info>(
 }
 
 pub fn sync_multiplier<'info>(
-    ext_mint: &InterfaceAccount<'info, Mint>,
+    ext_mint: &mut InterfaceAccount<'info, Mint>,
     m_earn_global_account: &Account<'info, EarnGlobal>,
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
@@ -195,6 +199,9 @@ pub fn sync_multiplier<'info>(
         ],
         authority_seeds,
     )?;
+
+    // Reload the mint account so the new multiplier is reflected
+    ext_mint.reload()?;
 
     return Ok(multiplier)
 }

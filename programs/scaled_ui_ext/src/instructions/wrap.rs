@@ -90,7 +90,7 @@ pub fn handler(ctx: Context<Wrap>, amount: u64) -> Result<()> {
     )?;
 
     let multiplier = sync_multiplier(
-        &ctx.accounts.ext_mint,
+        &mut ctx.accounts.ext_mint,
         &ctx.accounts.m_earn_global_account,
         &ctx.accounts.ext_mint_authority,
         authority_seeds,

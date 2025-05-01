@@ -64,7 +64,7 @@ pub fn handler(ctx: Context<Sync>) -> Result<()> {
     // This will update the multiplier on ext_mint 
     // if it doesn't match the index on m_earn_global_account
     sync_multiplier(
-        &ctx.accounts.ext_mint,
+        &mut ctx.accounts.ext_mint,
         &ctx.accounts.m_earn_global_account, 
         &ctx.accounts.ext_mint_authority,
         &[&[
