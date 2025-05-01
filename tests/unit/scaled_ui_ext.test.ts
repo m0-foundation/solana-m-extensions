@@ -2656,9 +2656,6 @@ describe('ScaledUiExt unit tests', () => {
         // Setup the instruction
         await prepSync(nonAdmin);
 
-        console.log('vault balance', (await getTokenBalance(mVaultATA)).toString());
-        console.log('required collateral', newIndex.mul(new BN((await getMint(provider.connection, extMint.publicKey, undefined, TOKEN_2022_PROGRAM_ID)).supply.toString())).div(new BN(1e12)).toString());
-
         // Send the instruction
         await scaledUiExt.methods
           .sync()
