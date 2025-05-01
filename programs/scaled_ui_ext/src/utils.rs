@@ -1,5 +1,7 @@
 // ext_earn/utils/token.rs
 
+use core::f64;
+
 // external dependencies
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{
@@ -11,7 +13,10 @@ use spl_token_2022::extension::{
 };
 use earn::state::Global as EarnGlobal;
 use solana_program::program::invoke_signed;
-use crate::constants::{INDEX_SCALE_F64, INDEX_SCALE_U64};
+use crate::{
+    constants::{INDEX_SCALE_F64, INDEX_SCALE_U64},
+    errors::ExtError,
+};
 
 pub fn transfer_tokens_from_program<'info>(
     from: &InterfaceAccount<'info, TokenAccount>,
@@ -115,49 +120,52 @@ pub fn burn_tokens<'info>(
     Ok(())
 }
 
-fn update_scaled_ui_multiplier<'info>(
-    mint: &InterfaceAccount<'info, Mint>,
-    multiplier: f64,
-    timestamp: i64,
-    authority: &AccountInfo<'info>,
-    authority_seeds: &[&[&[u8]]],
-    token_program: &Program<'info, Token2022>,
-) -> Result<()> {
+fn get_multiplier_and_timestamp<'info>(
+    m_earn_global_account: &Account<'info, EarnGlobal>
+) -> (f64, i64) {
+    // Get the current index and timestamp from the m_earn_global_account
+    let multiplier: f64 = (m_earn_global_account.index as f64) / INDEX_SCALE_F64;
+    let timestamp: i64 = m_earn_global_account.timestamp as i64;
 
-    invoke_signed(
-        &spl_token_2022::extension::scaled_ui_amount::instruction::update_multiplier(
-            &token_program.key(),
-            &mint.key(),
-            &authority.key(),
-            &[],
-            multiplier,
-            timestamp,
-        )?,
-        &[
-            mint.to_account_info(),
-            authority.clone(),
-        ],
-        authority_seeds,
-    )?;
+    (multiplier, timestamp)
+}
+
+pub fn check_solvency<'info>(
+    ext_mint: &InterfaceAccount<'info, Mint>,
+    m_earn_global_account: &Account<'info, EarnGlobal>,
+    vault_m_token_account: &InterfaceAccount<'info, TokenAccount>,
+) -> Result<()> {
+    // Get the current index and timestamp from the m_earn_global_account
+    let (multiplier, _): (f64, i64) = get_multiplier_and_timestamp(m_earn_global_account);
+
+    // Calculate the amount of tokens in the vault
+    let vault_amount = vault_m_token_account.amount;
+
+    // Calculate the amount of tokens needed to be solvent
+    let required_amount = principal_to_amount_down(ext_mint.supply, multiplier);
+
+    // Check if the vault has enough tokens
+    if vault_amount < required_amount {
+        return err!(ExtError::InsufficientCollateral);
+    }
 
     Ok(())
 }
 
 pub fn sync_multiplier<'info>(
-    mint: &InterfaceAccount<'info, Mint>,
+    ext_mint: &InterfaceAccount<'info, Mint>,
     m_earn_global_account: &Account<'info, EarnGlobal>,
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
     token_program: &Program<'info, Token2022>,
 ) -> Result<f64> {
     // Get the current index and timestamp from the m_earn_global_account
-    let multiplier: f64 = (m_earn_global_account.index as f64) / INDEX_SCALE_F64;
-    let timestamp: i64 = m_earn_global_account.timestamp as i64;
-
+    let (multiplier, timestamp): (f64, i64) = get_multiplier_and_timestamp(m_earn_global_account);
+    
     // Compare against the current multiplier
     // If the multiplier is the same, we don't need to update
     { // explicit scope to drop the borrow at the end of the code block
-        let ext_account_info= &mint.to_account_info();
+        let ext_account_info= &ext_mint.to_account_info();
         let ext_data = ext_account_info.try_borrow_data()?;
         let ext_mint_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(
             &ext_data
@@ -171,7 +179,22 @@ pub fn sync_multiplier<'info>(
         }
     }
 
-    update_scaled_ui_multiplier(mint, multiplier, timestamp, authority, authority_seeds, token_program)?;
+    // Update the multiplier and timestamp in the mint account
+    invoke_signed(
+        &spl_token_2022::extension::scaled_ui_amount::instruction::update_multiplier(
+            &token_program.key(),
+            &ext_mint.key(),
+            &authority.key(),
+            &[],
+            multiplier,
+            timestamp,
+        )?,
+        &[
+            ext_mint.to_account_info(),
+            authority.clone(),
+        ],
+        authority_seeds,
+    )?;
 
     return Ok(multiplier)
 }

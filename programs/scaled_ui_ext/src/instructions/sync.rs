@@ -1,11 +1,11 @@
 // scaled_ui_ext/instructions/sync.rs
 
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022};
+use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use crate::{
     errors::ExtError,
-    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED}, 
-    utils::sync_multiplier,
+    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED}, 
+    utils::{check_solvency, sync_multiplier},
 };
 use earn::state::Global as EarnGlobal;
 
@@ -24,6 +24,20 @@ pub struct Sync<'info> {
     )]
     pub global_account: Account<'info, ExtGlobal>,
 
+    /// CHECK: This account is validated by the seed, it stores no data
+    #[account(
+        seeds = [M_VAULT_SEED],
+        bump = global_account.m_vault_bump,
+    )]
+    pub m_vault: AccountInfo<'info>,
+
+    #[account(
+        associated_token::mint = global_account.m_mint,
+        associated_token::authority = m_vault,
+        associated_token::token_program = Token2022::id(),
+    )]
+    pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
+
     #[account(mut)]
     pub ext_mint: InterfaceAccount<'info, Mint>,
 
@@ -38,9 +52,17 @@ pub struct Sync<'info> {
 }
 
 pub fn handler(ctx: Context<Sync>) -> Result<()> {
-    // TODO do we need to check if the vault holds enough collateral for the new multiplier?
-    // I.e. that ext_mint.supply * multiplier <= vault_m_token_account.amount
+    // Check that the vault will be solvent after the sync
+    // TODO: If not, should we skip the sync or revert?
+    check_solvency(
+        &ctx.accounts.ext_mint,
+        &ctx.accounts.m_earn_global_account, 
+        &ctx.accounts.vault_m_token_account,
+    )?;
 
+    // Sync the multiplier
+    // This will update the multiplier on ext_mint 
+    // if it doesn't match the index on m_earn_global_account
     sync_multiplier(
         &ctx.accounts.ext_mint,
         &ctx.accounts.m_earn_global_account, 

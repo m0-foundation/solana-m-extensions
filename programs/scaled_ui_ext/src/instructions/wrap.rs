@@ -9,7 +9,7 @@ use crate::{
         ExtGlobal, EXT_GLOBAL_SEED,
         MINT_AUTHORITY_SEED, M_VAULT_SEED,
     },
-    utils::{amount_to_principal_down, sync_multiplier, mint_tokens, transfer_tokens},
+    utils::{amount_to_principal_down, check_solvency, mint_tokens, sync_multiplier, transfer_tokens},
 };
 use earn::state::Global as EarnGlobal;
 
@@ -82,6 +82,13 @@ pub fn handler(ctx: Context<Wrap>, amount: u64) -> Result<()> {
 
     // Update the scaled UI multiplier with the current M index
     // before wrapping new tokens
+    // Check solvency before syncing
+    check_solvency(
+        &ctx.accounts.ext_mint,
+        &ctx.accounts.m_earn_global_account,
+        &ctx.accounts.vault_m_token_account,
+    )?;
+
     let multiplier = sync_multiplier(
         &ctx.accounts.ext_mint,
         &ctx.accounts.m_earn_global_account,
@@ -117,4 +124,5 @@ pub fn handler(ctx: Context<Wrap>, amount: u64) -> Result<()> {
 
     Ok(())
 }
+
 

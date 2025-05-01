@@ -6,12 +6,9 @@ use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use crate::{
     errors::ExtError,
     state::{
-        ExtGlobal,
-        EXT_GLOBAL_SEED,
-        M_VAULT_SEED,
-        MINT_AUTHORITY_SEED,
+        ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED
     },
-    utils::{amount_to_principal_down, burn_tokens, sync_multiplier, transfer_tokens_from_program},
+    utils::{amount_to_principal_down, burn_tokens, check_solvency, sync_multiplier, transfer_tokens_from_program},
 };
 use earn::state::Global as EarnGlobal;
 
@@ -84,6 +81,13 @@ pub fn handler(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
 
     // Update the scaled UI multiplier with the current M index
     // before unwrapping tokens
+    // Check solvency of the vault
+    check_solvency(
+        &ctx.accounts.ext_mint,
+        &ctx.accounts.m_earn_global_account,
+        &ctx.accounts.vault_m_token_account,
+    )?;
+
     let multiplier = sync_multiplier(
         &ctx.accounts.ext_mint,
         &ctx.accounts.m_earn_global_account,
