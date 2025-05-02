@@ -42,7 +42,7 @@ runs:
     - name: Install Solana CLI
       run: |
         mkdir -p ~/.local/share/solana
-        sh -c "$(curl -sSfL https://release.solana.com/v${{ inputs.solana-version }}/install)"
+        sh -c "$(curl -sSfL https://release.anza.xyz/v${{ inputs.solana-version }}/install)"
         echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
       shell: bash
 
@@ -52,12 +52,12 @@ runs:
         path: ./node_modules/
         key: node-modules-${{ inputs.node-version }}
 
-    - name: Install Anchor CLI
-      run: cargo install --git https://github.com/coral-xyz/anchor avm --force && avm install ${{ inputs.anchor-version }} && avm use ${{ inputs.anchor-version }} && anchor --version
-      shell: bash
-
     - name: Install Node Dependencies
       run: npm i -g yarn typescript tsup && yarn install
+      shell: bash
+
+    - name: Install Anchor CLI
+      run: cargo install --git https://github.com/coral-xyz/anchor anchor --tag v${{ inputs.anchor-version }} --force && anchor --version
       shell: bash
 
     - name: Build programs
