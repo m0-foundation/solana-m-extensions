@@ -2091,12 +2091,6 @@ describe('ScaledUiExt unit tests', () => {
           // Setup the instruction
           const { vaultMTokenAccount, fromMTokenAccount, toExtTokenAccount } = await prepWrap(wrapAuthority);
 
-          console.log('vault balance pre-wrap', (await getTokenBalance(vaultMTokenAccount)).toString());
-          const mEarnState = await earn.account.global.fetch(getEarnGlobalAccount());
-          const extMintState = await getMint(provider.connection, extMint.publicKey, undefined, TOKEN_2022_PROGRAM_ID);
-          console.log('required collateral', BigInt(mEarnState.index.toString()) * extMintState.supply / BigInt(1e12));
-
-
           // Cache initial balances
           const fromMTokenAccountBalance = await getTokenBalance(fromMTokenAccount);
           const vaultMTokenAccountBalance = await getTokenBalance(vaultMTokenAccount);
