@@ -57,7 +57,7 @@ runs:
       shell: bash
 
     - name: Install Anchor CLI
-      run: cargo install --git https://github.com/coral-xyz/anchor anchor --tag v${{ inputs.anchor-version }} --force && anchor --version
+      run: cargo install --git https://github.com/coral-xyz/anchor --tag v${{ inputs.anchor-version }} --force anchor-cli && anchor --version
       shell: bash
 
     - name: Build programs
