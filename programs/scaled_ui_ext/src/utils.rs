@@ -142,11 +142,16 @@ pub fn check_solvency<'info>(
     let vault_amount = vault_m_token_account.amount;
 
     // Calculate the amount of tokens needed to be solvent
-    // Reduce it by one to avoid rounding errors
+    // Reduce it by two to avoid rounding errors (there is an edge cases where the rounding error
+    // from one index (down) to the next (up) can cause the difference to be 2)
     let mut required_amount = principal_to_amount_down(ext_mint.supply, multiplier);
-    if required_amount > 0 {
-        required_amount -= 1;
-    }
+    required_amount -= if required_amount >= 2 {
+        2
+    } else if required_amount == 1 {
+        1
+    } else {
+        0
+    };
 
     // Check if the vault has enough tokens
     if vault_amount < required_amount {
