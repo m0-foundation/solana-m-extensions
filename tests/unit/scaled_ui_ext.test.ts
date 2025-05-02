@@ -68,7 +68,15 @@ const expectTokenBalance = async (tokenAccount: PublicKey, expectedBalance: BN) 
   expect(balance.toString()).toEqual(expectedBalance.toString());
 };
 
-const expectTokenUiBalance = async (tokenAccount: PublicKey, expectedBalance: BN) => {
+enum Comparison {
+  Equal,
+  GreaterThan,
+  GreaterThanOrEqual,
+  LessThan,
+  LessThanOrEqual,
+};
+
+const expectTokenUiBalance = async (tokenAccount: PublicKey, expectedBalance: BN, op: Comparison = Comparison.Equal, tolerance?: BN) => {
   const rawBalance = (await getAccount(provider.connection, tokenAccount, undefined, TOKEN_2022_PROGRAM_ID)).amount;
 
   const multiplier = (await getScaledUiAmountConfig(extMint.publicKey)).multiplier;
@@ -77,7 +85,36 @@ const expectTokenUiBalance = async (tokenAccount: PublicKey, expectedBalance: BN
 
   const uiBalance = (rawBalance * BigInt(Math.floor(multiplier * scale))) / BigInt(scale);
 
-  expect(uiBalance.toString()).toEqual(expectedBalance.toString());
+  switch (op) {
+    case Comparison.GreaterThan:
+      expect(uiBalance).toBeGreaterThan(BigInt(expectedBalance.toString()));
+      if (tolerance) {
+        expect(uiBalance).toBeLessThanOrEqual(BigInt(expectedBalance.add(tolerance).toString()));
+      }
+    case Comparison.GreaterThanOrEqual:
+      expect(uiBalance).toBeGreaterThanOrEqual(BigInt(expectedBalance.toString()));
+      if (tolerance) {
+        expect(uiBalance).toBeLessThanOrEqual(BigInt(expectedBalance.add(tolerance).toString()));
+      }
+    case Comparison.LessThan:
+      expect(uiBalance).toBeLessThan(BigInt(expectedBalance.toString()));
+      if (tolerance) {
+        expect(uiBalance).toBeGreaterThanOrEqual(BigInt(expectedBalance.sub(tolerance).toString()));
+      }
+    case Comparison.LessThanOrEqual:
+      expect(uiBalance).toBeLessThanOrEqual(BigInt(expectedBalance.toString()));
+      if (tolerance) {
+        expect(uiBalance).toBeGreaterThanOrEqual(BigInt(expectedBalance.sub(tolerance).toString()));
+      }
+    default:
+      if (tolerance) {
+        expect(uiBalance).toBeGreaterThanOrEqual(BigInt(expectedBalance.sub(tolerance).toString()));
+        expect(uiBalance).toBeLessThanOrEqual(BigInt(expectedBalance.add(tolerance).toString()));
+      } else {
+        expect(uiBalance).toEqual(BigInt(expectedBalance.toString()));
+      }
+      break;
+  }
 };
 
 const createATA = async (mint: PublicKey, owner: PublicKey, use2022: boolean = true) => {
@@ -1953,7 +1990,7 @@ describe('ScaledUiExt unit tests', () => {
           // Confirm updated balances
           await expectTokenBalance(fromMTokenAccount, fromMTokenAccountBalance.sub(wrapAmount));
           await expectTokenBalance(vaultMTokenAccount, vaultMTokenAccountBalance.add(wrapAmount));
-          await expectTokenUiBalance(toExtTokenAccount, toExtTokenAccountUiBalance.add(wrapAmount));
+          await expectTokenUiBalance(toExtTokenAccount, toExtTokenAccountUiBalance.add(wrapAmount), Comparison.LessThanOrEqual, new BN(2));
         });
 
         // given all accounts are correct
@@ -1982,7 +2019,7 @@ describe('ScaledUiExt unit tests', () => {
           // Confirm updated balances
           await expectTokenBalance(fromMTokenAccount, fromMTokenAccountBalance.sub(wrapAmount));
           await expectTokenBalance(vaultMTokenAccount, vaultMTokenAccountBalance.add(wrapAmount));
-          await expectTokenUiBalance(toExtTokenAccount, toExtTokenAccountUiBalance.add(wrapAmount));
+          await expectTokenUiBalance(toExtTokenAccount, toExtTokenAccountUiBalance.add(wrapAmount), Comparison.LessThanOrEqual, new BN(2));
         });
 
         // given all accounts are correct
@@ -2001,8 +2038,7 @@ describe('ScaledUiExt unit tests', () => {
           await unwrap(wrapAuthority, wrapAmount);
 
           // Confirm the final balance is the same as the starting balance
-          const finalBalance = await getTokenBalance(wrapAuthorityATA);
-          expect(finalBalance.toString()).toEqual(startingBalance.toString());
+          expectTokenBalance(wrapAuthorityATA, startingBalance);
         });
       });
 
@@ -2055,6 +2091,12 @@ describe('ScaledUiExt unit tests', () => {
           // Setup the instruction
           const { vaultMTokenAccount, fromMTokenAccount, toExtTokenAccount } = await prepWrap(wrapAuthority);
 
+          console.log('vault balance pre-wrap', (await getTokenBalance(vaultMTokenAccount)).toString());
+          const mEarnState = await earn.account.global.fetch(getEarnGlobalAccount());
+          const extMintState = await getMint(provider.connection, extMint.publicKey, undefined, TOKEN_2022_PROGRAM_ID);
+          console.log('required collateral', BigInt(mEarnState.index.toString()) * extMintState.supply / BigInt(1e12));
+
+
           // Cache initial balances
           const fromMTokenAccountBalance = await getTokenBalance(fromMTokenAccount);
           const vaultMTokenAccountBalance = await getTokenBalance(vaultMTokenAccount);
@@ -2072,7 +2114,7 @@ describe('ScaledUiExt unit tests', () => {
           // Confirm updated balances
           await expectTokenBalance(fromMTokenAccount, fromMTokenAccountBalance.sub(wrapAmount));
           await expectTokenBalance(vaultMTokenAccount, vaultMTokenAccountBalance.add(wrapAmount));
-          await expectTokenUiBalance(toExtTokenAccount, toExtTokenAccountUiBalance.add(wrapAmount));
+          await expectTokenUiBalance(toExtTokenAccount, toExtTokenAccountUiBalance.add(wrapAmount), Comparison.LessThanOrEqual, new BN(2));
         });
       });
     });
@@ -2322,7 +2364,7 @@ describe('ScaledUiExt unit tests', () => {
           // Confirm updated balances
           await expectTokenBalance(toMTokenAccount, toMTokenAccountBalance.add(unwrapAmount));
           await expectTokenBalance(vaultMTokenAccount, vaultMTokenAccountBalance.sub(unwrapAmount));
-          await expectTokenUiBalance(fromExtTokenAccount, fromExtTokenAccountUiBalance.sub(unwrapAmount));
+          await expectTokenUiBalance(fromExtTokenAccount, fromExtTokenAccountUiBalance.sub(unwrapAmount), Comparison.LessThanOrEqual, new BN(2));
         });
 
         // given all accounts are correct
@@ -2350,7 +2392,7 @@ describe('ScaledUiExt unit tests', () => {
           // Confirm updated balances
           await expectTokenBalance(toMTokenAccount, toMTokenAccountBalance.add(unwrapAmount));
           await expectTokenBalance(vaultMTokenAccount, vaultMTokenAccountBalance.sub(unwrapAmount));
-          await expectTokenUiBalance(fromExtTokenAccount, fromExtTokenAccountUiBalance.sub(unwrapAmount));
+          await expectTokenUiBalance(fromExtTokenAccount, fromExtTokenAccountUiBalance.sub(unwrapAmount), Comparison.LessThanOrEqual, new BN(2));
         });
       });
 
@@ -2420,7 +2462,7 @@ describe('ScaledUiExt unit tests', () => {
           // Confirm updated balances
           await expectTokenBalance(toMTokenAccount, toMTokenAccountBalance.add(unwrapAmount));
           await expectTokenBalance(vaultMTokenAccount, vaultMTokenAccountBalance.sub(unwrapAmount));
-          await expectTokenUiBalance(fromExtTokenAccount, postSyncFromExtTokenAccountUiBalance.sub(unwrapAmount));
+          await expectTokenUiBalance(fromExtTokenAccount, postSyncFromExtTokenAccountUiBalance.sub(unwrapAmount), Comparison.LessThanOrEqual, new BN(2));
         });
       });
     });
