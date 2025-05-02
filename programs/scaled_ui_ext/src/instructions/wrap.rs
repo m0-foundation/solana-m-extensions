@@ -5,11 +5,8 @@ use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 
 use crate::{
     errors::ExtError,
-    state::{
-        ExtGlobal, EXT_GLOBAL_SEED,
-        MINT_AUTHORITY_SEED, M_VAULT_SEED,
-    },
-    utils::{amount_to_principal_down, check_solvency, mint_tokens, sync_multiplier, transfer_tokens},
+    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
+    utils::{mint_tokens, transfer_tokens, GlobalIndex},
 };
 use earn::state::Global as EarnGlobal;
 
@@ -75,6 +72,8 @@ pub struct Wrap<'info> {
 }
 
 pub fn handler(ctx: Context<Wrap>, amount: u64) -> Result<()> {
+    let global_index = GlobalIndex::from(&ctx.accounts.m_earn_global_account);
+
     let authority_seeds: &[&[&[u8]]] = &[&[
         MINT_AUTHORITY_SEED,
         &[ctx.accounts.global_account.ext_mint_authority_bump],
@@ -83,15 +82,10 @@ pub fn handler(ctx: Context<Wrap>, amount: u64) -> Result<()> {
     // Update the scaled UI multiplier with the current M index
     // before wrapping new tokens
     // Check solvency before syncing
-    check_solvency(
-        &ctx.accounts.ext_mint,
-        &ctx.accounts.m_earn_global_account,
-        &ctx.accounts.vault_m_token_account,
-    )?;
+    global_index.check_solvency(&ctx.accounts.ext_mint, &ctx.accounts.vault_m_token_account)?;
 
-    let multiplier = sync_multiplier(
+    global_index.sync_multiplier(
         &mut ctx.accounts.ext_mint,
-        &ctx.accounts.m_earn_global_account,
         &ctx.accounts.ext_mint_authority,
         authority_seeds,
         &ctx.accounts.token_2022,
@@ -110,19 +104,17 @@ pub fn handler(ctx: Context<Wrap>, amount: u64) -> Result<()> {
     // Calculate the amount of ext tokens to mint based
     // on the amount of m tokens wrapped
     // TODO handle rounding
-    let principal = amount_to_principal_down(amount, multiplier);
+    let principal = global_index.amount_to_principal_down(amount);
 
     // Mint the amount of ext tokens to the user
     mint_tokens(
         &ctx.accounts.to_ext_token_account, // to
-        principal,                             // amount
+        principal,                          // amount
         &ctx.accounts.ext_mint,             // mint
         &ctx.accounts.ext_mint_authority,   // authority
-        authority_seeds, // authority seeds
+        authority_seeds,                    // authority seeds
         &ctx.accounts.token_2022,           // token program
     )?;
 
     Ok(())
 }
-
-

@@ -1,4 +1,5 @@
 // scaled_ui_ext/lib.rs - top-level program file
+#![allow(unexpected_cfgs)]
 
 pub mod constants;
 pub mod errors;
@@ -39,7 +40,11 @@ pub mod scaled_ui_ext {
         instructions::set_m_mint::handler(ctx)
     }
 
-    pub fn update_wrap_authority(ctx: Context<UpdateWrapAuthority>, index: u8, new_wrap_authority: Pubkey) -> Result<()> {
+    pub fn update_wrap_authority(
+        ctx: Context<UpdateWrapAuthority>,
+        index: u8,
+        new_wrap_authority: Pubkey,
+    ) -> Result<()> {
         instructions::update_wrap_authority::handler(ctx, index, new_wrap_authority)
     }
 
@@ -58,6 +63,4 @@ pub mod scaled_ui_ext {
     pub fn sync(ctx: Context<Sync>) -> Result<()> {
         instructions::sync::handler(ctx)
     }
-
 }
-

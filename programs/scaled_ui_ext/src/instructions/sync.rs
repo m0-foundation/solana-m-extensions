@@ -1,12 +1,12 @@
 // scaled_ui_ext/instructions/sync.rs
 
-use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use crate::{
     errors::ExtError,
-    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED}, 
-    utils::{check_solvency, sync_multiplier},
+    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
+    utils::GlobalIndex,
 };
+use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use earn::state::Global as EarnGlobal;
 
 #[derive(Accounts)]
@@ -52,26 +52,23 @@ pub struct Sync<'info> {
 }
 
 pub fn handler(ctx: Context<Sync>) -> Result<()> {
+    let global_index = GlobalIndex::from(&ctx.accounts.m_earn_global_account);
+
     // Check that the vault will be solvent after the sync
     // TODO: If not, should we skip the sync or revert?
-    check_solvency(
-        &ctx.accounts.ext_mint,
-        &ctx.accounts.m_earn_global_account, 
-        &ctx.accounts.vault_m_token_account,
-    )?;
+    global_index.check_solvency(&ctx.accounts.ext_mint, &ctx.accounts.vault_m_token_account)?;
 
     // Sync the multiplier
-    // This will update the multiplier on ext_mint 
+    // This will update the multiplier on ext_mint
     // if it doesn't match the index on m_earn_global_account
-    sync_multiplier(
+    global_index.sync_multiplier(
         &mut ctx.accounts.ext_mint,
-        &ctx.accounts.m_earn_global_account, 
         &ctx.accounts.ext_mint_authority,
         &[&[
             MINT_AUTHORITY_SEED,
             &[ctx.accounts.global_account.ext_mint_authority_bump],
         ]],
-        &ctx.accounts.token_2022
+        &ctx.accounts.token_2022,
     )?;
 
     Ok(())

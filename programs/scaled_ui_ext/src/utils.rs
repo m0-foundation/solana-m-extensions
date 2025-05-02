@@ -1,18 +1,23 @@
 // ext_earn/utils/token.rs
 
 use core::f64;
+use std::cmp::min;
 
 // external dependencies
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{
     burn, mint_to, transfer_checked, Burn, Mint, MintTo, Token2022, TokenAccount, TransferChecked,
 };
-use spl_token_2022::extension::{
-    BaseStateWithExtensions, StateWithExtensions,
-    scaled_ui_amount::{PodF64, UnixTimestamp, ScaledUiAmountConfig},
-};
-use earn::state::Global as EarnGlobal;
+use earn::state::Global;
 use solana_program::program::invoke_signed;
+use spl_token_2022::{
+    extension::{
+        scaled_ui_amount::{PodF64, ScaledUiAmountConfig, UnixTimestamp},
+        BaseStateWithExtensions, StateWithExtensions,
+    },
+    state,
+};
+
 use crate::{
     constants::{INDEX_SCALE_F64, INDEX_SCALE_U64},
     errors::ExtError,
@@ -120,165 +125,125 @@ pub fn burn_tokens<'info>(
     Ok(())
 }
 
-fn get_multiplier_and_timestamp<'info>(
-    m_earn_global_account: &Account<'info, EarnGlobal>
-) -> (f64, i64) {
-    // Get the current index and timestamp from the m_earn_global_account
-    let multiplier: f64 = (m_earn_global_account.index as f64) / INDEX_SCALE_F64;
-    let timestamp: i64 = m_earn_global_account.timestamp as i64;
-
-    (multiplier, timestamp)
+pub struct GlobalIndex {
+    index: u128,
+    timestamp: i64,
+    multiplier: f64,
 }
 
-pub fn check_solvency<'info>(
-    ext_mint: &InterfaceAccount<'info, Mint>,
-    m_earn_global_account: &Account<'info, EarnGlobal>,
-    vault_m_token_account: &InterfaceAccount<'info, TokenAccount>,
-) -> Result<()> {
-    // Get the current index and timestamp from the m_earn_global_account
-    let (multiplier, _): (f64, i64) = get_multiplier_and_timestamp(m_earn_global_account);
-
-    // Calculate the amount of tokens in the vault
-    let vault_amount = vault_m_token_account.amount;
-
-    // Calculate the amount of tokens needed to be solvent
-    // Reduce it by two to avoid rounding errors (there is an edge cases where the rounding error
-    // from one index (down) to the next (up) can cause the difference to be 2)
-    let mut required_amount = principal_to_amount_down(ext_mint.supply, multiplier);
-    required_amount -= if required_amount >= 2 {
-        2
-    } else if required_amount == 1 {
-        1
-    } else {
-        0
-    };
-
-    // Check if the vault has enough tokens
-    if vault_amount < required_amount {
-        return err!(ExtError::InsufficientCollateral);
-    }
-
-    Ok(())
-}
-
-pub fn sync_multiplier<'info>(
-    ext_mint: &mut InterfaceAccount<'info, Mint>,
-    m_earn_global_account: &Account<'info, EarnGlobal>,
-    authority: &AccountInfo<'info>,
-    authority_seeds: &[&[&[u8]]],
-    token_program: &Program<'info, Token2022>,
-) -> Result<f64> {
-    // Get the current index and timestamp from the m_earn_global_account
-    let (multiplier, timestamp): (f64, i64) = get_multiplier_and_timestamp(m_earn_global_account);
-    
-    // Compare against the current multiplier
-    // If the multiplier is the same, we don't need to update
-    { // explicit scope to drop the borrow at the end of the code block
-        let ext_account_info= &ext_mint.to_account_info();
-        let ext_data = ext_account_info.try_borrow_data()?;
-        let ext_mint_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(
-            &ext_data
-        )?;
-        let scaled_ui_config = ext_mint_data
-            .get_extension::<ScaledUiAmountConfig>()?;
-
-        if scaled_ui_config.new_multiplier == PodF64::from(multiplier) 
-            && scaled_ui_config.new_multiplier_effective_timestamp == UnixTimestamp::from(timestamp) {
-            return Ok(multiplier);
+impl GlobalIndex {
+    pub fn new(index: u128, timestamp: i64) -> Self {
+        Self {
+            index,
+            timestamp,
+            multiplier: (index as f64) / INDEX_SCALE_F64,
         }
     }
 
-    // Update the multiplier and timestamp in the mint account
-    invoke_signed(
-        &spl_token_2022::extension::scaled_ui_amount::instruction::update_multiplier(
-            &token_program.key(),
-            &ext_mint.key(),
-            &authority.key(),
-            &[],
-            multiplier,
-            timestamp,
-        )?,
-        &[
-            ext_mint.to_account_info(),
-            authority.clone(),
-        ],
-        authority_seeds,
-    )?;
+    pub fn check_solvency<'info>(
+        &self,
+        ext_mint: &InterfaceAccount<'info, Mint>,
+        vault_m_token_account: &InterfaceAccount<'info, TokenAccount>,
+    ) -> Result<()> {
+        // Calculate the amount of tokens needed to be solvent
+        // Reduce it by two to avoid rounding errors (there is an edge cases where the rounding error
+        // from one index (down) to the next (up) can cause the difference to be 2)
+        let mut required_amount = self.principal_to_amount_down(ext_mint.supply);
+        required_amount -= min(2, required_amount);
 
-    // Reload the mint account so the new multiplier is reflected
-    ext_mint.reload()?;
+        // Check if the vault has enough tokens
+        if vault_m_token_account.amount < required_amount {
+            return err!(ExtError::InsufficientCollateral);
+        }
 
-    return Ok(multiplier)
+        Ok(())
+    }
+
+    pub fn sync_multiplier<'info>(
+        &self,
+        ext_mint: &mut InterfaceAccount<'info, Mint>,
+        authority: &AccountInfo<'info>,
+        authority_seeds: &[&[&[u8]]],
+        token_program: &Program<'info, Token2022>,
+    ) -> Result<()> {
+        // If the multiplier is the same, we don't need to update
+        if self.matches_mint_multiplier(&ext_mint.to_account_info()) {
+            return Ok(());
+        }
+
+        // Update the multiplier and timestamp in the mint account
+        invoke_signed(
+            &spl_token_2022::extension::scaled_ui_amount::instruction::update_multiplier(
+                &token_program.key(),
+                &ext_mint.key(),
+                &authority.key(),
+                &[],
+                self.multiplier,
+                self.timestamp,
+            )?,
+            &[ext_mint.to_account_info(), authority.clone()],
+            authority_seeds,
+        )?;
+
+        // Reload the mint account so the new multiplier is reflected
+        ext_mint.reload()
+    }
+
+    pub fn amount_to_principal_down(&self, amount: u64) -> u64 {
+        // Calculate the principal from the amount and index, rounding down
+        (amount as u128)
+            .checked_mul(INDEX_SCALE_U64 as u128)
+            .and_then(|res| res.checked_div(self.index))
+            .and_then(|res| res.try_into().ok())
+            .expect("conversion underflow/overflow")
+    }
+
+    pub fn amount_to_principal_up(&self, amount: u64) -> u64 {
+        // Calculate the principal from the amount and index, rounding up
+        (amount as u128)
+            .checked_mul(INDEX_SCALE_U64 as u128)
+            .and_then(|res| res.checked_add(self.index))
+            .and_then(|res| res.checked_sub(1u128))
+            .and_then(|res| res.checked_div(self.index))
+            .and_then(|res| res.try_into().ok())
+            .expect("conversion underflow/overflow")
+    }
+
+    pub fn principal_to_amount_down(&self, principal: u64) -> u64 {
+        // Calculate the amount from the principal and index, rounding down
+        self.index
+            .checked_mul(principal as u128)
+            .and_then(|res| res.checked_div(INDEX_SCALE_U64 as u128))
+            .and_then(|res| res.try_into().ok())
+            .expect("conversion underflow/overflow")
+    }
+
+    pub fn principal_to_amount_up(&self, principal: u64) -> u64 {
+        // Calculate the amount from the principal and index, rounding up
+        self.index
+            .checked_mul(principal as u128)
+            .and_then(|res| res.checked_add(INDEX_SCALE_U64 as u128 - 1))
+            .and_then(|res| res.checked_div(INDEX_SCALE_U64 as u128))
+            .and_then(|res| res.try_into().ok())
+            .expect("conversion underflow/overflow")
+    }
+
+    pub fn matches_mint_multiplier(&self, ext_mint_account_info: &AccountInfo<'_>) -> bool {
+        let ext_data = ext_mint_account_info.try_borrow_data().unwrap();
+        let ext_mint_data = StateWithExtensions::<state::Mint>::unpack(&ext_data).unwrap();
+
+        let scaled_ui_config = ext_mint_data
+            .get_extension::<ScaledUiAmountConfig>()
+            .unwrap();
+
+        scaled_ui_config.new_multiplier == PodF64::from(self.multiplier)
+            && scaled_ui_config.new_multiplier_effective_timestamp
+                == UnixTimestamp::from(self.timestamp)
+    }
 }
 
-pub fn amount_to_principal_down(
-    amount: u64,
-    multiplier: f64
-) -> u64 {
-    // We want to avoid precision errors with floating point numbers
-    // Therefore, we use integer math.
-    let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
-
-    // Calculate the principal from the amount and index, rounding down
-    let principal: u64 = (amount as u128)
-        .checked_mul(INDEX_SCALE_U64 as u128).expect("amount * INDEX_SCALE_U64 overflow")
-        .checked_div(index).expect("amount * INDEX_SCALE_U64 / index underflow")
-        .try_into().expect("conversion overflow");
-    
-    principal
-}
-
-pub fn amount_to_principal_up(
-    amount: u64,
-    multiplier: f64
-) -> u64 {
-    // We want to avoid precision errors with floating point numbers
-    // Therefore, we use integer math.
-    let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
-
-    // Calculate the principal from the amount and index, rounding up
-    let principal: u64 = (amount as u128)
-        .checked_mul(INDEX_SCALE_U64 as u128).expect("amount * INDEX_SCALE_U64 overflow")
-        .checked_add(
-            index.checked_sub(1u128).expect("index - 1 underflow")
-        ).expect("amount * INDEX_SCALE_U64 + index overflow")
-        .checked_div(index).expect("amount * INDEX_SCALE_U64 + index / index underflow")
-        .try_into().expect("conversion overflow");
-
-    principal
-}
-
-pub fn principal_to_amount_down(
-    principal: u64,
-    multiplier: f64
-) -> u64 {
-    // We want to avoid precision errors with floating point numbers
-    // Therefore, we use integer math.
-    let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
-
-    // Calculate the amount from the principal and index, rounding down
-    let amount: u64 = index.checked_mul(principal as u128).expect("index * principal overflow")
-        .checked_div(INDEX_SCALE_U64 as u128).expect("index * principal / INDEX_SCALE_U64 underflow")
-        .try_into().expect("conversion overflow");
-
-    amount
-}
-
-pub fn principal_to_amount_up(
-    principal: u64,
-    multiplier: f64
-) -> u64 {
-    // We want to avoid precision errors with floating point numbers
-    // Therefore, we use integer math.
-    let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
-
-    // Calculate the amount from the principal and index, rounding up
-    let amount: u64 = index.checked_mul(principal as u128).expect("index * principal overflow")
-        .checked_add(
-            INDEX_SCALE_U64 as u128 - 1u128
-        ).expect("index * principal + INDEX_SCALE_U64 - 1 overflow")
-        .checked_div(INDEX_SCALE_U64 as u128).expect("index * principal + INDEX_SCALE_U64 - 1 / INDEX_SCALE_U64 underflow")
-        .try_into().expect("conversion overflow");
-
-    amount
+impl From<&Account<'_, Global>> for GlobalIndex {
+    fn from(global: &Account<'_, Global>) -> Self {
+        GlobalIndex::new(global.index as u128, global.timestamp as i64)
+    }
 }

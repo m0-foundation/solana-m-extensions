@@ -5,10 +5,8 @@ use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 
 use crate::{
     errors::ExtError,
-    state::{
-        ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED
-    },
-    utils::{amount_to_principal_up, burn_tokens, check_solvency, sync_multiplier, transfer_tokens_from_program},
+    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
+    utils::{burn_tokens, transfer_tokens_from_program, GlobalIndex},
 };
 use earn::state::Global as EarnGlobal;
 
@@ -74,6 +72,8 @@ pub struct Unwrap<'info> {
 }
 
 pub fn handler(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
+    let global_index = GlobalIndex::from(&ctx.accounts.m_earn_global_account);
+
     let authority_seeds: &[&[&[u8]]] = &[&[
         MINT_AUTHORITY_SEED,
         &[ctx.accounts.global_account.ext_mint_authority_bump],
@@ -82,15 +82,10 @@ pub fn handler(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
     // Update the scaled UI multiplier with the current M index
     // before unwrapping tokens
     // Check solvency of the vault
-    check_solvency(
-        &ctx.accounts.ext_mint,
-        &ctx.accounts.m_earn_global_account,
-        &ctx.accounts.vault_m_token_account,
-    )?;
+    global_index.check_solvency(&ctx.accounts.ext_mint, &ctx.accounts.vault_m_token_account)?;
 
-    let multiplier = sync_multiplier(
+    global_index.sync_multiplier(
         &mut ctx.accounts.ext_mint,
-        &ctx.accounts.m_earn_global_account,
         &ctx.accounts.ext_mint_authority,
         authority_seeds,
         &ctx.accounts.token_2022,
@@ -98,7 +93,7 @@ pub fn handler(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
 
     // Calculate the principal amount of ext tokens to burn
     // from the amount of m tokens to unwrap
-    let mut principal = amount_to_principal_up(amount, multiplier);
+    let mut principal = global_index.amount_to_principal_up(amount);
     if principal > ctx.accounts.from_ext_token_account.amount {
         principal = ctx.accounts.from_ext_token_account.amount;
     }
