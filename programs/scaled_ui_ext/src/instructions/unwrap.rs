@@ -8,7 +8,10 @@ use crate::{
     state::{
         ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED
     },
-    utils::{amount_to_principal_up, burn_tokens, check_solvency, sync_multiplier, transfer_tokens_from_program},
+    utils::{
+        conversion::{amount_to_principal_up, check_solvency, sync_multiplier},
+        token::{burn_tokens, transfer_tokens_from_program},
+    },
 };
 use earn::state::Global as EarnGlobal;
 

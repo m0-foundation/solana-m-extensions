@@ -13,7 +13,7 @@ use crate::{
     constants::ANCHOR_DISCRIMINATOR_SIZE,
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED}, 
-    utils::sync_multiplier,
+    utils::conversion::sync_multiplier,
 };
 use earn::{
     state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
