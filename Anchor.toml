@@ -18,4 +18,4 @@ cluster = "Localnet"
 wallet = "tests/keys/user.json"
 
 [scripts]
-test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+test = "yarn run jest --preset ts-jest tests/**/*.ts"
