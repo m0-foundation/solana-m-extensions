@@ -5,7 +5,7 @@ use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED}, 
-    utils::{check_solvency, sync_multiplier},
+    utils::conversion::{check_solvency, sync_multiplier},
 };
 use earn::state::Global as EarnGlobal;
 
