@@ -17,7 +17,6 @@ use crate::{
     state::ExtGlobal
 };
 
-
 fn get_latest_multiplier_and_timestamp<'info>(
     ext_global_account: &Account<'info, ExtGlobal>,
     m_earn_global_account: &Account<'info, EarnGlobal>,

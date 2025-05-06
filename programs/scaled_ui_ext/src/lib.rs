@@ -43,6 +43,10 @@ pub mod scaled_ui_ext {
         instructions::update_wrap_authority::handler(ctx, index, new_wrap_authority)
     }
 
+    pub fn claim_excess(ctx: Context<ClaimExcess>) -> Result<()> {
+        instructions::claim_excess::handler(ctx)
+    }
+
     // Wrap authority instructions
 
     pub fn wrap(ctx: Context<Wrap>, amount: u64) -> Result<()> {
