@@ -35,6 +35,10 @@ pub mod scaled_ui_ext {
         instructions::initialize::handler(ctx, wrap_authorities, fee_bps)
     }
 
+    pub fn set_fee(ctx: Context<SetFee>, fee_bps: u64) -> Result<()> {
+        instructions::set_fee::handler(ctx, fee_bps)
+    }
+
     pub fn set_m_mint(ctx: Context<SetMMint>) -> Result<()> {
         instructions::set_m_mint::handler(ctx)
     }
