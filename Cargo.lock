@@ -835,7 +835,9 @@ dependencies = [
  "anchor-spl",
  "cfg-if",
  "earn",
+ "spl-tlv-account-resolution",
  "spl-token-2022 7.0.0",
+ "spl-transfer-hook-interface",
 ]
 
 [[package]]

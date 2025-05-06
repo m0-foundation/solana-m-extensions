@@ -2,6 +2,9 @@
 
 use anchor_lang::prelude::*;
 
+#[cfg(feature = "transfer-hook")]
+use spl_transfer_hook_interface::instruction::TransferHookInstruction;
+
 pub use instructions::*;
 
 pub mod constants;
@@ -36,5 +39,33 @@ pub mod dynamic_ext {
 
     pub fn sync_multiplier(ctx: Context<SyncMultiplier>) -> Result<()> {
         instructions::sync::SyncMultiplier::handler(ctx)
+    }
+
+    // Transfer hook
+
+    #[cfg(feature = "transfer-hook")]
+    pub fn transfer_hook(ctx: Context<TransferHook>, amount: u64) -> Result<()> {
+        instructions::transfer_hook::TransferHook::handler(ctx, amount)
+    }
+
+    // fallback instruction handler as workaround to anchor instruction discriminator check
+    #[cfg(feature = "transfer-hook")]
+    pub fn fallback<'info>(
+        program_id: &Pubkey,
+        accounts: &'info [AccountInfo<'info>],
+        data: &[u8],
+    ) -> Result<()> {
+        let instruction = TransferHookInstruction::unpack(data)?;
+
+        // match instruction discriminator to transfer hook interface execute instruction
+        match instruction {
+            TransferHookInstruction::Execute { amount } => {
+                let amount_bytes = amount.to_le_bytes();
+
+                // invoke custom transfer hook instruction on our program
+                __private::__global::transfer_hook(program_id, accounts, &amount_bytes)
+            }
+            _ => return Err(ProgramError::InvalidInstructionData.into()),
+        }
     }
 }
