@@ -828,6 +828,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "dynamic_ext"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "cfg-if",
+ "earn",
+ "spl-token-2022 7.0.0",
+]
+
+[[package]]
 name = "earn"
 version = "0.1.0"
 source = "git+https://github.com/m0-foundation/solana-m?branch=solana-2.1.0#58c8bac1e5130baa1f227982ba638180fabd8034"
