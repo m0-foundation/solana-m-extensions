@@ -13,9 +13,6 @@ use crate::{
 
 #[derive(Accounts)]
 pub struct Unwrap<'info> {
-    #[account(
-        constraint = signer.key() != Pubkey::default() && global_account.wrap_authorities.contains(&signer.key()) @ ExtError::NotAuthorized,
-    )]
     pub signer: Signer<'info>,
 
     pub m_mint: InterfaceAccount<'info, Mint>,
@@ -74,6 +71,15 @@ pub struct Unwrap<'info> {
 
 impl Unwrap<'_> {
     fn validate(&self) -> Result<()> {
+        #[cfg(feature = "permissioned-wrapping")]
+        if !self
+            .global_account
+            .wrap_authorities
+            .contains(&self.signer.key())
+        {
+            return Err(ExtError::InvalidAccount.into());
+        }
+
         check_solvency(
             &self.ext_mint,
             &self.m_earn_global_account,

@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[derive(Accounts)]
-pub struct SyncMultiplier<'info> {
+pub struct SyncIndex<'info> {
     pub signer: Signer<'info>,
 
     pub m_earn_global_account: Account<'info, EarnGlobal>,
@@ -50,7 +50,7 @@ pub struct SyncMultiplier<'info> {
     pub token_2022: Program<'info, Token2022>,
 }
 
-impl SyncMultiplier<'_> {
+impl SyncIndex<'_> {
     fn validate(&self) -> Result<()> {
         check_solvency(
             &self.ext_mint,
@@ -61,6 +61,7 @@ impl SyncMultiplier<'_> {
 
     #[access_control(ctx.accounts.validate())]
     pub fn handler(ctx: Context<Self>) -> Result<()> {
+        #[cfg(feature = "scaled-ui")]
         sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &ctx.accounts.m_earn_global_account,

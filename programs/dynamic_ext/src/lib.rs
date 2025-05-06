@@ -21,8 +21,14 @@ pub mod dynamic_ext {
 
     // Admin instructions
 
+    #[cfg(feature = "permissioned-wrapping")]
     pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
         instructions::initialize::Initialize::handler(ctx, wrap_authorities)
+    }
+
+    #[cfg(not(feature = "permissioned-wrapping"))]
+    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+        instructions::initialize::Initialize::handler(ctx, vec![])
     }
 
     // Wrap authority instructions
@@ -37,8 +43,8 @@ pub mod dynamic_ext {
 
     // Open instructions
 
-    pub fn sync_multiplier(ctx: Context<SyncMultiplier>) -> Result<()> {
-        instructions::sync::SyncMultiplier::handler(ctx)
+    pub fn sync_index(ctx: Context<SyncIndex>) -> Result<()> {
+        instructions::sync::SyncIndex::handler(ctx)
     }
 
     // Transfer hook

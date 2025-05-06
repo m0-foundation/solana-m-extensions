@@ -9,7 +9,7 @@ crate-type = ["cdylib", "lib"]
 name = "dynamic_ext"
 
 [features]
-default = ["transfer-hook"]
+default = ["transfer-hook", "permissioned-wrapping", "scaled-ui"]
 cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []
@@ -19,7 +19,9 @@ transfer-hook = [
     "dep:spl-transfer-hook-interface",
     "dep:spl-tlv-account-resolution",
 ]
-
+scaled-ui = []
+ibt = []
+permissioned-wrapping = []
 
 [dependencies]
 anchor-lang.workspace = true
