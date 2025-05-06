@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   scaled-ui-ext-tests:
-    runs-on: ubuntu-24.04
+    runs-on: macos-latest 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

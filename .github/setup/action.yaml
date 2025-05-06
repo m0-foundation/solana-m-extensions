@@ -16,12 +16,6 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Setup Linux
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential pkg-config libudev-dev llvm libclang-dev protobuf-compiler libssl-dev
-      shell: bash
-
     - name: Setup Node
       uses: actions/setup-node@v4
       with:
