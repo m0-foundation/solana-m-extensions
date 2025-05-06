@@ -88,12 +88,14 @@ pub fn handler(ctx: Context<Wrap>, amount: u64) -> Result<()> {
     // Check solvency before syncing
     check_solvency(
         &ctx.accounts.ext_mint,
+        &ctx.accounts.global_account,
         &ctx.accounts.m_earn_global_account,
         &ctx.accounts.vault_m_token_account,
     )?;
 
     let multiplier = sync_multiplier(
         &mut ctx.accounts.ext_mint,
+        &mut ctx.accounts.global_account,
         &ctx.accounts.m_earn_global_account,
         &ctx.accounts.ext_mint_authority,
         authority_seeds,

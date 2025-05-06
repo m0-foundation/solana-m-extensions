@@ -10,7 +10,7 @@ use spl_token_2022::extension::{
 
 // local dependencies
 use crate::{
-    constants::ANCHOR_DISCRIMINATOR_SIZE,
+    constants::{ANCHOR_DISCRIMINATOR_SIZE, INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED}, 
     utils::conversion::sync_multiplier,
@@ -67,7 +67,7 @@ pub struct Initialize<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
+pub fn handler(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>, fee_bps: u64) -> Result<()> {
     let m_vault_bump = Pubkey::find_program_address(&[M_VAULT_SEED], ctx.program_id).1;
 
     // Validate the ext_mint_authority PDA is the mint authority for the ext mint
@@ -96,12 +96,18 @@ pub fn handler(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Resul
             return err!(ExtError::InvalidMint);
         }
     }
+
+    // Validate the fee_bps is within the allowed range
+    if fee_bps > ONE_HUNDRED_PERCENT_U64 {
+        return err!(ExtError::InvalidParam);
+    }
     
     // Sync the ScaledUiAmount multiplier with the M Index
     // We don't need to check collateralization here because
     // the ext mint must have a supply of 0 to start
     sync_multiplier(
         &mut ctx.accounts.ext_mint,
+        &mut ctx.accounts.global_account,
         &ctx.accounts.m_earn_global_account,
         &ctx.accounts.ext_mint_authority,
     &[&[
@@ -130,6 +136,9 @@ pub fn handler(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Resul
         ext_mint: ctx.accounts.ext_mint.key(),
         m_mint: ctx.accounts.m_mint.key(),
         m_earn_global_account: ctx.accounts.m_earn_global_account.key(),
+        fee_bps,
+        last_m_index: ctx.accounts.m_earn_global_account.index,
+        last_ext_index: INDEX_SCALE_U64, // we set the extension index to 1.0 initially
         bump: ctx.bumps.global_account,
         m_vault_bump,
         ext_mint_authority_bump: ctx.bumps.ext_mint_authority,

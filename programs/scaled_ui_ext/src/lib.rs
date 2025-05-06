@@ -13,7 +13,7 @@ use instructions::*;
 #[cfg(not(feature = "no-entrypoint"))]
 solana_security_txt::security_txt! {
     // Required fields
-    name: "<insert name>>",
+    name: "<insert name>",
     project_url: "<insert project url>",
     contacts: "<insert contact email>",
     policy: "<insert terms file>",
@@ -31,8 +31,8 @@ pub mod scaled_ui_ext {
 
     // Admin instructions
 
-    pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
-        instructions::initialize::handler(ctx, wrap_authorities)
+    pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>, fee_bps: u64) -> Result<()> {
+        instructions::initialize::handler(ctx, wrap_authorities, fee_bps)
     }
 
     pub fn set_m_mint(ctx: Context<SetMMint>) -> Result<()> {

@@ -28,6 +28,7 @@ pub struct Unwrap<'info> {
     pub ext_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
+        mut,
         seeds = [EXT_GLOBAL_SEED],
         bump = global_account.bump,
         has_one = m_mint @ ExtError::InvalidAccount,
@@ -87,12 +88,14 @@ pub fn handler(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
     // Check solvency of the vault
     check_solvency(
         &ctx.accounts.ext_mint,
+        &ctx.accounts.global_account,
         &ctx.accounts.m_earn_global_account,
         &ctx.accounts.vault_m_token_account,
     )?;
 
     let multiplier = sync_multiplier(
         &mut ctx.accounts.ext_mint,
+        &mut ctx.accounts.global_account,
         &ctx.accounts.m_earn_global_account,
         &ctx.accounts.ext_mint_authority,
         authority_seeds,

@@ -56,6 +56,7 @@ pub fn handler(ctx: Context<Sync>) -> Result<()> {
     // TODO: If not, should we skip the sync or revert?
     check_solvency(
         &ctx.accounts.ext_mint,
+        &ctx.accounts.global_account,
         &ctx.accounts.m_earn_global_account, 
         &ctx.accounts.vault_m_token_account,
     )?;
@@ -63,13 +64,15 @@ pub fn handler(ctx: Context<Sync>) -> Result<()> {
     // Sync the multiplier
     // This will update the multiplier on ext_mint 
     // if it doesn't match the index on m_earn_global_account
+    let signer_bump = ctx.accounts.global_account.ext_mint_authority_bump;
     sync_multiplier(
         &mut ctx.accounts.ext_mint,
+        &mut ctx.accounts.global_account,
         &ctx.accounts.m_earn_global_account, 
         &ctx.accounts.ext_mint_authority,
         &[&[
             MINT_AUTHORITY_SEED,
-            &[ctx.accounts.global_account.ext_mint_authority_bump],
+            &[signer_bump],
         ]],
         &ctx.accounts.token_2022
     )?;
