@@ -1,3 +1,5 @@
+use core::sync;
+
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use earn::state::Global as EarnGlobal;
@@ -5,8 +7,14 @@ use earn::state::Global as EarnGlobal;
 use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
-    utils::conversion::{check_solvency, sync_multiplier},
+    utils::conversion::check_solvency,
 };
+
+#[cfg(feature = "scaled-ui")]
+use crate::utils::conversion::sync_multiplier;
+
+#[cfg(feature = "ibt")]
+use crate::utils::conversion::sync_rate;
 
 #[derive(Accounts)]
 pub struct SyncIndex<'info> {
@@ -80,8 +88,21 @@ impl SyncIndex<'_> {
             &ctx.accounts.token_2022,
         )?;
 
+        #[cfg(feature = "ibt")]
+        sync_rate(
+            &mut ctx.accounts.ext_mint,
+            &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.global_account,
+            &ctx.accounts.ext_mint_authority,
+            &[&[
+                MINT_AUTHORITY_SEED,
+                &[ctx.accounts.global_account.ext_mint_authority_bump],
+            ]],
+            &ctx.accounts.token_2022,
+        )?;
+
         ctx.accounts.global_account.index = ctx.accounts.m_earn_global_account.index;
-        ctx.accounts.global_account.index_ts = ctx.accounts.m_earn_global_account.timestamp;
+        ctx.accounts.global_account.update_ts = ctx.accounts.m_earn_global_account.timestamp;
 
         Ok(())
     }

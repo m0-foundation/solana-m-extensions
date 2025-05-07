@@ -11,7 +11,8 @@ pub struct ExtGlobal {
     pub m_mint: Pubkey,                // m mint
     pub m_earn_global_account: Pubkey, // m earn global account
     pub index: u64,                    // index from mainnet
-    pub index_ts: u64,                 // timestamp of the index
+    pub update_ts: u64,                // timestamp of the last rate/index update
+    pub yield_fee_bps: u16,            // yield fee in bps
     pub bump: u8,
     pub m_vault_bump: u8,
     pub ext_mint_authority_bump: u8,

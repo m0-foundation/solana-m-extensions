@@ -1,17 +1,20 @@
-// ext_earn/utils/conversion.rs
+use anchor_lang::prelude::*;
+use anchor_lang::solana_program::program::invoke_signed;
+use anchor_spl::token_interface::{spl_pod::primitives::PodI16, Mint, Token2022, TokenAccount};
+use earn::state::Global as EarnGlobal;
+use spl_token_2022::extension::{BaseStateWithExtensions, StateWithExtensions};
+use std::cmp::min;
 
-// external dependencies
+#[cfg(feature = "scaled-ui")]
+use spl_token_2022::extension::scaled_ui_amount::{PodF64, ScaledUiAmountConfig, UnixTimestamp};
+
+#[cfg(feature = "ibt")]
+use spl_token_2022::extension::interest_bearing_mint::{self, InterestBearingConfig};
+
 use crate::{
     constants::{INDEX_SCALE_F64, INDEX_SCALE_U64},
     errors::ExtError,
-};
-use anchor_lang::prelude::*;
-use anchor_lang::solana_program::program::invoke_signed;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
-use earn::state::Global as EarnGlobal;
-use spl_token_2022::extension::{
-    scaled_ui_amount::{PodF64, ScaledUiAmountConfig, UnixTimestamp},
-    BaseStateWithExtensions, StateWithExtensions,
+    state::ExtGlobal,
 };
 
 fn get_multiplier_and_timestamp<'info>(
@@ -39,13 +42,7 @@ pub fn check_solvency<'info>(
     // Reduce it by two to avoid rounding errors (there is an edge cases where the rounding error
     // from one index (down) to the next (up) can cause the difference to be 2)
     let mut required_amount = principal_to_amount_down(ext_mint.supply, multiplier);
-    required_amount -= if required_amount >= 2 {
-        2
-    } else if required_amount == 1 {
-        1
-    } else {
-        0
-    };
+    required_amount -= min(2, required_amount);
 
     // Check if the vault has enough tokens
     if vault_amount < required_amount {
@@ -55,6 +52,7 @@ pub fn check_solvency<'info>(
     Ok(())
 }
 
+#[cfg(feature = "scaled-ui")]
 pub fn sync_multiplier<'info>(
     ext_mint: &mut InterfaceAccount<'info, Mint>,
     m_earn_global_account: &Account<'info, EarnGlobal>,
@@ -99,6 +97,53 @@ pub fn sync_multiplier<'info>(
     ext_mint.reload()?;
 
     return Ok(multiplier);
+}
+
+#[cfg(feature = "ibt")]
+pub fn sync_rate<'info>(
+    ext_mint: &mut InterfaceAccount<'info, Mint>,
+    m_earn_global_account: &Account<'info, EarnGlobal>,
+    global_account: &Account<'info, ExtGlobal>,
+    authority: &AccountInfo<'info>,
+    authority_seeds: &[&[&[u8]]],
+    token_program: &Program<'info, Token2022>,
+) -> Result<()> {
+    // TODO: this needs to be tihe earner rate on the m_earn_global_account
+    let mut current_rate = 415 as i16;
+
+    // Adjust the rate to include the yield fee
+    current_rate = current_rate
+        - ((current_rate as f64 * global_account.yield_fee_bps as f64) / 10000.0) as i16;
+
+    // Compare against the current rate
+    {
+        let ext_account_info = &ext_mint.to_account_info();
+        let ext_data = ext_account_info.try_borrow_data()?;
+        let ext_mint_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&ext_data)?;
+        let interest_bearing_config = ext_mint_data.get_extension::<InterestBearingConfig>()?;
+
+        if interest_bearing_config.current_rate == PodI16::from(current_rate) {
+            return Ok(());
+        }
+    }
+
+    // Update the multiplier and timestamp in the mint account
+    invoke_signed(
+        &interest_bearing_mint::instruction::update_rate(
+            &token_program.key(),
+            &ext_mint.key(),
+            &authority.key(),
+            &[],
+            current_rate,
+        )?,
+        &[ext_mint.to_account_info(), authority.clone()],
+        authority_seeds,
+    )?;
+
+    // Reload the mint account so the new multiplier is reflected
+    ext_mint.reload()?;
+
+    return Ok(());
 }
 
 pub fn amount_to_principal_down(amount: u64, multiplier: f64) -> u64 {

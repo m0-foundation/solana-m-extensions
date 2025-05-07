@@ -37,13 +37,17 @@ pub mod dynamic_ext {
     // Admin instructions
 
     #[cfg(feature = "permissioned-wrapping")]
-    pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
-        instructions::initialize::Initialize::handler(ctx, wrap_authorities)
+    pub fn initialize(
+        ctx: Context<Initialize>,
+        yield_fee_bps: u16,
+        wrap_authorities: Vec<Pubkey>,
+    ) -> Result<()> {
+        instructions::initialize::Initialize::handler(ctx, yield_fee_bps, wrap_authorities)
     }
 
     #[cfg(not(feature = "permissioned-wrapping"))]
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        instructions::initialize::Initialize::handler(ctx, vec![])
+    pub fn initialize(ctx: Context<Initialize>, yield_fee_bps: u16) -> Result<()> {
+        instructions::initialize::Initialize::handler(ctx, yield_fee_bps, vec![])
     }
 
     // Wrap authority instructions

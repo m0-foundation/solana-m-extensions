@@ -4,12 +4,15 @@ use anchor_spl::{
     token_interface::{Mint, Token2022},
 };
 use spl_token_2022::{
-    extension::{
-        scaled_ui_amount::ScaledUiAmountConfig, BaseStateWithExtensions, ExtensionType,
-        StateWithExtensions,
-    },
+    extension::{BaseStateWithExtensions, ExtensionType, StateWithExtensions},
     state,
 };
+
+#[cfg(feature = "scaled-ui")]
+use spl_token_2022::extension::scaled_ui_amount::ScaledUiAmountConfig;
+
+#[cfg(feature = "ibt")]
+use spl_token_2022::extension::interest_bearing_mint::{self, InterestBearingConfig};
 
 use crate::{
     constants::ANCHOR_DISCRIMINATOR_SIZE,
@@ -70,24 +73,42 @@ pub struct Initialize<'info> {
 }
 
 impl Initialize<'_> {
-    fn validate(&self, wrap_authorities: &Vec<Pubkey>) -> Result<()> {
+    fn validate(&self, yield_fee_bps: u16, wrap_authorities: &Vec<Pubkey>) -> Result<()> {
         if self.ext_mint.mint_authority.unwrap_or_default() != self.ext_mint_authority.key() {
             return err!(ExtError::InvalidMint);
         }
 
-        // Validate ScaledUiAmount
         let ext_account_info = &self.ext_mint.to_account_info();
         let ext_data = ext_account_info.try_borrow_data()?;
         let ext_mint_data = StateWithExtensions::<state::Mint>::unpack(&ext_data)?;
         let extensions = ext_mint_data.get_extension_types()?;
 
-        if !extensions.contains(&ExtensionType::ScaledUiAmount) {
-            return err!(ExtError::InvalidMint);
+        // Validate ScaledUiAmount
+        #[cfg(feature = "scaled-ui")]
+        {
+            if !extensions.contains(&ExtensionType::ScaledUiAmount) {
+                return err!(ExtError::InvalidMint);
+            }
+
+            let scaled_ui_config = ext_mint_data.get_extension::<ScaledUiAmountConfig>()?;
+            if scaled_ui_config.authority != OptionalNonZeroPubkey(self.ext_mint_authority.key()) {
+                return err!(ExtError::InvalidMint);
+            }
         }
 
-        let scaled_ui_config = ext_mint_data.get_extension::<ScaledUiAmountConfig>()?;
-        if scaled_ui_config.authority != OptionalNonZeroPubkey(self.ext_mint_authority.key()) {
-            return err!(ExtError::InvalidMint);
+        // Validate interest-bearing token
+        #[cfg(feature = "ibt")]
+        {
+            if !extensions.contains(&ExtensionType::InterestBearingConfig) {
+                return err!(ExtError::InvalidMint);
+            }
+
+            let scaled_ui_config = ext_mint_data.get_extension::<InterestBearingConfig>()?;
+            if scaled_ui_config.rate_authority
+                != OptionalNonZeroPubkey(self.ext_mint_authority.key())
+            {
+                return err!(ExtError::InvalidMint);
+            }
         }
 
         // Validate and create the wrap authorities array
@@ -95,11 +116,20 @@ impl Initialize<'_> {
             return err!(ExtError::InvalidParam);
         }
 
+        // Cannot be more than 100%
+        if yield_fee_bps > 10_000 {
+            return err!(ExtError::InvalidParam);
+        }
+
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(&wrap_authorities))]
-    pub fn handler(ctx: Context<Self>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
+    #[access_control(ctx.accounts.validate(yield_fee_bps, &wrap_authorities))]
+    pub fn handler(
+        ctx: Context<Self>,
+        yield_fee_bps: u16,
+        wrap_authorities: Vec<Pubkey>,
+    ) -> Result<()> {
         let m_vault_bump = Pubkey::find_program_address(&[M_VAULT_SEED], ctx.program_id).1;
 
         // Sync the ScaledUiAmount multiplier with the M Index
@@ -132,7 +162,8 @@ impl Initialize<'_> {
             ext_mint_authority_bump: ctx.bumps.ext_mint_authority,
             wrap_authorities: wrap_authorities_array,
             index: ctx.accounts.m_earn_global_account.index,
-            index_ts: ctx.accounts.m_earn_global_account.timestamp,
+            update_ts: ctx.accounts.m_earn_global_account.timestamp,
+            yield_fee_bps,
         });
 
         Ok(())

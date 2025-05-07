@@ -6,10 +6,16 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{amount_to_principal_up, check_solvency, sync_multiplier},
+        conversion::check_solvency,
         token::{burn_tokens, transfer_tokens_from_program},
     },
 };
+
+#[cfg(feature = "scaled-ui")]
+use crate::utils::conversion::sync_multiplier;
+
+#[cfg(feature = "ibt")]
+use crate::utils::conversion::sync_rate;
 
 #[derive(Accounts)]
 pub struct Unwrap<'info> {
@@ -94,7 +100,8 @@ impl Unwrap<'_> {
             &[ctx.accounts.global_account.ext_mint_authority_bump],
         ]];
 
-        let multiplier = sync_multiplier(
+        #[cfg(feature = "scaled-ui")]
+        sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &ctx.accounts.m_earn_global_account,
             &ctx.accounts.ext_mint_authority,
@@ -102,30 +109,39 @@ impl Unwrap<'_> {
             &ctx.accounts.token_2022,
         )?;
 
-        // Calculate the principal amount of ext tokens to burn from the amount of m tokens to unwrap
+        #[cfg(feature = "ibt")]
+        sync_rate(
+            &mut ctx.accounts.ext_mint,
+            &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.global_account,
+            &ctx.accounts.ext_mint_authority,
+            authority_seeds,
+            &ctx.accounts.token_2022,
+        )?;
+
+        // Calculate the principal amount of ext tokens to burn
+        // from the amount of m tokens to unwrap
         let mut principal = amount_to_principal_up(amount, multiplier);
         if principal > ctx.accounts.from_ext_token_account.amount {
             principal = ctx.accounts.from_ext_token_account.amount;
         }
 
-        // Burn the amount of ext tokens from the user
         burn_tokens(
-            &ctx.accounts.from_ext_token_account,   // from
-            principal,                              // amount
-            &ctx.accounts.ext_mint,                 // mint
-            &ctx.accounts.signer.to_account_info(), // authority
-            &ctx.accounts.token_2022,               // token program
+            &ctx.accounts.from_ext_token_account,
+            principal,
+            &ctx.accounts.ext_mint,
+            &ctx.accounts.signer.to_account_info(),
+            &ctx.accounts.token_2022,
         )?;
 
-        // Transfer the amount of m tokens from the m vault to the user
         transfer_tokens_from_program(
-            &ctx.accounts.vault_m_token_account, // from
-            &ctx.accounts.to_m_token_account,    // to
-            amount,                              // amount
-            &ctx.accounts.m_mint,                // mint
-            &ctx.accounts.m_vault,               // authority
-            &[&[M_VAULT_SEED, &[ctx.accounts.global_account.m_vault_bump]]], // authority seeds
-            &ctx.accounts.token_2022,            // token program
+            &ctx.accounts.vault_m_token_account,
+            &ctx.accounts.to_m_token_account,
+            amount,
+            &ctx.accounts.m_mint,
+            &ctx.accounts.m_vault,
+            &[&[M_VAULT_SEED, &[ctx.accounts.global_account.m_vault_bump]]],
+            &ctx.accounts.token_2022,
         )?;
 
         Ok(())

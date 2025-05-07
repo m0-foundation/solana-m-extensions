@@ -6,10 +6,16 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{amount_to_principal_down, check_solvency, sync_multiplier},
+        conversion::check_solvency,
         token::{mint_tokens, transfer_tokens},
     },
 };
+
+#[cfg(feature = "scaled-ui")]
+use crate::utils::conversion::sync_multiplier;
+
+#[cfg(feature = "ibt")]
+use crate::utils::conversion::sync_rate;
 
 #[derive(Accounts)]
 pub struct Wrap<'info> {
@@ -94,9 +100,20 @@ impl Wrap<'_> {
             &[ctx.accounts.global_account.ext_mint_authority_bump],
         ]];
 
-        let multiplier = sync_multiplier(
+        #[cfg(feature = "scaled-ui")]
+        sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.ext_mint_authority,
+            authority_seeds,
+            &ctx.accounts.token_2022,
+        )?;
+
+        #[cfg(feature = "ibt")]
+        sync_rate(
+            &mut ctx.accounts.ext_mint,
+            &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.global_account,
             &ctx.accounts.ext_mint_authority,
             authority_seeds,
             &ctx.accounts.token_2022,
