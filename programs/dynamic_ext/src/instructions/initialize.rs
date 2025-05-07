@@ -131,6 +131,8 @@ impl Initialize<'_> {
             m_vault_bump,
             ext_mint_authority_bump: ctx.bumps.ext_mint_authority,
             wrap_authorities: wrap_authorities_array,
+            index: ctx.accounts.m_earn_global_account.index,
+            index_ts: ctx.accounts.m_earn_global_account.timestamp,
         });
 
         Ok(())

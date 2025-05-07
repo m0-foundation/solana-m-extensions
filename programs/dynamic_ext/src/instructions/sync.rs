@@ -56,7 +56,14 @@ impl SyncIndex<'_> {
             &self.ext_mint,
             &self.m_earn_global_account,
             &self.vault_m_token_account,
-        )
+        )?;
+
+        #[cfg(feature = "crank-yield")]
+        if self.signer.key() != self.global_account.admin {
+            return Err(ExtError::NotAuthorized.into());
+        }
+
+        Ok(())
     }
 
     #[access_control(ctx.accounts.validate())]
@@ -72,6 +79,9 @@ impl SyncIndex<'_> {
             ]],
             &ctx.accounts.token_2022,
         )?;
+
+        ctx.accounts.global_account.index = ctx.accounts.m_earn_global_account.index;
+        ctx.accounts.global_account.index_ts = ctx.accounts.m_earn_global_account.timestamp;
 
         Ok(())
     }

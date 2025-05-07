@@ -15,6 +15,21 @@ pub mod utils;
 
 declare_id!("4yXxi6sRvWpYUUUx3CTnVKuKLYegooLoNakrePLLVoV4");
 
+// Validate feature combinations
+const _: () = {
+    let yield_features = {
+        cfg!(feature = "scaled-ui") as u32
+            + cfg!(feature = "ibt") as u32
+            + cfg!(feature = "yield-crank") as u32
+    };
+
+    match yield_features {
+        0 => panic!("No yield distribution feature enabled"),
+        1 => {}
+        2.. => panic!("Only one yield distribution feature can be enabled at a time"),
+    }
+};
+
 #[program]
 pub mod dynamic_ext {
     use super::*;
