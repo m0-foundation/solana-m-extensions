@@ -2,17 +2,20 @@
 
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::{token_interface::{Mint, Token2022}, token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey};
+use anchor_spl::{
+    token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey,
+    token_interface::{Mint, Token2022},
+};
 use spl_token_2022::extension::{
-    BaseStateWithExtensions, ExtensionType, StateWithExtensions,
-    scaled_ui_amount::ScaledUiAmountConfig,
+    scaled_ui_amount::ScaledUiAmountConfig, BaseStateWithExtensions, ExtensionType,
+    StateWithExtensions,
 };
 
 // local dependencies
 use crate::{
     constants::ANCHOR_DISCRIMINATOR_SIZE,
     errors::ExtError,
-    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED}, 
+    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::conversion::sync_multiplier,
 };
 use earn::{
@@ -78,25 +81,23 @@ pub fn handler(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Resul
 
     // Validate that the ext mint has the ScaledUiAmount extension and
     // that the ext mint authority is the extension authority
-    { // explicit scope to drop the borrow at the end of the code block
-        let ext_account_info= &ctx.accounts.ext_mint.to_account_info();
+    {
+        // explicit scope to drop the borrow at the end of the code block
+        let ext_account_info = &ctx.accounts.ext_mint.to_account_info();
         let ext_data = ext_account_info.try_borrow_data()?;
-        let ext_mint_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(
-            &ext_data
-        )?;
+        let ext_mint_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&ext_data)?;
         let extensions = ext_mint_data.get_extension_types()?;
 
         if !extensions.contains(&ExtensionType::ScaledUiAmount) {
             return err!(ExtError::InvalidMint);
         }
 
-        let scaled_ui_config = ext_mint_data
-            .get_extension::<ScaledUiAmountConfig>()?;
+        let scaled_ui_config = ext_mint_data.get_extension::<ScaledUiAmountConfig>()?;
         if scaled_ui_config.authority != OptionalNonZeroPubkey(ext_mint_authority) {
             return err!(ExtError::InvalidMint);
         }
     }
-    
+
     // Sync the ScaledUiAmount multiplier with the M Index
     // We don't need to check collateralization here because
     // the ext mint must have a supply of 0 to start
@@ -104,11 +105,8 @@ pub fn handler(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Resul
         &mut ctx.accounts.ext_mint,
         &ctx.accounts.m_earn_global_account,
         &ctx.accounts.ext_mint_authority,
-    &[&[
-            MINT_AUTHORITY_SEED,
-            &[ctx.bumps.ext_mint_authority],
-        ]],
-        &ctx.accounts.token_2022
+        &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
+        &ctx.accounts.token_2022,
     )?;
 
     // Validate and create the wrap authorities array

@@ -5,10 +5,7 @@ use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 
 use crate::{
     errors::ExtError,
-    state::{
-        ExtGlobal, EXT_GLOBAL_SEED,
-        MINT_AUTHORITY_SEED, M_VAULT_SEED,
-    },
+    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
         conversion::{amount_to_principal_down, check_solvency, sync_multiplier},
         token::{mint_tokens, transfer_tokens},
@@ -118,14 +115,12 @@ pub fn handler(ctx: Context<Wrap>, amount: u64) -> Result<()> {
     // Mint the amount of ext tokens to the user
     mint_tokens(
         &ctx.accounts.to_ext_token_account, // to
-        principal,                             // amount
+        principal,                          // amount
         &ctx.accounts.ext_mint,             // mint
         &ctx.accounts.ext_mint_authority,   // authority
-        authority_seeds, // authority seeds
+        authority_seeds,                    // authority seeds
         &ctx.accounts.token_2022,           // token program
     )?;
 
     Ok(())
 }
-
-

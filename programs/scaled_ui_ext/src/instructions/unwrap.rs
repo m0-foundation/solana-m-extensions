@@ -5,9 +5,7 @@ use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 
 use crate::{
     errors::ExtError,
-    state::{
-        ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED
-    },
+    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
         conversion::{amount_to_principal_up, check_solvency, sync_multiplier},
         token::{burn_tokens, transfer_tokens_from_program},
