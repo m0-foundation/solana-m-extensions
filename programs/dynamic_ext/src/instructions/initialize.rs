@@ -3,6 +3,10 @@ use anchor_spl::{
     token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey,
     token_interface::{Mint, Token2022},
 };
+use earn::{
+    state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
+    ID as EARN_PROGRAM,
+};
 use spl_token_2022::{
     extension::{BaseStateWithExtensions, ExtensionType, StateWithExtensions},
     state,
@@ -19,10 +23,6 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::conversion::sync_multiplier,
-};
-use earn::{
-    state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
-    ID as EARN_PROGRAM,
 };
 
 #[derive(Accounts)]
@@ -132,12 +132,20 @@ impl Initialize<'_> {
     ) -> Result<()> {
         let m_vault_bump = Pubkey::find_program_address(&[M_VAULT_SEED], ctx.program_id).1;
 
-        // Sync the ScaledUiAmount multiplier with the M Index
-        // We don't need to check collateralization here because
-        // the ext mint must have a supply of 0 to start
+        #[cfg(feature = "scaled-ui")]
         sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.ext_mint_authority,
+            &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
+            &ctx.accounts.token_2022,
+        )?;
+
+        #[cfg(feature = "ibt")]
+        sync_rate(
+            &mut ctx.accounts.ext_mint,
+            &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.global_account,
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
             &ctx.accounts.token_2022,

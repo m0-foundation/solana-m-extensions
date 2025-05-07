@@ -1,5 +1,5 @@
 use anchor_lang::{prelude::*, system_program::{create_account, CreateAccount}};
-use anchor_spl::{associated_token::AssociatedToken, token_interface::{Mint, TokenAccount, TokenInterface}};
+use anchor_spl::token_interface::{Mint, TokenAccount};
 use spl_tlv_account_resolution::state::ExtraAccountMetaList;
 use spl_transfer_hook_interface::instruction::ExecuteInstruction;
 
@@ -46,16 +46,9 @@ pub struct InitializeExtraAccountMetaList<'info> {
         seeds = [b"extra-account-metas", mint.key().as_ref()], 
         bump
     )]
-
     pub extra_account_meta_list: AccountInfo<'info>,
 
     pub mint: InterfaceAccount<'info, Mint>,
-
-    pub wsol_mint: InterfaceAccount<'info, Mint>,
-
-    pub token_program: Interface<'info, TokenInterface>,
-
-    pub associated_token_program: Program<'info, AssociatedToken>,
     
     pub system_program: Program<'info, System>,
 }
@@ -67,6 +60,7 @@ impl InitializeExtraAccountMetaList<'_> {
     pub fn handler(
         ctx: Context<InitializeExtraAccountMetaList>,
     ) -> Result<()> {
+        // TODO: add extra accounts here
         let account_metas = vec![];
 
         // Calculate account size
