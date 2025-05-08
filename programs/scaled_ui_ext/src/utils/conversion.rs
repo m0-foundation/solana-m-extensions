@@ -63,13 +63,7 @@ pub fn check_solvency<'info>(
     // Reduce it by two to avoid rounding errors (there is an edge cases where the rounding error
     // from one index (down) to the next (up) can cause the difference to be 2)
     let mut required_amount = principal_to_amount_down(ext_mint.supply, multiplier);
-    required_amount -= if required_amount >= 2 {
-        2
-    } else if required_amount == 1 {
-        1
-    } else {
-        0
-    };
+    required_amount -= std::cmp::min(2, required_amount);
 
     // Check if the vault has enough tokens
     if vault_amount < required_amount {
