@@ -6,7 +6,7 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::check_solvency,
+        conversion::{check_solvency, sync_mint_extension},
         token::{mint_tokens, transfer_tokens},
     },
 };
@@ -95,38 +95,21 @@ impl Wrap<'_> {
 
     #[access_control(ctx.accounts.validate())]
     pub fn handler(ctx: Context<Wrap>, amount: u64) -> Result<()> {
-        let authority_seeds: &[&[&[u8]]] = &[&[
-            MINT_AUTHORITY_SEED,
-            &[ctx.accounts.global_account.ext_mint_authority_bump],
-        ]];
-
-        #[cfg(feature = "scaled-ui")]
-        sync_multiplier(
-            &mut ctx.accounts.ext_mint,
-            &ctx.accounts.m_earn_global_account,
-            &ctx.accounts.ext_mint_authority,
-            authority_seeds,
-            &ctx.accounts.token_2022,
-        )?;
-
-        #[cfg(feature = "ibt")]
-        sync_rate(
+        sync_mint_extension(
             &mut ctx.accounts.ext_mint,
             &ctx.accounts.m_earn_global_account,
             &ctx.accounts.global_account,
             &ctx.accounts.ext_mint_authority,
-            authority_seeds,
-            &ctx.accounts.token_2022,
         )?;
 
         // Transfer the amount of m tokens from the user to the m vault
         transfer_tokens(
-            &ctx.accounts.from_m_token_account,     // from
-            &ctx.accounts.vault_m_token_account,    // to
-            amount,                                 // amount
-            &ctx.accounts.m_mint,                   // mint
-            &ctx.accounts.signer.to_account_info(), // authority
-            &ctx.accounts.token_2022,               // token program
+            &ctx.accounts.from_m_token_account,
+            &ctx.accounts.vault_m_token_account,
+            amount,
+            &ctx.accounts.m_mint,
+            &ctx.accounts.signer.to_account_info(),
+            &ctx.accounts.token_2022,
         )?;
 
         // Calculate the amount of ext tokens to mint based on the amount of m tokens wrapped
@@ -134,12 +117,12 @@ impl Wrap<'_> {
 
         // Mint the amount of ext tokens to the user
         mint_tokens(
-            &ctx.accounts.to_ext_token_account, // to
-            principal,                          // amount
-            &ctx.accounts.ext_mint,             // mint
-            &ctx.accounts.ext_mint_authority,   // authority
-            authority_seeds,                    // authority seeds
-            &ctx.accounts.token_2022,           // token program
+            &ctx.accounts.to_ext_token_account,
+            principal,
+            &ctx.accounts.ext_mint,
+            &ctx.accounts.ext_mint_authority,
+            ctx.accounts.global_account.ext_mint_authority_bump,
+            &ctx.accounts.token_2022,
         )?;
 
         Ok(())

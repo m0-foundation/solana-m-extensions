@@ -1,5 +1,3 @@
-use core::sync;
-
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use earn::state::Global as EarnGlobal;
@@ -7,14 +5,8 @@ use earn::state::Global as EarnGlobal;
 use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
-    utils::conversion::check_solvency,
+    utils::conversion::{check_solvency, sync_mint_extension},
 };
-
-#[cfg(feature = "scaled-ui")]
-use crate::utils::conversion::sync_multiplier;
-
-#[cfg(feature = "ibt")]
-use crate::utils::conversion::sync_rate;
 
 #[derive(Accounts)]
 pub struct SyncIndex<'info> {
@@ -76,29 +68,11 @@ impl SyncIndex<'_> {
 
     #[access_control(ctx.accounts.validate())]
     pub fn handler(ctx: Context<Self>) -> Result<()> {
-        #[cfg(feature = "scaled-ui")]
-        sync_multiplier(
-            &mut ctx.accounts.ext_mint,
-            &ctx.accounts.m_earn_global_account,
-            &ctx.accounts.ext_mint_authority,
-            &[&[
-                MINT_AUTHORITY_SEED,
-                &[ctx.accounts.global_account.ext_mint_authority_bump],
-            ]],
-            &ctx.accounts.token_2022,
-        )?;
-
-        #[cfg(feature = "ibt")]
-        sync_rate(
+        sync_mint_extension(
             &mut ctx.accounts.ext_mint,
             &ctx.accounts.m_earn_global_account,
             &ctx.accounts.global_account,
             &ctx.accounts.ext_mint_authority,
-            &[&[
-                MINT_AUTHORITY_SEED,
-                &[ctx.accounts.global_account.ext_mint_authority_bump],
-            ]],
-            &ctx.accounts.token_2022,
         )?;
 
         ctx.accounts.global_account.index = ctx.accounts.m_earn_global_account.index;

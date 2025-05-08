@@ -1,7 +1,5 @@
 [workspace]
-members = [
-    "programs/*"
-]
+members = ["programs/*"]
 resolver = "2"
 
 [profile.release]
@@ -20,5 +18,6 @@ spl-token-2022 = { version = "7.0.0", features = ["no-entrypoint"] }
 solana-program = "=2.1.0"
 solana-security-txt = "1.1.1"
 cfg-if = "1.0"
-earn = { git = "https://github.com/m0-foundation/solana-m", branch = "solana-2.1.0", features = ["no-entrypoint"] }
-
+earn = { git = "https://github.com/m0-foundation/solana-m", branch = "solana-v2-earner-rate", features = [
+    "no-entrypoint",
+] }

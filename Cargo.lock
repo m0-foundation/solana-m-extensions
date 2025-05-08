@@ -842,7 +842,7 @@ dependencies = [
 [[package]]
 name = "earn"
 version = "0.1.0"
-source = "git+https://github.com/m0-foundation/solana-m?branch=solana-2.1.0#58c8bac1e5130baa1f227982ba638180fabd8034"
+source = "git+https://github.com/m0-foundation/solana-m?branch=solana-v2-earner-rate#f9b7a24f3d2a532910ebdc1e1e9f601ee84a8cfe"
 dependencies = [
  "anchor-lang",
  "anchor-spl",

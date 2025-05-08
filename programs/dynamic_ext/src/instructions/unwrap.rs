@@ -6,16 +6,10 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::check_solvency,
+        conversion::{check_solvency, sync_mint_extension},
         token::{burn_tokens, transfer_tokens_from_program},
     },
 };
-
-#[cfg(feature = "scaled-ui")]
-use crate::utils::conversion::sync_multiplier;
-
-#[cfg(feature = "ibt")]
-use crate::utils::conversion::sync_rate;
 
 #[derive(Accounts)]
 pub struct Unwrap<'info> {
@@ -95,32 +89,14 @@ impl Unwrap<'_> {
 
     #[access_control(ctx.accounts.validate())]
     pub fn handler(ctx: Context<Self>, amount: u64) -> Result<()> {
-        let authority_seeds: &[&[&[u8]]] = &[&[
-            MINT_AUTHORITY_SEED,
-            &[ctx.accounts.global_account.ext_mint_authority_bump],
-        ]];
-
-        #[cfg(feature = "scaled-ui")]
-        sync_multiplier(
-            &mut ctx.accounts.ext_mint,
-            &ctx.accounts.m_earn_global_account,
-            &ctx.accounts.ext_mint_authority,
-            authority_seeds,
-            &ctx.accounts.token_2022,
-        )?;
-
-        #[cfg(feature = "ibt")]
-        sync_rate(
+        sync_mint_extension(
             &mut ctx.accounts.ext_mint,
             &ctx.accounts.m_earn_global_account,
             &ctx.accounts.global_account,
             &ctx.accounts.ext_mint_authority,
-            authority_seeds,
-            &ctx.accounts.token_2022,
         )?;
 
-        // Calculate the principal amount of ext tokens to burn
-        // from the amount of m tokens to unwrap
+        // Calculate the principal amount of ext tokens to burn from the amount of m tokens to unwrap
         let mut principal = amount_to_principal_up(amount, multiplier);
         if principal > ctx.accounts.from_ext_token_account.amount {
             principal = ctx.accounts.from_ext_token_account.amount;
@@ -140,7 +116,7 @@ impl Unwrap<'_> {
             amount,
             &ctx.accounts.m_mint,
             &ctx.accounts.m_vault,
-            &[&[M_VAULT_SEED, &[ctx.accounts.global_account.m_vault_bump]]],
+            ctx.accounts.global_account.m_vault_bump,
             &ctx.accounts.token_2022,
         )?;
 

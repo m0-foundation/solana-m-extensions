@@ -3,15 +3,19 @@ use anchor_spl::token_interface::{
     burn, mint_to, transfer_checked, Burn, Mint, MintTo, Token2022, TokenAccount, TransferChecked,
 };
 
+use crate::state::MINT_AUTHORITY_SEED;
+
 pub fn transfer_tokens_from_program<'info>(
     from: &InterfaceAccount<'info, TokenAccount>,
     to: &InterfaceAccount<'info, TokenAccount>,
     amount: u64,
     mint: &InterfaceAccount<'info, Mint>,
     authority: &AccountInfo<'info>,
-    authority_seeds: &[&[&[u8]]],
+    authority_bump: u8,
     token_program: &Program<'info, Token2022>,
 ) -> Result<()> {
+    let authority_seeds: &[&[&[u8]]] = &[&[MINT_AUTHORITY_SEED, &[authority_bump]]];
+
     // Build the arguments for the transfer instruction
     let transfer_options = TransferChecked {
         from: from.to_account_info(),
@@ -19,6 +23,7 @@ pub fn transfer_tokens_from_program<'info>(
         mint: mint.to_account_info(),
         authority: authority.clone(),
     };
+
     let cpi_context = CpiContext::new_with_signer(
         token_program.to_account_info(),
         transfer_options,
@@ -54,14 +59,12 @@ pub fn transfer_tokens<'info>(
     Ok(())
 }
 
-// Convenience functions to mint and burn tokens from a program using a PDA signer
-
 pub fn mint_tokens<'info>(
     to: &InterfaceAccount<'info, TokenAccount>,
     amount: u64,
     mint: &InterfaceAccount<'info, Mint>,
     authority: &AccountInfo<'info>,
-    authority_seeds: &[&[&[u8]]],
+    authority_bump: u8,
     token_program: &Program<'info, Token2022>,
 ) -> Result<()> {
     // Build the arguments for the mint instruction
@@ -70,6 +73,8 @@ pub fn mint_tokens<'info>(
         to: to.to_account_info(),
         authority: authority.clone(),
     };
+
+    let authority_seeds: &[&[&[u8]]] = &[&[MINT_AUTHORITY_SEED, &[authority_bump]]];
 
     let cpi_context = CpiContext::new_with_signer(
         token_program.to_account_info(),

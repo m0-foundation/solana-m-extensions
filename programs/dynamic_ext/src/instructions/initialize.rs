@@ -16,13 +16,13 @@ use spl_token_2022::{
 use spl_token_2022::extension::scaled_ui_amount::ScaledUiAmountConfig;
 
 #[cfg(feature = "ibt")]
-use spl_token_2022::extension::interest_bearing_mint::{self, InterestBearingConfig};
+use spl_token_2022::extension::interest_bearing_mint::InterestBearingConfig;
 
 use crate::{
     constants::ANCHOR_DISCRIMINATOR_SIZE,
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
-    utils::conversion::sync_multiplier,
+    utils::conversion::sync_mint_extension,
 };
 
 #[derive(Accounts)]
@@ -130,25 +130,11 @@ impl Initialize<'_> {
         yield_fee_bps: u16,
         wrap_authorities: Vec<Pubkey>,
     ) -> Result<()> {
-        let m_vault_bump = Pubkey::find_program_address(&[M_VAULT_SEED], ctx.program_id).1;
-
-        #[cfg(feature = "scaled-ui")]
-        sync_multiplier(
-            &mut ctx.accounts.ext_mint,
-            &ctx.accounts.m_earn_global_account,
-            &ctx.accounts.ext_mint_authority,
-            &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
-            &ctx.accounts.token_2022,
-        )?;
-
-        #[cfg(feature = "ibt")]
-        sync_rate(
+        sync_mint_extension(
             &mut ctx.accounts.ext_mint,
             &ctx.accounts.m_earn_global_account,
             &ctx.accounts.global_account,
             &ctx.accounts.ext_mint_authority,
-            &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
-            &ctx.accounts.token_2022,
         )?;
 
         let mut wrap_authorities_array = [Pubkey::default(); 10];
@@ -166,7 +152,7 @@ impl Initialize<'_> {
             m_mint: ctx.accounts.m_mint.key(),
             m_earn_global_account: ctx.accounts.m_earn_global_account.key(),
             bump: ctx.bumps.global_account,
-            m_vault_bump,
+            m_vault_bump: Pubkey::find_program_address(&[M_VAULT_SEED], ctx.program_id).1,
             ext_mint_authority_bump: ctx.bumps.ext_mint_authority,
             wrap_authorities: wrap_authorities_array,
             index: ctx.accounts.m_earn_global_account.index,
