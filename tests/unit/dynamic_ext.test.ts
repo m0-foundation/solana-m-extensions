@@ -38,7 +38,7 @@ describe("dynamic ext tests", () => {
   const mMint: Keypair = new Keypair();
   const extMint: Keypair = new Keypair();
 
-  for (const featuresSet of ["scaled-ui", "ibt", "yield-crank"]) {
+  for (const featuresSet of ["scaled-ui", "ibt", "yield-crank", "no-yield"]) {
     const svm = fromWorkspace("")
       .withSplPrograms()
       .withBuiltins()

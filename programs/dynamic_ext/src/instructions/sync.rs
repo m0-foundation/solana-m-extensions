@@ -58,7 +58,7 @@ impl SyncIndex<'_> {
             &self.vault_m_token_account,
         )?;
 
-        #[cfg(feature = "yield-crank")]
+        #[cfg(any(feature = "yield-crank", feature = "no-yield"))]
         if self.signer.key() != self.global_account.admin {
             return Err(ExtError::NotAuthorized.into());
         }

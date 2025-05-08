@@ -106,7 +106,7 @@ pub fn sync_mint_extension<'info>(
         authority_seeds,
     )?;
 
-    #[cfg(feature = "yield-crank")]
+    #[cfg(any(feature = "yield-crank", feature = "no-yield"))]
     let mult = 1.;
 
     Ok(mult)

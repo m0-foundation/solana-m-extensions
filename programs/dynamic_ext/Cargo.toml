@@ -23,6 +23,7 @@ scaled-ui = []
 ibt = []
 permissioned-wrapping = []
 yield-crank = []
+no-yield = []
 
 [dependencies]
 anchor-lang.workspace = true

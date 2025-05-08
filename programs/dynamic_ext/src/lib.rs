@@ -21,6 +21,7 @@ const _: () = {
         cfg!(feature = "scaled-ui") as u32
             + cfg!(feature = "ibt") as u32
             + cfg!(feature = "yield-crank") as u32
+            + cfg!(feature = "no-yield") as u32
     };
 
     match yield_features {
