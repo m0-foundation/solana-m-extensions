@@ -16,4 +16,10 @@ pub enum ExtError {
     InsufficientCollateral,
     #[msg("Invalid Mint.")]
     InvalidMint,
+    #[msg("Math overflow.")]
+    MathOverflow,
+    #[msg("Math underflow.")]
+    MathUnderflow,
+    #[msg("Type conversion error.")]
+    TypeConversionError,
 }

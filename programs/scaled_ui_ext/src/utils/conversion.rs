@@ -1,13 +1,14 @@
 // ext_earn/utils/conversion.rs
 
 use crate::{
-    constants::{INDEX_SCALE_F64, INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_F64},
+    constants::{INDEX_SCALE_F64, INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
     errors::ExtError,
     state::ExtGlobal,
 };
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use earn::state::Global as EarnGlobal;
+use rust_decimal::prelude::*;
 use solana_program::program::invoke_signed;
 use spl_token_2022::extension::{
     scaled_ui_amount::{PodF64, ScaledUiAmountConfig, UnixTimestamp},
@@ -17,20 +18,20 @@ use spl_token_2022::extension::{
 fn get_latest_multiplier_and_timestamp<'info>(
     ext_global_account: &Account<'info, ExtGlobal>,
     m_earn_global_account: &Account<'info, EarnGlobal>,
-) -> (f64, i64) {
-    // TODO explore fixed point math to avoid floating point precision unpredictability
-    let current_m_multiplier = m_earn_global_account.index as f64 / INDEX_SCALE_F64;
-    let last_m_multiplier = ext_global_account.last_m_index as f64 / INDEX_SCALE_F64;
+) -> Result<(f64, i64)> {
+    let current_m_multiplier = Decimal::new(m_earn_global_account.index as i64, 12);
+    let last_m_multiplier = Decimal::new(ext_global_account.last_m_index as i64, 12);
     let timestamp: i64 = m_earn_global_account.timestamp as i64;
-    let last_ext_multiplier = ext_global_account.last_ext_index as f64 / INDEX_SCALE_F64;
-
-    msg!("current_m_multiplier: {}", current_m_multiplier);
-    msg!("last_m_multiplier: {}", last_m_multiplier);
+    let last_ext_multiplier = Decimal::new(ext_global_account.last_ext_index as i64, 12);
 
     // If no change, return early
     if current_m_multiplier == last_m_multiplier {
-        msg!("Hasn't changed");
-        return (last_ext_multiplier, timestamp);
+        return Ok((
+            last_ext_multiplier
+                .to_f64()
+                .ok_or(ExtError::TypeConversionError)?,
+            timestamp,
+        ));
     }
 
     let m_increase_factor = current_m_multiplier / last_m_multiplier;
@@ -41,18 +42,18 @@ fn get_latest_multiplier_and_timestamp<'info>(
         m_increase_factor
     } else {
         // Calculate the increase factor for the ext index
-        let fee_on_yield = ext_global_account.fee_bps as f64 / ONE_HUNDRED_PERCENT_F64;
-        m_increase_factor.powf(1.0f64 - fee_on_yield)
+        let fee_on_yield = Decimal::new(ext_global_account.fee_bps as i64, 4);
+        m_increase_factor.powd(Decimal::new(ONE_HUNDRED_PERCENT_U64 as i64, 4) - fee_on_yield)
     };
 
-    msg!("ext_increase_factor: {}", ext_increase_factor);
-
     // Calculate the new extension multiplier (index in f64 scaled down)
-    let new_ext_multiplier = last_ext_multiplier * ext_increase_factor;
+    let new_ext_multiplier = last_ext_multiplier
+        .checked_mul(ext_increase_factor)
+        .ok_or(ExtError::MathOverflow)?
+        .to_f64()
+        .ok_or(ExtError::TypeConversionError)?;
 
-    msg!("new_ext_multiplier: {}", new_ext_multiplier);
-
-    (new_ext_multiplier, timestamp)
+    Ok((new_ext_multiplier, timestamp))
 }
 
 pub fn check_solvency<'info>(
@@ -63,7 +64,7 @@ pub fn check_solvency<'info>(
 ) -> Result<()> {
     // Get the current index and timestamp from the m_earn_global_account
     let (multiplier, _): (f64, i64) =
-        get_latest_multiplier_and_timestamp(ext_global_account, m_earn_global_account);
+        get_latest_multiplier_and_timestamp(ext_global_account, m_earn_global_account)?;
 
     // Calculate the amount of tokens in the vault
     let vault_amount = vault_m_token_account.amount;
@@ -92,7 +93,7 @@ pub fn sync_multiplier<'info>(
 ) -> Result<f64> {
     // Get the current index and timestamp from the m_earn_global_account
     let (multiplier, timestamp): (f64, i64) =
-        get_latest_multiplier_and_timestamp(ext_global_account, m_earn_global_account);
+        get_latest_multiplier_and_timestamp(ext_global_account, m_earn_global_account)?;
 
     // Compare against the current multiplier
     // If the multiplier is the same, we don't need to update

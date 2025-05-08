@@ -24,3 +24,4 @@ cfg-if.workspace = true
 solana-security-txt.workspace = true
 solana-program.workspace = true
 earn.workspace = true
+rust_decimal = { version = "1.37", features = ["maths"] }
