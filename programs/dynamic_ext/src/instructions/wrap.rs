@@ -94,6 +94,7 @@ impl Wrap<'_> {
             &ctx.accounts.m_earn_global_account,
             &ctx.accounts.global_account,
             &ctx.accounts.ext_mint_authority,
+            ctx.accounts.global_account.ext_mint_authority_bump,
         )?;
 
         // Transfer the amount of m tokens from the user to the m vault

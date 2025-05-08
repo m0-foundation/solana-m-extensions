@@ -26,6 +26,7 @@ fn get_multiplier_and_timestamp<'info>(m_earn_global: &Account<'info, EarnGlobal
     (multiplier, timestamp)
 }
 
+#[cfg(feature = "ibt")]
 fn get_ibt_multiplier<'info>(config: &InterestBearingConfig, latest_timestamp: i64) -> f64 {
     // Duration from initialization to the last update
     let pre_update_timespan = i64::from(config.last_update_timestamp)
@@ -86,26 +87,27 @@ pub fn check_solvency<'info>(
 
 pub fn sync_mint_extension<'info>(
     ext_mint: &mut InterfaceAccount<'info, Mint>,
-    m_earn_global_account: &Account<'info, EarnGlobal>,
-    ext_global_account: &Account<'info, ExtGlobal>,
+    m_earn_global: &Account<'info, EarnGlobal>,
+    ext_global: &Account<'info, ExtGlobal>,
     authority: &AccountInfo<'info>,
+    authority_bump: u8,
 ) -> Result<f64> {
-    let authority_seeds: &[&[&[u8]]] = &[&[
-        MINT_AUTHORITY_SEED,
-        &[ext_global_account.ext_mint_authority_bump],
-    ]];
+    let authority_seeds: &[&[&[u8]]] = &[&[MINT_AUTHORITY_SEED, &[authority_bump]]];
 
     #[cfg(feature = "scaled-ui")]
-    let mult = sync_multiplier(ext_mint, m_earn_global_account, authority, authority_seeds)?;
+    let mult = sync_multiplier(ext_mint, m_earn_global, authority, authority_seeds)?;
 
     #[cfg(feature = "ibt")]
     let mult = sync_rate(
         ext_mint,
-        m_earn_global_account,
-        ext_global_account,
+        m_earn_global,
+        ext_global,
         authority,
         authority_seeds,
     )?;
+
+    #[cfg(feature = "yield-crank")]
+    let mult = 1.;
 
     Ok(mult)
 }
@@ -117,7 +119,7 @@ pub fn sync_multiplier<'info>(
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
 ) -> Result<f64> {
-    let (multiplier, timestamp) = get_multiplier_and_timestamp(m_earn_global, ext_mint);
+    let (multiplier, timestamp) = get_multiplier_and_timestamp(m_earn_global);
 
     let ext_account_info = &ext_mint.to_account_info();
     let ext_data = ext_account_info.try_borrow_data()?;

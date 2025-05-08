@@ -58,7 +58,7 @@ impl SyncIndex<'_> {
             &self.vault_m_token_account,
         )?;
 
-        #[cfg(feature = "crank-yield")]
+        #[cfg(feature = "yield-crank")]
         if self.signer.key() != self.global_account.admin {
             return Err(ExtError::NotAuthorized.into());
         }
@@ -73,6 +73,7 @@ impl SyncIndex<'_> {
             &ctx.accounts.m_earn_global_account,
             &ctx.accounts.global_account,
             &ctx.accounts.ext_mint_authority,
+            ctx.accounts.global_account.ext_mint_authority_bump,
         )?;
 
         ctx.accounts.global_account.index = ctx.accounts.m_earn_global_account.index;

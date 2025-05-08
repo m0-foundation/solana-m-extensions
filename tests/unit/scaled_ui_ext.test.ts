@@ -26,11 +26,13 @@ import {
 import { struct, u8, f64 } from '@solana/buffer-layout';
 import { publicKey, u64 } from '@solana/buffer-layout-utils';
 import { randomInt } from 'crypto';
-
+import { PROGRAM_ID as EARN_PROGRAM_ID, MerkleTree, ProofElement } from '@m0-foundation/solana-m-sdk';
 import { ScaledUiExt } from '../../target/types/scaled_ui_ext';
+import { Earn } from '../programs/earn';
+const EARN_IDL = require('../programs/earn.json');
 const SCALED_UI_EXT_IDL = require('../../target/idl/scaled_ui_ext.json');
 
-import { Earn, EARN_IDL, PROGRAM_ID as EARN_PROGRAM_ID, MerkleTree, ProofElement } from '@m0-foundation/solana-m-sdk';
+
 
 // Unit tests for ext earn program
 
@@ -59,6 +61,7 @@ let scaledUiExt: Program<ScaledUiExt>;
 // Start parameters for M Earn
 const initialSupply = new BN(100_000_000); // 100 tokens with 6 decimals
 const initialIndex = new BN(1_000_000_000_000); // 1.0
+const initialEarnerRate = 415;
 const claimCooldown = new BN(0); // None
 
 // Token Helper functions
@@ -338,7 +341,7 @@ const getScaledUiAmountConfig = async (mint: PublicKey): Promise<ScaledUiAmountC
   return ScaledUiAmountConfigLayout.decode(extensionData);
 }
 
-const createMintWithMultisig = async (mint: Keypair, mintAuthority: Keypair) => {
+export const createMintWithMultisig = async (mint: Keypair, mintAuthority: Keypair) => {
   // Create and initialize multisig mint authority on the token program
   const multisigLen = 355;
   // const multisigLamports = await provider.connection.getMinimumBalanceForRentExemption(multisigLen);
@@ -457,7 +460,7 @@ interface ExtGlobal {
   mMint?: PublicKey;
   mEarnGlobalAccount?: PublicKey;
   bump?: number;
-  mVaultBump?: number;
+  mVaultBump?: number; 
   extMintAuthorityBump?: number;
   wrapAuthorities?: PublicKey[];
 }
@@ -595,14 +598,14 @@ const prepEarnInitialize = (signer: Keypair, mint: PublicKey) => {
   return { globalAccount };
 };
 
-const initializeEarn = async (mint: PublicKey, earnAuthority: PublicKey, initialIndex: BN, claimCooldown: BN) => {
+const initializeEarn = async (mint: PublicKey, earnAuthority: PublicKey, initialIndex: BN, initialEarnerRate: number, claimCooldown: BN) => {
   // Setup the instruction
   const { globalAccount } = prepEarnInitialize(admin, mint);
 
   // Send the transaction
   try {
   await earn.methods
-    .initialize(earnAuthority, initialIndex, claimCooldown)
+    .initialize(earnAuthority, initialIndex, initialEarnerRate, claimCooldown)
     .accountsPartial({ ...accounts })
     .signers([admin])
     .rpc();
@@ -1000,7 +1003,7 @@ describe('ScaledUiExt unit tests', () => {
     await mintM(admin.publicKey, initialSupply);
 
     // Initialize the earn program
-    await initializeEarn(mMint.publicKey, earnAuthority.publicKey, initialIndex, claimCooldown);
+    await initializeEarn(mMint.publicKey, earnAuthority.publicKey, initialIndex, initialEarnerRate, claimCooldown);
 
     // Add the m vault as an M earner
     const mVault = getMVault();

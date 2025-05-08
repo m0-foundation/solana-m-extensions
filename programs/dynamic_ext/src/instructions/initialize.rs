@@ -103,10 +103,8 @@ impl Initialize<'_> {
                 return err!(ExtError::InvalidMint);
             }
 
-            let scaled_ui_config = ext_mint_data.get_extension::<InterestBearingConfig>()?;
-            if scaled_ui_config.rate_authority
-                != OptionalNonZeroPubkey(self.ext_mint_authority.key())
-            {
+            let ibt_config = ext_mint_data.get_extension::<InterestBearingConfig>()?;
+            if ibt_config.rate_authority != OptionalNonZeroPubkey(self.ext_mint_authority.key()) {
                 return err!(ExtError::InvalidMint);
             }
         }
@@ -135,6 +133,7 @@ impl Initialize<'_> {
             &ctx.accounts.m_earn_global_account,
             &ctx.accounts.global_account,
             &ctx.accounts.ext_mint_authority,
+            ctx.bumps.ext_mint_authority,
         )?;
 
         let mut wrap_authorities_array = [Pubkey::default(); 10];

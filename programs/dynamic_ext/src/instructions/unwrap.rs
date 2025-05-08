@@ -94,6 +94,7 @@ impl Unwrap<'_> {
             &ctx.accounts.m_earn_global_account,
             &ctx.accounts.global_account,
             &ctx.accounts.ext_mint_authority,
+            ctx.accounts.global_account.ext_mint_authority_bump,
         )?;
 
         // Calculate the principal amount of ext tokens to burn from the amount of m tokens to unwrap

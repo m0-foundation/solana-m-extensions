@@ -22,7 +22,7 @@ transfer-hook = [
 scaled-ui = []
 ibt = []
 permissioned-wrapping = []
-crank-yield = []
+yield-crank = []
 
 [dependencies]
 anchor-lang.workspace = true
