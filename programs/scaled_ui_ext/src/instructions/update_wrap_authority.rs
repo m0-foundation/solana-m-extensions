@@ -20,11 +20,19 @@ pub struct UpdateWrapAuthority<'info> {
     pub global_account: Account<'info, ExtGlobal>,
 }
 
-pub fn handler(ctx: Context<UpdateWrapAuthority>, index: u8, new_wrap_authority: Pubkey) -> Result<()> {
+pub fn handler(
+    ctx: Context<UpdateWrapAuthority>,
+    index: u8,
+    new_wrap_authority: Pubkey,
+) -> Result<()> {
     let global_account = &mut ctx.accounts.global_account;
 
     // Validate that the new wrap authority is not already in the list (if not the system program)
-    if new_wrap_authority != Pubkey::default() && global_account.wrap_authorities.contains(&new_wrap_authority) {
+    if new_wrap_authority != Pubkey::default()
+        && global_account
+            .wrap_authorities
+            .contains(&new_wrap_authority)
+    {
         return err!(ExtError::InvalidParam);
     }
 
@@ -38,6 +46,3 @@ pub fn handler(ctx: Context<UpdateWrapAuthority>, index: u8, new_wrap_authority:
 
     Ok(())
 }
-
-
-
