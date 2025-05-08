@@ -291,6 +291,16 @@ mod tests {
         }
 
         #[test]
+        fn test_get_ibt_multiplier_zero() {
+            let init_ts = 1630000000;
+            let ts = 1630000000 + SECONDS_PER_YEAR as i64 / 2;
+
+            let config = create_test_config(init_ts, ts, 0, 0);
+            let result = get_ibt_multiplier(&config, ts);
+            assert!(result == 1.0);
+        }
+
+        #[test]
         fn test_get_ibt_multiplier_one_year() {
             let init_ts = 1630000000;
             let last_update_ts = 1630000000 + SECONDS_PER_YEAR as i64 / 2;
@@ -303,7 +313,7 @@ mod tests {
             // 6 months at 5%, then 6 months at 5% = 5% for a year
             // Expected ≈ exp(0.05) ≈ 1.05127
             let expected = (0.05_f64).exp();
-            assert!((result - expected).abs() < 0.001);
+            assert!(result == expected);
 
             // Use multiplier to calculate principal and compare
             let amount = 100_000e6 as u64;
