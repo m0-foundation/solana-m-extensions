@@ -1,4 +1,3 @@
-
 pub const ANCHOR_DISCRIMINATOR_SIZE: usize = 8;
 
 pub const INDEX_SCALE_F64: f64 = 1e12f64;
