@@ -9,7 +9,7 @@ crate-type = ["cdylib", "lib"]
 name = "dynamic_ext"
 
 [features]
-default = ["transfer-hook", "permissioned-wrapping", "scaled-ui"]
+default = ["transfer-hook", "permissioned-wrapping", "ibt"]
 cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []

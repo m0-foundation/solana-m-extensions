@@ -14,16 +14,53 @@ use anchor_spl::token_interface::spl_pod::primitives::PodI16;
 use spl_token_2022::extension::interest_bearing_mint::{self, InterestBearingConfig};
 
 use crate::{
-    constants::{INDEX_SCALE_F64, INDEX_SCALE_U64},
+    constants::{INDEX_SCALE_F64, INDEX_SCALE_U64, ONE_IN_BASIS_POINTS, SECONDS_PER_YEAR},
     errors::ExtError,
     state::{ExtGlobal, MINT_AUTHORITY_SEED},
 };
 
 fn get_multiplier_and_timestamp<'info>(m_earn_global: &Account<'info, EarnGlobal>) -> (f64, i64) {
-    (
-        (m_earn_global.index as f64) / INDEX_SCALE_F64,
-        m_earn_global.timestamp as i64,
-    )
+    let multiplier: f64 = (m_earn_global.index as f64) / INDEX_SCALE_F64;
+    let timestamp: i64 = m_earn_global.timestamp as i64;
+
+    (multiplier, timestamp)
+}
+
+fn get_ibt_multiplier<'info>(config: &InterestBearingConfig, latest_timestamp: i64) -> f64 {
+    // Duration from initialization to the last update
+    let pre_update_timespan = i64::from(config.last_update_timestamp)
+        .checked_sub(config.initialization_timestamp.into())
+        .unwrap();
+
+    // Duration from the last update to the current time
+    let post_update_timespan = latest_timestamp
+        .checked_sub(config.last_update_timestamp.into())
+        .unwrap();
+
+    // - Take the average rate from initialization to last update
+    // - Multiply by the time span in that period
+    // - Convert to a continuous compound interest formula: e^(rate × time)
+    // - Divide by SECONDS_PER_YEAR converts time units to years
+    // - Divide by ONE_IN_BASIS_POINTS to scale rate from bps
+    let pre_update_exp = {
+        let numerator = (i16::from(config.pre_update_average_rate) as i128)
+            .checked_mul(pre_update_timespan as i128)
+            .expect("average_rate * timespan overflow") as f64;
+
+        (numerator / SECONDS_PER_YEAR / ONE_IN_BASIS_POINTS).exp()
+    };
+
+    // Same as above, but for the period after the last update
+    let post_update_exp = {
+        let numerator = (i16::from(config.current_rate) as i128)
+            .checked_mul(post_update_timespan as i128)
+            .expect("current_rate * timespan overflow") as f64;
+
+        (numerator / SECONDS_PER_YEAR / ONE_IN_BASIS_POINTS).exp()
+    };
+
+    // Multiplies the two exponential factors together (compound interest from both periods)
+    pre_update_exp * post_update_exp
 }
 
 pub fn check_solvency<'info>(
@@ -31,8 +68,7 @@ pub fn check_solvency<'info>(
     m_earn_global_account: &Account<'info, EarnGlobal>,
     vault_m_token_account: &InterfaceAccount<'info, TokenAccount>,
 ) -> Result<()> {
-    // Get the current index and timestamp from the m_earn_global_account
-    let (multiplier, _): (f64, i64) = get_multiplier_and_timestamp(m_earn_global_account);
+    let (multiplier, _) = get_multiplier_and_timestamp(m_earn_global_account);
 
     // Calculate the amount of tokens needed to be solvent
     // Reduce it by two to avoid rounding errors (there is an edge cases where the rounding error
@@ -53,17 +89,17 @@ pub fn sync_mint_extension<'info>(
     m_earn_global_account: &Account<'info, EarnGlobal>,
     ext_global_account: &Account<'info, ExtGlobal>,
     authority: &AccountInfo<'info>,
-) -> Result<()> {
+) -> Result<f64> {
     let authority_seeds: &[&[&[u8]]] = &[&[
         MINT_AUTHORITY_SEED,
         &[ext_global_account.ext_mint_authority_bump],
     ]];
 
     #[cfg(feature = "scaled-ui")]
-    sync_multiplier(ext_mint, m_earn_global_account, authority, authority_seeds)?;
+    let mult = sync_multiplier(ext_mint, m_earn_global_account, authority, authority_seeds)?;
 
     #[cfg(feature = "ibt")]
-    sync_rate(
+    let mult = sync_rate(
         ext_mint,
         m_earn_global_account,
         ext_global_account,
@@ -71,18 +107,17 @@ pub fn sync_mint_extension<'info>(
         authority_seeds,
     )?;
 
-    Ok(())
+    Ok(mult)
 }
 
 #[cfg(feature = "scaled-ui")]
 pub fn sync_multiplier<'info>(
     ext_mint: &mut InterfaceAccount<'info, Mint>,
-    m_earn_global_account: &Account<'info, EarnGlobal>,
+    m_earn_global: &Account<'info, EarnGlobal>,
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
 ) -> Result<f64> {
-    // Get the current index and timestamp from the m_earn_global_account
-    let (multiplier, timestamp): (f64, i64) = get_multiplier_and_timestamp(m_earn_global_account);
+    let (multiplier, timestamp) = get_multiplier_and_timestamp(m_earn_global, ext_mint);
 
     let ext_account_info = &ext_mint.to_account_info();
     let ext_data = ext_account_info.try_borrow_data()?;
@@ -120,19 +155,25 @@ pub fn sync_rate<'info>(
     ext_global: &Account<'info, ExtGlobal>,
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
-) -> Result<()> {
-    // Adjust the rate to include the yield fee
-    let fee_pct = (m_earn_global.earner_rate as f64 * ext_global.yield_fee_bps as f64) / 10000.;
-    let current_rate = m_earn_global.earner_rate - (fee_pct as u16);
-
-    // Compare against the current rate
+) -> Result<f64> {
+    // Parse ibt config from mint
     let ext_account_info = &ext_mint.to_account_info();
     let ext_data = ext_account_info.try_borrow_data()?;
     let ext_mint_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&ext_data)?;
     let interest_bearing_config = ext_mint_data.get_extension::<InterestBearingConfig>()?;
 
+    let multiplier = get_ibt_multiplier(
+        interest_bearing_config,
+        Clock::get().unwrap().unix_timestamp,
+    );
+
+    // Adjust the rate to include the yield fee
+    let fee_pct = (m_earn_global.earner_rate as f64 * ext_global.yield_fee_bps as f64) / 10000.;
+    let current_rate = m_earn_global.earner_rate - (fee_pct as u16);
+
+    // Compare against the current rate
     if interest_bearing_config.current_rate == PodI16::from(current_rate as i16) {
-        return Ok(());
+        return Ok(multiplier);
     }
 
     // Update the multiplier and timestamp in the mint account
@@ -151,7 +192,7 @@ pub fn sync_rate<'info>(
     // Reload the mint account so the new multiplier is reflected
     ext_mint.reload()?;
 
-    return Ok(());
+    return Ok(multiplier);
 }
 
 pub fn amount_to_principal_down(amount: u64, multiplier: f64) -> u64 {

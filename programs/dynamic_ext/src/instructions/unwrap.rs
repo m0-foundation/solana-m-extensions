@@ -6,7 +6,7 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{check_solvency, sync_mint_extension},
+        conversion::{amount_to_principal_up, check_solvency, sync_mint_extension},
         token::{burn_tokens, transfer_tokens_from_program},
     },
 };
@@ -89,7 +89,7 @@ impl Unwrap<'_> {
 
     #[access_control(ctx.accounts.validate())]
     pub fn handler(ctx: Context<Self>, amount: u64) -> Result<()> {
-        sync_mint_extension(
+        let multiplier = sync_mint_extension(
             &mut ctx.accounts.ext_mint,
             &ctx.accounts.m_earn_global_account,
             &ctx.accounts.global_account,
