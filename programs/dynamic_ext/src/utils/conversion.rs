@@ -158,25 +158,28 @@ pub fn sync_rate<'info>(
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
 ) -> Result<f64> {
-    // Parse ibt config from mint
-    let ext_account_info = &ext_mint.to_account_info();
-    let ext_data = ext_account_info.try_borrow_data()?;
-    let ext_mint_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&ext_data)?;
-    let interest_bearing_config = ext_mint_data.get_extension::<InterestBearingConfig>()?;
-
-    let multiplier = get_ibt_multiplier(
-        interest_bearing_config,
-        Clock::get().unwrap().unix_timestamp,
-    );
-
     // Adjust the rate to include the yield fee
     let fee_pct = (m_earn_global.earner_rate as f64 * ext_global.yield_fee_bps as f64) / 10000.;
     let current_rate = m_earn_global.earner_rate - (fee_pct as u16);
 
-    // Compare against the current rate
-    if interest_bearing_config.current_rate == PodI16::from(current_rate as i16) {
-        return Ok(multiplier);
-    }
+    // Parse ibt config from mint
+    let multiplier: f64;
+    {
+        let ext_account_info = &ext_mint.to_account_info();
+        let ext_data = ext_account_info.try_borrow_data()?;
+        let ext_mint_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&ext_data)?;
+        let interest_bearing_config = ext_mint_data.get_extension::<InterestBearingConfig>()?;
+
+        multiplier = get_ibt_multiplier(
+            interest_bearing_config,
+            Clock::get().unwrap().unix_timestamp,
+        );
+
+        // Compare against the current rate
+        if interest_bearing_config.current_rate == PodI16::from(current_rate as i16) {
+            return Ok(multiplier);
+        }
+    };
 
     // Update the multiplier and timestamp in the mint account
     invoke_signed(
