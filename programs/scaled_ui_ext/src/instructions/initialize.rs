@@ -107,18 +107,6 @@ pub fn handler(
         return err!(ExtError::InvalidParam);
     }
 
-    // Sync the ScaledUiAmount multiplier with the M Index
-    // We don't need to check collateralization here because
-    // the ext mint must have a supply of 0 to start
-    sync_multiplier(
-        &mut ctx.accounts.ext_mint,
-        &mut ctx.accounts.global_account,
-        &ctx.accounts.m_earn_global_account,
-        &ctx.accounts.ext_mint_authority,
-        &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
-        &ctx.accounts.token_2022,
-    )?;
-
     // Validate and create the wrap authorities array
     if wrap_authorities.len() > 10 {
         return err!(ExtError::InvalidParam);
@@ -146,6 +134,21 @@ pub fn handler(
         ext_mint_authority_bump: ctx.bumps.ext_mint_authority,
         wrap_authorities: wrap_authorities_array,
     });
+
+    // Set the ScaledUi multiplier to 1.0
+    // We can do this by calling the sync_multiplier function
+    // when the last_m_index equals the index on the m_earn_global_account
+    // and having last_ext_index set to 1e12
+    // We don't need to check collateralization here because
+    // the ext mint must have a supply of 0 to start
+    sync_multiplier(
+        &mut ctx.accounts.ext_mint,
+        &mut ctx.accounts.global_account,
+        &ctx.accounts.m_earn_global_account,
+        &ctx.accounts.ext_mint_authority,
+        &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
+        &ctx.accounts.token_2022,
+    )?;
 
     Ok(())
 }

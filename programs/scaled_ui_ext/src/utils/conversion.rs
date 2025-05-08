@@ -24,12 +24,17 @@ fn get_latest_multiplier_and_timestamp<'info>(
     let timestamp: i64 = m_earn_global_account.timestamp as i64;
     let last_ext_multiplier = ext_global_account.last_ext_index as f64 / INDEX_SCALE_F64;
 
+    msg!("current_m_multiplier: {}", current_m_multiplier);
+    msg!("last_m_multiplier: {}", last_m_multiplier);
+
     // If no change, return early
     if current_m_multiplier == last_m_multiplier {
+        msg!("Hasn't changed");
         return (last_ext_multiplier, timestamp);
     }
 
     let m_increase_factor = current_m_multiplier / last_m_multiplier;
+    msg!("m_increase_factor: {}", m_increase_factor);
 
     // Calculate the increase factor for the ext index, if the fee is zero, then the increase factor is the same as M
     let ext_increase_factor = if ext_global_account.fee_bps == 0 {
@@ -40,8 +45,12 @@ fn get_latest_multiplier_and_timestamp<'info>(
         m_increase_factor.powf(1.0f64 - fee_on_yield)
     };
 
+    msg!("ext_increase_factor: {}", ext_increase_factor);
+
     // Calculate the new extension multiplier (index in f64 scaled down)
     let new_ext_multiplier = last_ext_multiplier * ext_increase_factor;
+
+    msg!("new_ext_multiplier: {}", new_ext_multiplier);
 
     (new_ext_multiplier, timestamp)
 }

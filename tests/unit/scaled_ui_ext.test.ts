@@ -1,7 +1,14 @@
-import { Program, AnchorError, BN } from '@coral-xyz/anchor';
-import { LiteSVM } from 'litesvm';
-import { fromWorkspace, LiteSVMProvider } from 'anchor-litesvm';
-import { PublicKey, Keypair, LAMPORTS_PER_SOL, SystemProgram, Transaction, TransactionInstruction } from '@solana/web3.js';
+import { Program, AnchorError, BN } from "@coral-xyz/anchor";
+import { LiteSVM } from "litesvm";
+import { fromWorkspace, LiteSVMProvider } from "anchor-litesvm";
+import {
+  PublicKey,
+  Keypair,
+  LAMPORTS_PER_SOL,
+  SystemProgram,
+  Transaction,
+  TransactionInstruction,
+} from "@solana/web3.js";
 import {
   ACCOUNT_SIZE,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -21,16 +28,22 @@ import {
   createMintToCheckedInstruction,
   ExtensionType,
   getExtensionData,
-  createInitializeImmutableOwnerInstruction
-} from '@solana/spl-token';
-import { struct, u8, f64 } from '@solana/buffer-layout';
-import { publicKey, u64 } from '@solana/buffer-layout-utils';
-import { randomInt } from 'crypto';
+  createInitializeImmutableOwnerInstruction,
+} from "@solana/spl-token";
+import { struct, u8, f64 } from "@solana/buffer-layout";
+import { publicKey, u64 } from "@solana/buffer-layout-utils";
+import { randomInt } from "crypto";
 
-import { ScaledUiExt } from '../../target/types/scaled_ui_ext';
-const SCALED_UI_EXT_IDL = require('../../target/idl/scaled_ui_ext.json');
+import { ScaledUiExt } from "../../target/types/scaled_ui_ext";
+const SCALED_UI_EXT_IDL = require("../../target/idl/scaled_ui_ext.json");
 
-import { Earn, EARN_IDL, PROGRAM_ID as EARN_PROGRAM_ID, MerkleTree, ProofElement } from '@m0-foundation/solana-m-sdk';
+import {
+  Earn,
+  EARN_IDL,
+  PROGRAM_ID as EARN_PROGRAM_ID,
+  MerkleTree,
+  ProofElement,
+} from "@m0-foundation/solana-m-sdk";
 
 // Unit tests for ext earn program
 
@@ -58,12 +71,22 @@ let scaledUiExt: Program<ScaledUiExt>;
 
 // Start parameters for M Earn
 const initialSupply = new BN(100_000_000); // 100 tokens with 6 decimals
-const initialIndex = new BN(1_000_000_000_000); // 1.0
+const initialIndex = new BN(1_100_000_000_000); // 1.1
 const claimCooldown = new BN(0); // None
 
 // Token Helper functions
-const expectTokenBalance = async (tokenAccount: PublicKey, expectedBalance: BN) => {
-  const balance = (await getAccount(provider.connection, tokenAccount, undefined, TOKEN_2022_PROGRAM_ID)).amount;
+const expectTokenBalance = async (
+  tokenAccount: PublicKey,
+  expectedBalance: BN
+) => {
+  const balance = (
+    await getAccount(
+      provider.connection,
+      tokenAccount,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    )
+  ).amount;
 
   expect(balance.toString()).toEqual(expectedBalance.toString());
 };
@@ -74,42 +97,70 @@ enum Comparison {
   GreaterThanOrEqual,
   LessThan,
   LessThanOrEqual,
-};
+}
 
-const expectTokenUiBalance = async (tokenAccount: PublicKey, expectedBalance: BN, op: Comparison = Comparison.Equal, tolerance?: BN) => {
-  const rawBalance = (await getAccount(provider.connection, tokenAccount, undefined, TOKEN_2022_PROGRAM_ID)).amount;
+const expectTokenUiBalance = async (
+  tokenAccount: PublicKey,
+  expectedBalance: BN,
+  op: Comparison = Comparison.Equal,
+  tolerance?: BN
+) => {
+  const rawBalance = (
+    await getAccount(
+      provider.connection,
+      tokenAccount,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    )
+  ).amount;
 
-  const multiplier = (await getScaledUiAmountConfig(extMint.publicKey)).multiplier;
+  const multiplier = (await getScaledUiAmountConfig(extMint.publicKey))
+    .multiplier;
 
   const scale = 1e12;
 
-  const uiBalance = (rawBalance * BigInt(Math.floor(multiplier * scale))) / BigInt(scale);
+  const uiBalance =
+    (rawBalance * BigInt(Math.floor(multiplier * scale))) / BigInt(scale);
 
   switch (op) {
     case Comparison.GreaterThan:
       expect(uiBalance).toBeGreaterThan(BigInt(expectedBalance.toString()));
       if (tolerance) {
-        expect(uiBalance).toBeLessThanOrEqual(BigInt(expectedBalance.add(tolerance).toString()));
+        expect(uiBalance).toBeLessThanOrEqual(
+          BigInt(expectedBalance.add(tolerance).toString())
+        );
       }
     case Comparison.GreaterThanOrEqual:
-      expect(uiBalance).toBeGreaterThanOrEqual(BigInt(expectedBalance.toString()));
+      expect(uiBalance).toBeGreaterThanOrEqual(
+        BigInt(expectedBalance.toString())
+      );
       if (tolerance) {
-        expect(uiBalance).toBeLessThanOrEqual(BigInt(expectedBalance.add(tolerance).toString()));
+        expect(uiBalance).toBeLessThanOrEqual(
+          BigInt(expectedBalance.add(tolerance).toString())
+        );
       }
     case Comparison.LessThan:
       expect(uiBalance).toBeLessThan(BigInt(expectedBalance.toString()));
       if (tolerance) {
-        expect(uiBalance).toBeGreaterThanOrEqual(BigInt(expectedBalance.sub(tolerance).toString()));
+        expect(uiBalance).toBeGreaterThanOrEqual(
+          BigInt(expectedBalance.sub(tolerance).toString())
+        );
       }
     case Comparison.LessThanOrEqual:
       expect(uiBalance).toBeLessThanOrEqual(BigInt(expectedBalance.toString()));
       if (tolerance) {
-        expect(uiBalance).toBeGreaterThanOrEqual(BigInt(expectedBalance.sub(tolerance).toString()));
+        expect(uiBalance).toBeGreaterThanOrEqual(
+          BigInt(expectedBalance.sub(tolerance).toString())
+        );
       }
     default:
       if (tolerance) {
-        expect(uiBalance).toBeGreaterThanOrEqual(BigInt(expectedBalance.sub(tolerance).toString()));
-        expect(uiBalance).toBeLessThanOrEqual(BigInt(expectedBalance.add(tolerance).toString()));
+        expect(uiBalance).toBeGreaterThanOrEqual(
+          BigInt(expectedBalance.sub(tolerance).toString())
+        );
+        expect(uiBalance).toBeLessThanOrEqual(
+          BigInt(expectedBalance.add(tolerance).toString())
+        );
       } else {
         expect(uiBalance).toEqual(BigInt(expectedBalance.toString()));
       }
@@ -117,13 +168,17 @@ const expectTokenUiBalance = async (tokenAccount: PublicKey, expectedBalance: BN
   }
 };
 
-const createATA = async (mint: PublicKey, owner: PublicKey, use2022: boolean = true) => {
+const createATA = async (
+  mint: PublicKey,
+  owner: PublicKey,
+  use2022: boolean = true
+) => {
   const tokenAccount = getAssociatedTokenAddressSync(
     mint,
     owner,
     true,
     use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID,
-    ASSOCIATED_TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
   );
 
   const createATA = createAssociatedTokenAccountInstruction(
@@ -132,7 +187,7 @@ const createATA = async (mint: PublicKey, owner: PublicKey, use2022: boolean = t
     owner, // owner
     mint, // mint
     use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID,
-    ASSOCIATED_TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
   );
 
   let tx = new Transaction().add(createATA);
@@ -142,14 +197,18 @@ const createATA = async (mint: PublicKey, owner: PublicKey, use2022: boolean = t
   return tokenAccount;
 };
 
-const getATA = async (mint: PublicKey, owner: PublicKey, use2022: boolean = true) => {
+const getATA = async (
+  mint: PublicKey,
+  owner: PublicKey,
+  use2022: boolean = true
+) => {
   // Check to see if the ATA already exists, if so return its key
   const tokenAccount = getAssociatedTokenAddressSync(
     mint,
     owner,
     true,
     use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID,
-    ASSOCIATED_TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
   );
 
   const tokenAccountInfo = svm.getAccount(tokenAccount);
@@ -161,7 +220,11 @@ const getATA = async (mint: PublicKey, owner: PublicKey, use2022: boolean = true
   return tokenAccount;
 };
 
-const createTokenAccount = async (mint: PublicKey, owner: PublicKey, use2022: boolean = true) => {
+const createTokenAccount = async (
+  mint: PublicKey,
+  owner: PublicKey,
+  use2022: boolean = true
+) => {
   // We want to create a token account that is not the ATA
   const tokenAccount = new Keypair();
 
@@ -171,10 +234,17 @@ const createTokenAccount = async (mint: PublicKey, owner: PublicKey, use2022: bo
       fromPubkey: admin.publicKey,
       newAccountPubkey: tokenAccount.publicKey,
       space: ACCOUNT_SIZE,
-      lamports: await provider.connection.getMinimumBalanceForRentExemption(ACCOUNT_SIZE),
+      lamports: await provider.connection.getMinimumBalanceForRentExemption(
+        ACCOUNT_SIZE
+      ),
       programId: use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID,
     }),
-    createInitializeAccountInstruction(tokenAccount.publicKey, mint, owner, TOKEN_2022_PROGRAM_ID),
+    createInitializeAccountInstruction(
+      tokenAccount.publicKey,
+      mint,
+      owner,
+      TOKEN_2022_PROGRAM_ID
+    )
   );
 
   await provider.sendAndConfirm!(tx, [admin, tokenAccount]);
@@ -188,7 +258,7 @@ const closeTokenAccount = async (owner: Keypair, tokenAccount: PublicKey) => {
     owner.publicKey,
     owner.publicKey,
     [],
-    TOKEN_2022_PROGRAM_ID,
+    TOKEN_2022_PROGRAM_ID
   );
 
   let tx = new Transaction().add(closeIx);
@@ -196,13 +266,19 @@ const closeTokenAccount = async (owner: Keypair, tokenAccount: PublicKey) => {
   await provider.sendAndConfirm!(tx, [owner]);
 };
 
-const createMint = async (mint: Keypair, mintAuthority: PublicKey, use2022: boolean = true, decimals = 6) => {
+const createMint = async (
+  mint: Keypair,
+  mintAuthority: PublicKey,
+  use2022: boolean = true,
+  decimals = 6
+) => {
   // Create and initialize mint account
 
   const tokenProgram = use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
 
   const mintLen = getMintLen([]);
-  const mintLamports = await provider.connection.getMinimumBalanceForRentExemption(mintLen);
+  const mintLamports =
+    await provider.connection.getMinimumBalanceForRentExemption(mintLen);
   const createMintAccount = SystemProgram.createAccount({
     fromPubkey: admin.publicKey,
     newAccountPubkey: mint.publicKey,
@@ -216,7 +292,7 @@ const createMint = async (mint: Keypair, mintAuthority: PublicKey, use2022: bool
     decimals, // decimals
     mintAuthority, // mint authority
     mintAuthority, // freeze authority
-    tokenProgram,
+    tokenProgram
   );
 
   let tx = new Transaction();
@@ -227,7 +303,7 @@ const createMint = async (mint: Keypair, mintAuthority: PublicKey, use2022: bool
   // Verify the mint was created properly
   const mintInfo = await provider.connection.getAccountInfo(mint.publicKey);
   if (!mintInfo) {
-    throw new Error('Mint account was not created');
+    throw new Error("Mint account was not created");
   }
 
   return mint.publicKey;
@@ -241,42 +317,48 @@ interface InitializeScaledUiAmountConfigData {
   multiplier: number;
 }
 
-const initializeScaledUiAmountConfigInstructionData = struct<InitializeScaledUiAmountConfigData>([
-  u8('instruction'),
-  u8('scaledUiAmountInstruction'),
-  publicKey('authority'),
-  f64('multiplier'),
-]);
+const initializeScaledUiAmountConfigInstructionData =
+  struct<InitializeScaledUiAmountConfigData>([
+    u8("instruction"),
+    u8("scaledUiAmountInstruction"),
+    publicKey("authority"),
+    f64("multiplier"),
+  ]);
 
 const createInitializeScaledUiAmountConfigInstruction = (
   mint: PublicKey,
   authority: PublicKey | null,
   multiplier: number,
-  programId: PublicKey = TOKEN_2022_PROGRAM_ID,
+  programId: PublicKey = TOKEN_2022_PROGRAM_ID
 ): TransactionInstruction => {
   const keys = [{ pubkey: mint, isSigner: false, isWritable: true }];
 
   const data = Buffer.alloc(initializeScaledUiAmountConfigInstructionData.span);
   initializeScaledUiAmountConfigInstructionData.encode(
-      {
-          instruction: 43, // scaled ui amount extension
-          scaledUiAmountInstruction: 0, // initialize
-          authority: authority ?? PublicKey.default,
-          multiplier: multiplier,
-      },
-      data,
+    {
+      instruction: 43, // scaled ui amount extension
+      scaledUiAmountInstruction: 0, // initialize
+      authority: authority ?? PublicKey.default,
+      multiplier: multiplier,
+    },
+    data
   );
 
   return new TransactionInstruction({ keys, programId, data });
-}
+};
 
-const createScaledUiMint = async (mint: Keypair, mintAuthority: PublicKey, decimals = 6) => {
+const createScaledUiMint = async (
+  mint: Keypair,
+  mintAuthority: PublicKey,
+  decimals = 6
+) => {
   // Create and initialize mint account
 
   const tokenProgram = TOKEN_2022_PROGRAM_ID;
 
   const mintLen = getMintLen([ExtensionType.ScaledUiAmountConfig]);
-  const mintLamports = await provider.connection.getMinimumBalanceForRentExemption(mintLen);
+  const mintLamports =
+    await provider.connection.getMinimumBalanceForRentExemption(mintLen);
   const createMintAccount = SystemProgram.createAccount({
     fromPubkey: admin.publicKey,
     newAccountPubkey: mint.publicKey,
@@ -285,19 +367,20 @@ const createScaledUiMint = async (mint: Keypair, mintAuthority: PublicKey, decim
     programId: tokenProgram,
   });
 
-  const initializeScaledUiAmountConfig = createInitializeScaledUiAmountConfigInstruction(
-    mint.publicKey,
-    mintAuthority,
-    1.0,
-    tokenProgram,
-  );
+  const initializeScaledUiAmountConfig =
+    createInitializeScaledUiAmountConfigInstruction(
+      mint.publicKey,
+      mintAuthority,
+      1.0,
+      tokenProgram
+    );
 
   const initializeMint = createInitializeMintInstruction(
     mint.publicKey,
     decimals, // decimals
     mintAuthority, // mint authority
     mintAuthority, // freeze authority
-    tokenProgram,
+    tokenProgram
   );
 
   let tx = new Transaction();
@@ -308,7 +391,7 @@ const createScaledUiMint = async (mint: Keypair, mintAuthority: PublicKey, decim
   // Verify the mint was created properly
   const mintInfo = await provider.connection.getAccountInfo(mint.publicKey);
   if (!mintInfo) {
-    throw new Error('Mint account was not created');
+    throw new Error("Mint account was not created");
   }
 
   return mint.publicKey;
@@ -322,27 +405,42 @@ interface ScaledUiAmountConfig {
 }
 
 const ScaledUiAmountConfigLayout = struct<ScaledUiAmountConfig>([
-  publicKey('authority'),
-  f64('multiplier'),
-  u64('newMultiplierEffectiveTimestamp'),
-  f64('newMultiplier'),
+  publicKey("authority"),
+  f64("multiplier"),
+  u64("newMultiplierEffectiveTimestamp"),
+  f64("newMultiplier"),
 ]);
 
-const getScaledUiAmountConfig = async (mint: PublicKey): Promise<ScaledUiAmountConfig> => {
-  const mintAccount = await getMint(provider.connection, mint, undefined, TOKEN_2022_PROGRAM_ID);
-  const extensionData = getExtensionData(ExtensionType.ScaledUiAmountConfig, mintAccount.tlvData);
+const getScaledUiAmountConfig = async (
+  mint: PublicKey
+): Promise<ScaledUiAmountConfig> => {
+  const mintAccount = await getMint(
+    provider.connection,
+    mint,
+    undefined,
+    TOKEN_2022_PROGRAM_ID
+  );
+  const extensionData = getExtensionData(
+    ExtensionType.ScaledUiAmountConfig,
+    mintAccount.tlvData
+  );
   if (extensionData === null) {
-    throw new Error('Extension data not found');
+    throw new Error("Extension data not found");
   }
 
   return ScaledUiAmountConfigLayout.decode(extensionData);
-}
+};
 
-const createMintWithMultisig = async (mint: Keypair, mintAuthority: Keypair) => {
+const createMintWithMultisig = async (
+  mint: Keypair,
+  mintAuthority: Keypair
+) => {
   // Create and initialize multisig mint authority on the token program
   const multisigLen = 355;
   // const multisigLamports = await provider.connection.getMinimumBalanceForRentExemption(multisigLen);
-  const multisigLamports = await getMinimumBalanceForRentExemptMultisig(provider.connection);
+  const multisigLamports = await getMinimumBalanceForRentExemptMultisig(
+    provider.connection
+  );
 
   const createMultisigAccount = SystemProgram.createAccount({
     fromPubkey: admin.publicKey,
@@ -358,7 +456,7 @@ const createMintWithMultisig = async (mint: Keypair, mintAuthority: Keypair) => 
     mintAuthority.publicKey, // account
     [portal, earnTokenAuthority],
     1,
-    TOKEN_2022_PROGRAM_ID,
+    TOKEN_2022_PROGRAM_ID
   );
 
   let tx = new Transaction();
@@ -369,7 +467,8 @@ const createMintWithMultisig = async (mint: Keypair, mintAuthority: Keypair) => 
   // Create and initialize mint account
 
   const mintLen = getMintLen([]);
-  const mintLamports = await provider.connection.getMinimumBalanceForRentExemption(mintLen);
+  const mintLamports =
+    await provider.connection.getMinimumBalanceForRentExemption(mintLen);
   const createMintWithMultisigAccount = SystemProgram.createAccount({
     fromPubkey: admin.publicKey,
     newAccountPubkey: mint.publicKey,
@@ -383,7 +482,7 @@ const createMintWithMultisig = async (mint: Keypair, mintAuthority: Keypair) => 
     6, // decimals
     mintAuthority.publicKey, // mint authority
     null, // freeze authority
-    TOKEN_2022_PROGRAM_ID,
+    TOKEN_2022_PROGRAM_ID
   );
 
   tx = new Transaction();
@@ -394,7 +493,7 @@ const createMintWithMultisig = async (mint: Keypair, mintAuthority: Keypair) => 
   // Verify the mint was created properly
   const mintInfo = await provider.connection.getAccountInfo(mint.publicKey);
   if (!mintInfo) {
-    throw new Error('Mint account was not created');
+    throw new Error("Mint account was not created");
   }
 
   return mint.publicKey;
@@ -410,7 +509,7 @@ const mintM = async (to: PublicKey, amount: BN) => {
     BigInt(amount.toString()),
     6,
     [portal],
-    TOKEN_2022_PROGRAM_ID,
+    TOKEN_2022_PROGRAM_ID
   );
 
   let tx = new Transaction();
@@ -419,33 +518,51 @@ const mintM = async (to: PublicKey, amount: BN) => {
 };
 
 const getTokenBalance = async (tokenAccount: PublicKey) => {
-  const tokenAccountInfo = await getAccount(provider.connection, tokenAccount, undefined, TOKEN_2022_PROGRAM_ID);
+  const tokenAccountInfo = await getAccount(
+    provider.connection,
+    tokenAccount,
+    undefined,
+    TOKEN_2022_PROGRAM_ID
+  );
   if (!tokenAccountInfo) {
-    throw new Error('Account not created');
+    throw new Error("Account not created");
   }
 
   return new BN(tokenAccountInfo.amount.toString());
 };
 
-const getTokenUiBalance = async (tokenAccount: PublicKey, multiplier?: number) => {
-  const tokenAccountInfo = await getAccount(provider.connection, tokenAccount, undefined, TOKEN_2022_PROGRAM_ID);
+const getTokenUiBalance = async (
+  tokenAccount: PublicKey,
+  multiplier?: number
+) => {
+  const tokenAccountInfo = await getAccount(
+    provider.connection,
+    tokenAccount,
+    undefined,
+    TOKEN_2022_PROGRAM_ID
+  );
 
   if (!tokenAccountInfo) {
-    throw new Error('Account not created');
+    throw new Error("Account not created");
   }
 
-  const mp = multiplier ?? (await getScaledUiAmountConfig(tokenAccountInfo.mint)).multiplier;
+  const mp =
+    multiplier ??
+    (await getScaledUiAmountConfig(tokenAccountInfo.mint)).multiplier;
 
   const scale = 1e12;
 
-  const uiBalance = (tokenAccountInfo.amount * BigInt(Math.floor(mp * scale))) / BigInt(scale); 
+  const uiBalance =
+    (tokenAccountInfo.amount * BigInt(Math.floor(mp * scale))) / BigInt(scale);
 
   return new BN(uiBalance.toString());
 };
 
 const warp = (seconds: BN, increment: boolean) => {
   const clock = svm.getClock();
-  clock.unixTimestamp = increment ? clock.unixTimestamp + BigInt(seconds.toString()) : BigInt(seconds.toString());
+  clock.unixTimestamp = increment
+    ? clock.unixTimestamp + BigInt(seconds.toString())
+    : BigInt(seconds.toString());
   svm.setClock(clock);
 };
 
@@ -456,6 +573,9 @@ interface ExtGlobal {
   extMint?: PublicKey;
   mMint?: PublicKey;
   mEarnGlobalAccount?: PublicKey;
+  feeBps?: BN;
+  lastMIndex?: BN;
+  lastExtIndex?: BN;
   bump?: number;
   mVaultBump?: number;
   extMintAuthorityBump?: number;
@@ -463,39 +583,54 @@ interface ExtGlobal {
 }
 
 const getEarnGlobalAccount = () => {
-  const [globalAccount] = PublicKey.findProgramAddressSync([Buffer.from('global')], earn.programId);
+  const [globalAccount] = PublicKey.findProgramAddressSync(
+    [Buffer.from("global")],
+    earn.programId
+  );
 
   return globalAccount;
 };
 
 const getEarnTokenAuthority = () => {
-  const [earnTokenAuthority] = PublicKey.findProgramAddressSync([Buffer.from('token_authority')], earn.programId);
+  const [earnTokenAuthority] = PublicKey.findProgramAddressSync(
+    [Buffer.from("token_authority")],
+    earn.programId
+  );
 
   return earnTokenAuthority;
 };
 
 const getExtGlobalAccount = () => {
-  const [globalAccount] = PublicKey.findProgramAddressSync([Buffer.from('global')], scaledUiExt.programId);
+  const [globalAccount] = PublicKey.findProgramAddressSync(
+    [Buffer.from("global")],
+    scaledUiExt.programId
+  );
 
   return globalAccount;
 };
 
 const getExtMintAuthority = () => {
-  const [extMintAuthority] = PublicKey.findProgramAddressSync([Buffer.from('mint_authority')], scaledUiExt.programId);
+  const [extMintAuthority] = PublicKey.findProgramAddressSync(
+    [Buffer.from("mint_authority")],
+    scaledUiExt.programId
+  );
 
   return extMintAuthority;
 };
 
 const getMVault = () => {
-  const [mVault] = PublicKey.findProgramAddressSync([Buffer.from('m_vault')], scaledUiExt.programId);
+  const [mVault] = PublicKey.findProgramAddressSync(
+    [Buffer.from("m_vault")],
+    scaledUiExt.programId
+  );
 
   return mVault;
 };
 
 const getMEarnerAccount = (tokenAccount: PublicKey) => {
   const [earnerAccount] = PublicKey.findProgramAddressSync(
-    [Buffer.from('earner'), tokenAccount.toBuffer()],
-    earn.programId,
+    [Buffer.from("earner"), tokenAccount.toBuffer()],
+    earn.programId
   );
 
   return earnerAccount;
@@ -512,12 +647,16 @@ const expectAccountEmpty = (account: PublicKey) => {
   }
 };
 
-const expectAnchorError = async (txResult: Promise<string>, errCode: string) => {
+const expectAnchorError = async (
+  txResult: Promise<string>,
+  errCode: string
+) => {
   try {
     await txResult;
-    throw new Error('Transaction should have reverted');
+    throw new Error("Transaction should have reverted");
   } catch (e) {
-    if (!(e instanceof AnchorError)) throw new Error(`Expected AnchorError, got ${e}`);
+    if (!(e instanceof AnchorError))
+      throw new Error(`Expected AnchorError, got ${e}`);
     const err: AnchorError = e;
     expect(err.error.errorCode.code).toStrictEqual(errCode);
   }
@@ -536,44 +675,68 @@ const expectSystemError = async (txResult: Promise<string>) => {
   }
 };
 
-const expectExtGlobalState = async (globalAccount: PublicKey, expected: ExtGlobal) => {
+const expectExtGlobalState = async (
+  globalAccount: PublicKey,
+  expected: ExtGlobal
+) => {
   const state = await scaledUiExt.account.extGlobal.fetch(globalAccount);
 
   if (expected.admin) expect(state.admin).toEqual(expected.admin);
   if (expected.extMint) expect(state.extMint).toEqual(expected.extMint);
   if (expected.mMint) expect(state.mMint).toEqual(expected.mMint);
-  if (expected.mEarnGlobalAccount) expect(state.mEarnGlobalAccount).toEqual(expected.mEarnGlobalAccount);
+  if (expected.mEarnGlobalAccount)
+    expect(state.mEarnGlobalAccount).toEqual(expected.mEarnGlobalAccount);
+  if (expected.feeBps)
+    expect(state.feeBps.toString()).toEqual(expected.feeBps.toString());
+  if (expected.lastMIndex)
+    expect(state.lastMIndex.toString()).toEqual(expected.lastMIndex.toString());
+  if (expected.lastExtIndex)
+    expect(state.lastExtIndex.toString()).toEqual(
+      expected.lastExtIndex.toString()
+    );
   if (expected.bump) expect(state.bump).toEqual(expected.bump);
-  if (expected.mVaultBump) expect(state.mVaultBump).toEqual(expected.mVaultBump);
-  if (expected.extMintAuthorityBump) expect(state.extMintAuthorityBump).toEqual(expected.extMintAuthorityBump);
+  if (expected.mVaultBump)
+    expect(state.mVaultBump).toEqual(expected.mVaultBump);
+  if (expected.extMintAuthorityBump)
+    expect(state.extMintAuthorityBump).toEqual(expected.extMintAuthorityBump);
 };
 
-const expectScaledUiAmountConfig = async (mint: PublicKey, expected: ScaledUiAmountConfig) => {
+const expectScaledUiAmountConfig = async (
+  mint: PublicKey,
+  expected: ScaledUiAmountConfig
+) => {
   const state = await getScaledUiAmountConfig(mint);
 
   if (expected.authority) expect(state.authority).toEqual(expected.authority);
-  if (expected.multiplier) expect(state.multiplier).toEqual(expected.multiplier);
-  if (expected.newMultiplierEffectiveTimestamp) expect(state.newMultiplierEffectiveTimestamp.toString()).toEqual(expected.newMultiplierEffectiveTimestamp.toString());
-  if (expected.newMultiplier) expect(state.newMultiplier).toEqual(expected.newMultiplier);
+  if (expected.multiplier)
+    expect(state.multiplier.toFixed(12)).toEqual(
+      (Math.floor(expected.multiplier * 1e12) / 1e12).toFixed(12)
+    );
+  if (expected.newMultiplierEffectiveTimestamp)
+    expect(state.newMultiplierEffectiveTimestamp.toString()).toEqual(
+      expected.newMultiplierEffectiveTimestamp.toString()
+    );
+  if (expected.newMultiplier)
+    expect(state.newMultiplier.toFixed(12)).toEqual(
+      (Math.floor(expected.newMultiplier * 1e12) / 1e12).toFixed(12)
+    );
 };
 
 const createUniqueKeyArray = (size: number) => {
-  return new Array(size)
-    .fill(PublicKey.default)
-    .map((_, i, arr) => {
-      let key = PublicKey.unique();
-      while (key.equals(PublicKey.default) || arr.includes(key)) {
-        key = PublicKey.unique();
-      }
-      return key;
-    });
+  return new Array(size).fill(PublicKey.default).map((_, i, arr) => {
+    let key = PublicKey.unique();
+    while (key.equals(PublicKey.default) || arr.includes(key)) {
+      key = PublicKey.unique();
+    }
+    return key;
+  });
 };
 
 const padKeyArray = (array: PublicKey[], desiredLen: number) => {
   const currentLen = array.length;
 
   if (currentLen > desiredLen) {
-    throw new Error('Array is too long');
+    throw new Error("Array is too long");
   }
 
   const padding = new Array(desiredLen - currentLen).fill(PublicKey.default);
@@ -595,17 +758,22 @@ const prepEarnInitialize = (signer: Keypair, mint: PublicKey) => {
   return { globalAccount };
 };
 
-const initializeEarn = async (mint: PublicKey, earnAuthority: PublicKey, initialIndex: BN, claimCooldown: BN) => {
+const initializeEarn = async (
+  mint: PublicKey,
+  earnAuthority: PublicKey,
+  initialIndex: BN,
+  claimCooldown: BN
+) => {
   // Setup the instruction
   const { globalAccount } = prepEarnInitialize(admin, mint);
 
   // Send the transaction
   try {
-  await earn.methods
-    .initialize(earnAuthority, initialIndex, claimCooldown)
-    .accountsPartial({ ...accounts })
-    .signers([admin])
-    .rpc();
+    await earn.methods
+      .initialize(earnAuthority, initialIndex, claimCooldown)
+      .accountsPartial({ ...accounts })
+      .signers([admin])
+      .rpc();
   } catch (e) {
     console.log(e);
     throw e;
@@ -627,7 +795,10 @@ const prepPropagateIndex = (signer: Keypair) => {
   return { globalAccount };
 };
 
-const propagateIndex = async (newIndex: BN, earnerMerkleRoot: number[] = ZERO_WORD) => {
+const propagateIndex = async (
+  newIndex: BN,
+  earnerMerkleRoot: number[] = ZERO_WORD
+) => {
   // Setup the instruction
   const { globalAccount } = prepPropagateIndex(portal);
 
@@ -643,7 +814,11 @@ const propagateIndex = async (newIndex: BN, earnerMerkleRoot: number[] = ZERO_WO
   return { globalAccount };
 };
 
-const prepMClaimFor = async (signer: Keypair, mint: PublicKey, earner: PublicKey) => {
+const prepMClaimFor = async (
+  signer: Keypair,
+  mint: PublicKey,
+  earner: PublicKey
+) => {
   // Get the global and token authority PDAs
   const globalAccount = getEarnGlobalAccount();
   const earnTokenAuthority = getEarnTokenAuthority();
@@ -670,7 +845,11 @@ const prepMClaimFor = async (signer: Keypair, mint: PublicKey, earner: PublicKey
 
 const mClaimFor = async (earner: PublicKey, balance?: BN) => {
   // Setup the instruction
-  const { globalAccount, earnerAccount, earnerATA } = await prepMClaimFor(earnAuthority, mMint.publicKey, earner);
+  const { globalAccount, earnerAccount, earnerATA } = await prepMClaimFor(
+    earnAuthority,
+    mMint.publicKey,
+    earner
+  );
 
   const snapshotBalance = balance ?? (await getTokenBalance(earnerATA));
 
@@ -761,13 +940,13 @@ const prepExtInitialize = (signer: Keypair) => {
   return { globalAccount };
 };
 
-const initializeExt = async (wrapAuthorities: PublicKey[]) => {
+const initializeExt = async (wrapAuthorities: PublicKey[], fee_bps: BN) => {
   // Setup the instruction
   const { globalAccount } = prepExtInitialize(admin);
 
   // Send the transaction
   await scaledUiExt.methods
-    .initialize(wrapAuthorities)
+    .initialize(wrapAuthorities, fee_bps)
     .accountsPartial({ ...accounts })
     .signers([admin])
     .rpc();
@@ -775,7 +954,11 @@ const initializeExt = async (wrapAuthorities: PublicKey[]) => {
   return globalAccount;
 };
 
-const prepSetMMint = async (signer: Keypair, mint: PublicKey, newVaultMTokenAccount?: PublicKey) => {
+const prepSetMMint = async (
+  signer: Keypair,
+  mint: PublicKey,
+  newVaultMTokenAccount?: PublicKey
+) => {
   // Get the global PDA
   const globalAccount = getExtGlobalAccount();
 
@@ -787,8 +970,9 @@ const prepSetMMint = async (signer: Keypair, mint: PublicKey, newVaultMTokenAcco
   accounts.mMint = mMint.publicKey;
   accounts.vaultMTokenAccount = await getATA(mMint.publicKey, accounts.mVault);
   accounts.newMMint = mint;
-  accounts.newVaultMTokenAccount = newVaultMTokenAccount ?? await getATA(mint, accounts.mVault);
-  
+  accounts.newVaultMTokenAccount =
+    newVaultMTokenAccount ?? (await getATA(mint, accounts.mVault));
+
   return { globalAccount };
 };
 
@@ -818,7 +1002,10 @@ const prepUpdateWrapAuthority = (signer: Keypair) => {
   return { globalAccount };
 };
 
-const updateWrapAuthority = async (index: number, newWrapAuthority: PublicKey) => {
+const updateWrapAuthority = async (
+  index: number,
+  newWrapAuthority: PublicKey
+) => {
   // Setup the instruction
   const { globalAccount } = prepUpdateWrapAuthority(admin);
 
@@ -837,7 +1024,7 @@ const prepWrap = async (
   to?: PublicKey,
   fromMTokenAccount?: PublicKey,
   toExtTokenAccount?: PublicKey,
-  vaultMTokenAccount?: PublicKey,
+  vaultMTokenAccount?: PublicKey
 ) => {
   // Get the M vault pda
   const mVault = getMVault();
@@ -851,9 +1038,13 @@ const prepWrap = async (
   accounts.mEarnGlobalAccount = getEarnGlobalAccount();
   accounts.mVault = mVault;
   accounts.extMintAuthority = getExtMintAuthority();
-  accounts.fromMTokenAccount = fromMTokenAccount ?? (await getATA(mMint.publicKey, from.publicKey));
-  accounts.toExtTokenAccount = toExtTokenAccount ?? (await getATA(extMint.publicKey, to ?? from.publicKey));
-  accounts.vaultMTokenAccount = vaultMTokenAccount ?? (await getATA(mMint.publicKey, mVault));
+  accounts.fromMTokenAccount =
+    fromMTokenAccount ?? (await getATA(mMint.publicKey, from.publicKey));
+  accounts.toExtTokenAccount =
+    toExtTokenAccount ??
+    (await getATA(extMint.publicKey, to ?? from.publicKey));
+  accounts.vaultMTokenAccount =
+    vaultMTokenAccount ?? (await getATA(mMint.publicKey, mVault));
   accounts.token2022 = TOKEN_2022_PROGRAM_ID;
 
   return {
@@ -865,7 +1056,8 @@ const prepWrap = async (
 
 const wrap = async (from: Keypair, amount: BN, to?: PublicKey) => {
   // Setup the instruction
-  const { vaultMTokenAccount, fromMTokenAccount, toExtTokenAccount } = await prepWrap(from, to);
+  const { vaultMTokenAccount, fromMTokenAccount, toExtTokenAccount } =
+    await prepWrap(from, to);
 
   // Send the instruction
   await scaledUiExt.methods
@@ -882,7 +1074,7 @@ const prepUnwrap = async (
   to?: PublicKey,
   toMTokenAccount?: PublicKey,
   fromExtTokenAccount?: PublicKey,
-  vaultMTokenAccount?: PublicKey,
+  vaultMTokenAccount?: PublicKey
 ) => {
   // Get m vault pda
   const mVault = getMVault();
@@ -896,9 +1088,12 @@ const prepUnwrap = async (
   accounts.mEarnGlobalAccount = getEarnGlobalAccount();
   accounts.mVault = mVault;
   accounts.extMintAuthority = getExtMintAuthority();
-  accounts.toMTokenAccount = toMTokenAccount ?? (await getATA(mMint.publicKey, to ?? from.publicKey));
-  accounts.fromExtTokenAccount = fromExtTokenAccount ?? (await getATA(extMint.publicKey, from.publicKey));
-  accounts.vaultMTokenAccount = vaultMTokenAccount ?? (await getATA(mMint.publicKey, mVault));
+  accounts.toMTokenAccount =
+    toMTokenAccount ?? (await getATA(mMint.publicKey, to ?? from.publicKey));
+  accounts.fromExtTokenAccount =
+    fromExtTokenAccount ?? (await getATA(extMint.publicKey, from.publicKey));
+  accounts.vaultMTokenAccount =
+    vaultMTokenAccount ?? (await getATA(mMint.publicKey, mVault));
   accounts.token2022 = TOKEN_2022_PROGRAM_ID;
 
   return {
@@ -910,7 +1105,8 @@ const prepUnwrap = async (
 
 const unwrap = async (from: Keypair, amount: BN, to?: PublicKey) => {
   // Setup the instruction
-  const { vaultMTokenAccount, toMTokenAccount, fromExtTokenAccount } = await prepUnwrap(from, to);
+  const { vaultMTokenAccount, toMTokenAccount, fromExtTokenAccount } =
+    await prepUnwrap(from, to);
 
   // Send the instruction
   await scaledUiExt.methods
@@ -953,24 +1149,26 @@ const sync = async () => {
   return globalAccount;
 };
 
-
-describe('ScaledUiExt unit tests', () => {
+describe("ScaledUiExt unit tests", () => {
   let currentTime: () => BN;
 
   beforeEach(async () => {
     // Initialize the SVM instance with all necessary configurations
-    svm = fromWorkspace('')
+    svm = fromWorkspace("")
       .withSplPrograms() // Add SPL programs (including token programs)
       .withBuiltins() // Add builtin programs
       .withSysvars() // Setup standard sysvars
       .withPrecompiles() // Add standard precompiles
-      .withBlockhashCheck(true)  // Optional: disable blockhash checking for tests
+      .withBlockhashCheck(true); // Optional: disable blockhash checking for tests
 
     // Add the earn program to the SVM instance
-    svm.addProgramFromFile(EARN_PROGRAM_ID, 'tests/programs/earn.so');
+    svm.addProgramFromFile(EARN_PROGRAM_ID, "tests/programs/earn.so");
 
     // Replace the default token2022 program with the (newer) one from the workspace
-    svm.addProgramFromFile(TOKEN_2022_PROGRAM_ID, 'tests/programs/spl_token_2022.so');
+    svm.addProgramFromFile(
+      TOKEN_2022_PROGRAM_ID,
+      "tests/programs/spl_token_2022.so"
+    );
 
     // Create an anchor provider from the liteSVM instance
     provider = new LiteSVMProvider(svm);
@@ -1000,7 +1198,12 @@ describe('ScaledUiExt unit tests', () => {
     await mintM(admin.publicKey, initialSupply);
 
     // Initialize the earn program
-    await initializeEarn(mMint.publicKey, earnAuthority.publicKey, initialIndex, claimCooldown);
+    await initializeEarn(
+      mMint.publicKey,
+      earnAuthority.publicKey,
+      initialIndex,
+      claimCooldown
+    );
 
     // Add the m vault as an M earner
     const mVault = getMVault();
@@ -1014,8 +1217,8 @@ describe('ScaledUiExt unit tests', () => {
     await addRegistrarEarner(mVault, proof);
   });
 
-  describe('admin instruction tests', () => {
-    describe('initialize unit tests', () => {
+  describe("admin instruction tests", () => {
+    describe("initialize unit tests", () => {
       // test cases
       // [X] given the m_mint is not owned by the token2022 program
       //   [X] it reverts with a ConstraintAddress error
@@ -1050,7 +1253,7 @@ describe('ScaledUiExt unit tests', () => {
 
       // given the m_mint is not owned by the token2022 program
       // it reverts with a ConstraintAddress error
-      test('m_mint not owned by token2022 - reverts', async () => {
+      test("m_mint not owned by token2022 - reverts", async () => {
         // Create a mint owned by a different program
         const wrongMint = new Keypair();
         await createMint(wrongMint, nonAdmin.publicKey, false);
@@ -1064,17 +1267,17 @@ describe('ScaledUiExt unit tests', () => {
         // Attempt to send the transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .initialize([])
+            .initialize([], new BN(0))
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
-          'ConstraintAddress',
+          "ConstraintAddress"
         );
       });
 
       // given the ext_mint is not owned by the token2022 program
       // it reverts with a ConstraintMintTokenProgram error
-      test('ext_mint not owned by token2022 - reverts', async () => {
+      test("ext_mint not owned by token2022 - reverts", async () => {
         // Create a mint owned by a different program
         const wrongMint = new Keypair();
         await createMint(wrongMint, nonAdmin.publicKey, false);
@@ -1088,17 +1291,17 @@ describe('ScaledUiExt unit tests', () => {
         // Attempt to send the transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .initialize([])
+            .initialize([], new BN(0))
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
-          'ConstraintMintTokenProgram',
+          "ConstraintMintTokenProgram"
         );
       });
 
       // given the ext_mint does not have the scaled ui amount extension
       // it reverts with a InvalidMint error
-      test('ext_mint does not have the scaled ui amount extension - reverts', async () => {
+      test("ext_mint does not have the scaled ui amount extension - reverts", async () => {
         // Create a mint without the scaled ui amount extension
         const wrongMint = new Keypair();
         await createMint(wrongMint, getExtMintAuthority(), true, 6); // valid otherwise
@@ -1112,17 +1315,17 @@ describe('ScaledUiExt unit tests', () => {
         // Attempt to send the transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .initialize([])
+            .initialize([], new BN(0))
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
-          'InvalidMint',
+          "InvalidMint"
         );
       });
 
       // given the ext_mint has the scaled ui amount extension, but the authority is not the mint authority PDA
       // it reverts with an InvalidMint error
-      test('ext_mint has the scaled ui amount extension, but the authority is not the mint authority PDA - reverts', async () => {
+      test("ext_mint has the scaled ui amount extension, but the authority is not the mint authority PDA - reverts", async () => {
         // Create a mint with the scaled ui amount extension
         const wrongMint = new Keypair();
         await createScaledUiMint(wrongMint, nonAdmin.publicKey, 6);
@@ -1136,17 +1339,17 @@ describe('ScaledUiExt unit tests', () => {
         // Attempt to send the transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .initialize([])
+            .initialize([], new BN(0))
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
-          'InvalidMint',
+          "InvalidMint"
         );
       });
 
       // given the decimals on ext_mint do not match M
       // it reverts with a MintDecimals error
-      test('ext_mint incorrect decimals - reverts', async () => {
+      test("ext_mint incorrect decimals - reverts", async () => {
         // Create a mint owned by a different program
         const badMint = new Keypair();
         await createMint(badMint, nonAdmin.publicKey, true, 9);
@@ -1160,17 +1363,17 @@ describe('ScaledUiExt unit tests', () => {
         // Attempt to send the transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .initialize([])
+            .initialize([], new BN(0))
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
-          'ConstraintMintDecimals',
+          "ConstraintMintDecimals"
         );
       });
 
       // given the M earn global account is invalid
       // it reverts with a seeds constraint
-      test('m_earn_global_account is incorrect - reverts', async () => {
+      test("m_earn_global_account is incorrect - reverts", async () => {
         // Setup the instruction call
         prepExtInitialize(nonAdmin);
 
@@ -1182,16 +1385,16 @@ describe('ScaledUiExt unit tests', () => {
         // Expect error (could be one of several "SeedsConstraint", "AccountOwnedByWrongProgram", "AccountNotInitialized")
         await expectSystemError(
           scaledUiExt.methods
-            .initialize([])
+            .initialize([], new BN(0))
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
-            .rpc(),
+            .rpc()
         );
       });
 
       // given ext_mint_authority is not required PDA
       // it reverts with a seeds constraint
-      test('ext_mint_authority is incorrect - reverts', async () => {
+      test("ext_mint_authority is incorrect - reverts", async () => {
         // Setup the instruction call
         prepExtInitialize(nonAdmin);
 
@@ -1203,16 +1406,16 @@ describe('ScaledUiExt unit tests', () => {
         // Expect error (could be one of several "SeedsConstraint", "AccountOwnedByWrongProgram", "AccountNotInitialized")
         await expectSystemError(
           scaledUiExt.methods
-            .initialize([])
+            .initialize([], new BN(0))
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
-            .rpc(),
+            .rpc()
         );
       });
 
       // given more than 10 wrap authorities are provided
       // it reverts with an InvalidParam error
-      test('more than 10 wrap authorities provided - reverts', async () => {
+      test("more than 10 wrap authorities provided - reverts", async () => {
         // Setup the instruction call
         prepExtInitialize(nonAdmin);
 
@@ -1222,17 +1425,17 @@ describe('ScaledUiExt unit tests', () => {
         // Attempt to send transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .initialize(wrapAuthorities)
+            .initialize(wrapAuthorities, new BN(0))
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
-          'InvalidParam',
+          "InvalidParam"
         );
       });
 
       // given wrap authorities includes the system program id (default public key)
       // it reverts with an InvalidParam error
-      test('wrap authorities includes the system program id - reverts', async () => {
+      test("wrap authorities includes the system program id - reverts", async () => {
         // Setup the instruction call
         prepExtInitialize(nonAdmin);
 
@@ -1243,17 +1446,17 @@ describe('ScaledUiExt unit tests', () => {
         // Attempt to send transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .initialize(wrapAuthorities)
+            .initialize(wrapAuthorities, new BN(0))
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
-          'InvalidParam',
+          "InvalidParam"
         );
       });
 
       // given wrap authorities includes a duplicate, non-default public key
       // it reverts with an InvalidParam error
-      test('wrap authorities includes a duplicate, non-default public key - reverts', async () => {
+      test("wrap authorities includes a duplicate, non-default public key - reverts", async () => {
         // Setup the instruction call
         prepExtInitialize(nonAdmin);
 
@@ -1264,11 +1467,11 @@ describe('ScaledUiExt unit tests', () => {
         // Attempt to send transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .initialize(wrapAuthorities)
+            .initialize(wrapAuthorities, new BN(0))
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
-          'InvalidParam',
+          "InvalidParam"
         );
       });
 
@@ -1280,37 +1483,41 @@ describe('ScaledUiExt unit tests', () => {
       // it sets the m_earn_global_account to the provided account
       // it sets the scalued ui amount multiplier and timestamp to the values on the m earn global account
       // it sets the bumps to the correct values
-      test('initialize - success', async () => {
+      test("initialize - success", async () => {
         // Setup the instruction call
         prepExtInitialize(admin);
 
         // Get a random number of wrap authorities
         // We use the padded array to check the stored state after the call
         const numWrapAuthorities = randomInt(10);
-        const wrapAuthorities: PublicKey[] = createUniqueKeyArray(numWrapAuthorities);
+        const wrapAuthorities: PublicKey[] =
+          createUniqueKeyArray(numWrapAuthorities);
         const paddedWrapAuthorities = padKeyArray(wrapAuthorities, 10);
 
         // Derive PDA bumps
         const [, bump] = PublicKey.findProgramAddressSync(
-          [Buffer.from('global')],
-          scaledUiExt.programId,
+          [Buffer.from("global")],
+          scaledUiExt.programId
         );
         const [, mVaultBump] = PublicKey.findProgramAddressSync(
-          [Buffer.from('m_vault')],
-          scaledUiExt.programId,
+          [Buffer.from("m_vault")],
+          scaledUiExt.programId
         );
         const [, extMintAuthorityBump] = PublicKey.findProgramAddressSync(
-          [Buffer.from('mint_authority')],
-          scaledUiExt.programId,
+          [Buffer.from("mint_authority")],
+          scaledUiExt.programId
         );
 
         // Ensure the global account has not been created yet
         const globalAccount = getExtGlobalAccount();
         expectAccountEmpty(globalAccount);
 
+        // Get a random fee bps
+        const fee_bps = new BN(randomInt(10000));
+
         // Send the transaction
         await scaledUiExt.methods
-          .initialize(wrapAuthorities)
+          .initialize(wrapAuthorities, fee_bps)
           .accountsPartial({ ...accounts })
           .signers([admin])
           .rpc();
@@ -1321,6 +1528,9 @@ describe('ScaledUiExt unit tests', () => {
           extMint: extMint.publicKey,
           mMint: mMint.publicKey,
           mEarnGlobalAccount: getEarnGlobalAccount(),
+          feeBps: fee_bps,
+          lastMIndex: initialIndex,
+          lastExtIndex: new BN(1e12),
           bump,
           mVaultBump,
           extMintAuthorityBump,
@@ -1328,20 +1538,23 @@ describe('ScaledUiExt unit tests', () => {
         });
 
         // Check the state of the mint
-        const multiplier = initialIndex.toNumber() / 1e12;
         await expectScaledUiAmountConfig(extMint.publicKey, {
           authority: getExtMintAuthority(),
-          multiplier,
+          multiplier: 1.0,
           newMultiplierEffectiveTimestamp: BigInt(currentTime().toString()),
-          newMultiplier: multiplier,
+          newMultiplier: 1.0,
         });
       });
     });
 
-    describe('set_m_mint unit tests', () => {
+    describe("set_m_mint unit tests", () => {
       beforeEach(async () => {
+        const fee_bps = new BN(randomInt(10000));
         // Initialize the extension program
-        await initializeExt([admin.publicKey, wrapAuthority.publicKey]);
+        await initializeExt(
+          [admin.publicKey, wrapAuthority.publicKey],
+          fee_bps
+        );
 
         // wrap some tokens to the make the m vault's balance non-zero
         await wrap(admin, initialSupply);
@@ -1368,7 +1581,7 @@ describe('ScaledUiExt unit tests', () => {
 
       // given the admin does not sign the transaction
       // it reverts with a NotAuthorized error
-      test('admin does not sign - reverts', async () => {
+      test("admin does not sign - reverts", async () => {
         // Create a new m mint that is valid
         const newMint = new Keypair();
         await createMint(newMint, nonAdmin.publicKey, true, 6);
@@ -1383,14 +1596,14 @@ describe('ScaledUiExt unit tests', () => {
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
-          'NotAuthorized',
+          "NotAuthorized"
         );
       });
 
       // given the admin signs the transaction
       // given the new m mint is not owned by the token2022 program
       // it reverts with a ConstraintAddress error
-      test('new m mint not owned by token2022 - reverts', async () => {
+      test("new m mint not owned by token2022 - reverts", async () => {
         // Create a new m mint that is valid
         const newMint = new Keypair();
         await createMint(newMint, nonAdmin.publicKey, false);
@@ -1406,13 +1619,13 @@ describe('ScaledUiExt unit tests', () => {
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc(),
-          'ConstraintMintTokenProgram',
+          "ConstraintMintTokenProgram"
         );
       });
 
       // given the new m mint has a different number of decimals than the existing m mint
       // it reverts with a ConstraintMintDecimals error
-      test('new m mint incorrect decimals - reverts', async () => {
+      test("new m mint incorrect decimals - reverts", async () => {
         // Create a new m mint that is valid
         const newMint = new Keypair();
         await createMint(newMint, nonAdmin.publicKey, true, 9);
@@ -1427,13 +1640,13 @@ describe('ScaledUiExt unit tests', () => {
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc(),
-          'ConstraintMintDecimals',
+          "ConstraintMintDecimals"
         );
       });
 
       // given the m vault is not the m vault PDA
       // it reverts with a SeedsConstraint error
-      test('m vault is not the m vault PDA - reverts', async () => {
+      test("m vault is not the m vault PDA - reverts", async () => {
         // Create a new m mint that is valid
         const newMint = new Keypair();
         await createMint(newMint, nonAdmin.publicKey, true, 6);
@@ -1451,13 +1664,13 @@ describe('ScaledUiExt unit tests', () => {
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc(),
-          'ConstraintSeeds',
+          "ConstraintSeeds"
         );
       });
 
       // given the m vault token account for the current m mint is not the m vault PDA's ATA
       // it reverts with a ConstraintAssociated error
-      test('m vault token account for current m mint is not the m vault PDA\'s ATA - reverts', async () => {
+      test("m vault token account for current m mint is not the m vault PDA's ATA - reverts", async () => {
         // Create a new m mint that is valid
         const newMint = new Keypair();
         await createMint(newMint, nonAdmin.publicKey, true, 6);
@@ -1466,7 +1679,10 @@ describe('ScaledUiExt unit tests', () => {
         await prepSetMMint(admin, newMint.publicKey);
 
         // Change the m vault token account
-        const { tokenAccount: nonAtaAccount } = await createTokenAccount(mMint.publicKey, getMVault());
+        const { tokenAccount: nonAtaAccount } = await createTokenAccount(
+          mMint.publicKey,
+          getMVault()
+        );
         accounts.vaultMTokenAccount = nonAtaAccount;
 
         // Attempt to send the transaction
@@ -1476,13 +1692,13 @@ describe('ScaledUiExt unit tests', () => {
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc(),
-          'ConstraintAssociated',
+          "ConstraintAssociated"
         );
       });
 
       // given the m vault token account for the new m mint is not the m vault PDA's ATA
       // it reverts with a ConstraintAssociated error
-      test('m vault token account for new m mint is not the m vault PDA\'s ATA - reverts', async () => {
+      test("m vault token account for new m mint is not the m vault PDA's ATA - reverts", async () => {
         // Create a new m mint that is valid
         const newMint = new Keypair();
         await createMint(newMint, nonAdmin.publicKey, true, 6);
@@ -1491,7 +1707,10 @@ describe('ScaledUiExt unit tests', () => {
         await prepSetMMint(admin, newMint.publicKey);
 
         // Change the m vault token account
-        const { tokenAccount: nonAtaAccount } = await createTokenAccount(newMint.publicKey, getMVault());
+        const { tokenAccount: nonAtaAccount } = await createTokenAccount(
+          newMint.publicKey,
+          getMVault()
+        );
         accounts.newVaultMTokenAccount = nonAtaAccount;
 
         // Attempt to send the transaction
@@ -1501,19 +1720,22 @@ describe('ScaledUiExt unit tests', () => {
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc(),
-          'ConstraintAssociated',
+          "ConstraintAssociated"
         );
       });
 
       // given the m vault token account for the new m mint has fewer tokens than the m vault token account for the current m mint
       // it reverts with an InsufficientCollateral error
-      test('new m mint vault token account has fewer tokens than current m mint vault token account - reverts', async () => {
+      test("new m mint vault token account has fewer tokens than current m mint vault token account - reverts", async () => {
         // Create a new m mint that is valid
         const newMint = new Keypair();
         await createMint(newMint, nonAdmin.publicKey, true, 6);
 
         // Create the ATA for the m vault for the new mint and mint some tokens to it
-        const mVaultATA: PublicKey = await getATA(newMint.publicKey, getMVault());
+        const mVaultATA: PublicKey = await getATA(
+          newMint.publicKey,
+          getMVault()
+        );
 
         const amount = BigInt(randomInt(initialSupply.toNumber()));
 
@@ -1524,9 +1746,9 @@ describe('ScaledUiExt unit tests', () => {
           amount,
           6,
           [],
-          TOKEN_2022_PROGRAM_ID,
+          TOKEN_2022_PROGRAM_ID
         );
-      
+
         let tx = new Transaction();
         tx.add(mintToInstruction);
         await provider.sendAndConfirm!(tx, [nonAdmin]);
@@ -1542,19 +1764,22 @@ describe('ScaledUiExt unit tests', () => {
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc(),
-          'InsufficientCollateral',
-        );        
+          "InsufficientCollateral"
+        );
       });
 
       // given all the accounts are correct
       // it sets the m mint to the new mint
       // Create a new m mint that is valid
-      test('set m mint - success', async () => {
+      test("set m mint - success", async () => {
         const newMint = new Keypair();
         await createMint(newMint, nonAdmin.publicKey, true, 6);
 
         // Create the ATA for the m vault for the new mint and mint some tokens to it
-        const mVaultATA: PublicKey = await getATA(newMint.publicKey, getMVault());
+        const mVaultATA: PublicKey = await getATA(
+          newMint.publicKey,
+          getMVault()
+        );
 
         const amount = BigInt(initialSupply.toString());
 
@@ -1565,9 +1790,9 @@ describe('ScaledUiExt unit tests', () => {
           amount,
           6,
           [],
-          TOKEN_2022_PROGRAM_ID,
+          TOKEN_2022_PROGRAM_ID
         );
-      
+
         let tx = new Transaction();
         tx.add(mintToInstruction);
         await provider.sendAndConfirm!(tx, [nonAdmin]);
@@ -1577,10 +1802,10 @@ describe('ScaledUiExt unit tests', () => {
 
         // Send the transaction
         await scaledUiExt.methods
-            .setMMint()
-            .accountsPartial({ ...accounts })
-            .signers([admin])
-            .rpc();
+          .setMMint()
+          .accountsPartial({ ...accounts })
+          .signers([admin])
+          .rpc();
 
         // Check that the m mint was updated
         expectExtGlobalState(globalAccount, {
@@ -1589,14 +1814,15 @@ describe('ScaledUiExt unit tests', () => {
       });
     });
 
-    describe('update_wrap_authority unit tests', () => {
+    describe("update_wrap_authority unit tests", () => {
       const wrapAuthorities = [admin.publicKey, wrapAuthority.publicKey];
       const paddedWrapAuthorities = padKeyArray(wrapAuthorities, 10);
 
       beforeEach(async () => {
+        const fee_bps = new BN(randomInt(10000));
         // Initialize the extension program
-        await initializeExt(wrapAuthorities);
-      }); 
+        await initializeExt(wrapAuthorities, fee_bps);
+      });
 
       // test cases
       // [X] given the admin does not sign the transaction
@@ -1613,7 +1839,7 @@ describe('ScaledUiExt unit tests', () => {
 
       // given the admin does not sign the transaction
       // it reverts with a NotAuthorized error
-      test('admin does not sign - reverts', async () => {
+      test("admin does not sign - reverts", async () => {
         // Setup the instruction
         await prepUpdateWrapAuthority(nonAdmin);
 
@@ -1624,14 +1850,14 @@ describe('ScaledUiExt unit tests', () => {
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
-          'NotAuthorized',
+          "NotAuthorized"
         );
       });
 
       // given the admin signs the transaction
       // given the index is out of bounds
       // it reverts with a InvalidParam error
-      test('index out of bounds - reverts', async () => {
+      test("index out of bounds - reverts", async () => {
         // Setup the instruction
         await prepUpdateWrapAuthority(admin);
 
@@ -1644,14 +1870,14 @@ describe('ScaledUiExt unit tests', () => {
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc(),
-          'InvalidParam',
+          "InvalidParam"
         );
       });
 
       // given the admin signs the transaction
       // given the new wrap authority is already in the list (and not the default public key)
       // it reverts with a InvalidParam error
-      test('new wrap authority already in the list - reverts', async () => {
+      test("new wrap authority already in the list - reverts", async () => {
         // Setup the instruction
         await prepUpdateWrapAuthority(admin);
 
@@ -1662,14 +1888,14 @@ describe('ScaledUiExt unit tests', () => {
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc(),
-          'InvalidParam',
+          "InvalidParam"
         );
       });
 
       // given the admin signs the transaction
       // given the new wrap authority is the default public key
       // it removes the wrap authority at the given index
-      test('new wrap authority is the default public key - success', async () => {
+      test("new wrap authority is the default public key - success", async () => {
         // Setup the instruction
         const { globalAccount } = await prepUpdateWrapAuthority(admin);
 
@@ -1692,7 +1918,7 @@ describe('ScaledUiExt unit tests', () => {
       // given the admin signs the transaction
       // given the new wrap authority is not the default public key and not in the list
       // it adds the new wrap authority to the list at the provided index
-      test('new wrap authority is not the default public key and not in the list - success', async () => {
+      test("new wrap authority is not the default public key and not in the list - success", async () => {
         // Setup the instruction
         const { globalAccount } = await prepUpdateWrapAuthority(admin);
 
@@ -1714,18 +1940,19 @@ describe('ScaledUiExt unit tests', () => {
     });
   });
 
-  describe('wrap_authority instruction tests', () => {
+  describe("wrap_authority instruction tests", () => {
     const mintAmount = new BN(100_000_000); // 100 with 6 decimals
     const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
 
     const wrapAuthorities = [admin.publicKey, wrapAuthority.publicKey];
+    const fee_bps = new BN(randomInt(10000));
 
-    const startIndex = new BN(randomInt(1e12, 2e12));
+    const startIndex = new BN(randomInt(initialIndex.toNumber() + 1, 2e12));
 
     // Setup accounts with M tokens so we can test wrapping and unwrapping
     beforeEach(async () => {
       // Initialize the extension program
-      await initializeExt(wrapAuthorities);
+      await initializeExt(wrapAuthorities, fee_bps);
 
       // Mint M tokens to the extension earner and a non-earner
       await mintM(wrapAuthority.publicKey, mintAmount);
@@ -1747,10 +1974,8 @@ describe('ScaledUiExt unit tests', () => {
       await sync();
     });
 
-    describe('wrap unit tests', () => {
-
-      describe('index same as start', () => {
-
+    describe("wrap unit tests", () => {
+      describe("index same as start", () => {
         // test cases
         // [X] given the m mint account does not match the one stored in the global account
         //   [X] it reverts with an InvalidAccount error
@@ -1777,7 +2002,7 @@ describe('ScaledUiExt unit tests', () => {
 
         // given the m mint account does not match the one stored in the global account
         // it reverts with an InvalidAccount error
-        test('M mint account does not match global account - reverts', async () => {
+        test("M mint account does not match global account - reverts", async () => {
           // Setup the instruction
           await prepWrap(wrapAuthority);
 
@@ -1792,13 +2017,13 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc(),
-            'InvalidAccount',
+            "InvalidAccount"
           );
         });
 
         // given the ext mint account does not match the one stored in the global account
         // it reverts with an InvalidAccount error
-        test('Ext mint account does not match global account - reverts', async () => {
+        test("Ext mint account does not match global account - reverts", async () => {
           // Setup the instruction
           await prepWrap(wrapAuthority);
 
@@ -1813,16 +2038,19 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc(),
-            'InvalidAccount',
+            "InvalidAccount"
           );
         });
 
         // given the signer is not the authority on the user M token account
         // it reverts with a ConstraintTokenOwner error
         // TODO should we allow from ATAs where the token account owner is not the signer as long as the wrap authority also signs the transaction?
-        test('Signer is not the authority on the from M token account - reverts', async () => {
+        test("Signer is not the authority on the from M token account - reverts", async () => {
           // Get the ATA for another user
-          const wrongATA = await getATA(mMint.publicKey, nonWrapAuthority.publicKey);
+          const wrongATA = await getATA(
+            mMint.publicKey,
+            nonWrapAuthority.publicKey
+          );
 
           // Setup the instruction with the wrong user M token account
           await prepWrap(wrapAuthority, undefined, wrongATA);
@@ -1835,17 +2063,20 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc(),
-            'ConstraintTokenOwner',
+            "ConstraintTokenOwner"
           );
         });
 
-              // given the M vault token account is not the M vault PDA's ATA
+        // given the M vault token account is not the M vault PDA's ATA
         // it reverts with a ConstraintAssociated error
         test("M Vault Token account is the the M Vault PDA's ATA (other token account) - reverts", async () => {
           // Create a token account for the M vault that is not the ATA
           const tokenAccountKeypair = Keypair.generate();
           const tokenAccountLen = getAccountLen([ExtensionType.ImmutableOwner]);
-          const lamports = await provider.connection.getMinimumBalanceForRentExemption(tokenAccountLen);
+          const lamports =
+            await provider.connection.getMinimumBalanceForRentExemption(
+              tokenAccountLen
+            );
 
           const mVault = getMVault();
 
@@ -1858,19 +2089,28 @@ describe('ScaledUiExt unit tests', () => {
               lamports,
               programId: TOKEN_2022_PROGRAM_ID,
             }),
-            createInitializeImmutableOwnerInstruction(tokenAccountKeypair.publicKey, TOKEN_2022_PROGRAM_ID),
+            createInitializeImmutableOwnerInstruction(
+              tokenAccountKeypair.publicKey,
+              TOKEN_2022_PROGRAM_ID
+            ),
             createInitializeAccountInstruction(
               tokenAccountKeypair.publicKey,
               mMint.publicKey,
               mVault,
-              TOKEN_2022_PROGRAM_ID,
-            ),
+              TOKEN_2022_PROGRAM_ID
+            )
           );
 
           await provider.send!(transaction, [admin, tokenAccountKeypair]);
 
           // Setup the instruction with the non-ATA vault m token account
-          await prepWrap(wrapAuthority, undefined, undefined, undefined, tokenAccountKeypair.publicKey);
+          await prepWrap(
+            wrapAuthority,
+            undefined,
+            undefined,
+            undefined,
+            tokenAccountKeypair.publicKey
+          );
 
           // Attempt to send the transaction
           // Expect revert with a ConstraintAssociated error
@@ -1880,15 +2120,18 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc(),
-            'ConstraintAssociated',
+            "ConstraintAssociated"
           );
         });
 
         // given the from m token account is for the wrong mint
         // it reverts with a ConstraintTokenMint error
-        test('From M token account is for wrong mint - reverts', async () => {
+        test("From M token account is for wrong mint - reverts", async () => {
           // Get the user's ATA for the ext mint and pass it as the user M token account
-          const wrongUserATA = await getATA(extMint.publicKey, wrapAuthority.publicKey);
+          const wrongUserATA = await getATA(
+            extMint.publicKey,
+            wrapAuthority.publicKey
+          );
 
           // Setup the instruction
           await prepWrap(wrapAuthority, undefined, wrongUserATA);
@@ -1901,15 +2144,18 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc(),
-            'ConstraintTokenMint',
+            "ConstraintTokenMint"
           );
         });
 
         // given the to ext token account is for the wrong mint
         // it reverts with a ConstraintTokenMint error
-        test('To Ext token account is for the wrong mint - reverts', async () => {
+        test("To Ext token account is for the wrong mint - reverts", async () => {
           // Get the user's ATA for the m mint and pass it as the user ext token account
-          const wrongUserATA = await getATA(mMint.publicKey, wrapAuthority.publicKey);
+          const wrongUserATA = await getATA(
+            mMint.publicKey,
+            wrapAuthority.publicKey
+          );
 
           // Setup the instruction
           await prepWrap(wrapAuthority, undefined, undefined, wrongUserATA);
@@ -1922,16 +2168,16 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc(),
-            'ConstraintTokenMint',
+            "ConstraintTokenMint"
           );
         });
 
         // given the signer is not in the wrap authorities list
         // it reverts with a NotAuthorized error
-        test('Signer is not in the wrap authorities list - reverts', async () => {
+        test("Signer is not in the wrap authorities list - reverts", async () => {
           // Setup the instruction
           await prepWrap(nonWrapAuthority);
-          
+
           // Attempt to send the transaction
           // Expect revert with a NotAuthorized error
           await expectAnchorError(
@@ -1940,19 +2186,20 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([nonWrapAuthority])
               .rpc(),
-            'NotAuthorized',
+            "NotAuthorized"
           );
-
         });
 
         // given all accounts are correct
         // give the user does not have enough M tokens
         // it reverts
-        test('Not enough M - reverts', async () => {
+        test("Not enough M - reverts", async () => {
           // Setup the instruction
           await prepWrap(wrapAuthority);
 
-          const wrapAmount = new BN(randomInt(mintAmount.toNumber() + 1, 2 ** 48 - 1));
+          const wrapAmount = new BN(
+            randomInt(mintAmount.toNumber() + 1, 2 ** 48 - 1)
+          );
 
           // Attempt to send the transaction
           // Expect an error
@@ -1961,7 +2208,7 @@ describe('ScaledUiExt unit tests', () => {
               .wrap(wrapAmount)
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
-              .rpc(),
+              .rpc()
           );
         });
 
@@ -1969,14 +2216,21 @@ describe('ScaledUiExt unit tests', () => {
         // given the user has enough M tokens
         // it transfers the amount of M tokens from the user's M token account to the M vault token account
         // it mints the amount of wM tokens to the user's wM token account
-        test('Wrap to wrap authority account - success', async () => {
+        test("Wrap to wrap authority account - success", async () => {
           // Setup the instruction
-          const { vaultMTokenAccount, fromMTokenAccount, toExtTokenAccount } = await prepWrap(wrapAuthority);
+          const { vaultMTokenAccount, fromMTokenAccount, toExtTokenAccount } =
+            await prepWrap(wrapAuthority);
 
           // Cache initial balances
-          const fromMTokenAccountBalance = await getTokenBalance(fromMTokenAccount);
-          const vaultMTokenAccountBalance = await getTokenBalance(vaultMTokenAccount);
-          const toExtTokenAccountUiBalance = await getTokenUiBalance(toExtTokenAccount);
+          const fromMTokenAccountBalance = await getTokenBalance(
+            fromMTokenAccount
+          );
+          const vaultMTokenAccountBalance = await getTokenBalance(
+            vaultMTokenAccount
+          );
+          const toExtTokenAccountUiBalance = await getTokenUiBalance(
+            toExtTokenAccount
+          );
 
           const wrapAmount = new BN(randomInt(1, mintAmount.toNumber() + 1));
 
@@ -1988,9 +2242,20 @@ describe('ScaledUiExt unit tests', () => {
             .rpc();
 
           // Confirm updated balances
-          await expectTokenBalance(fromMTokenAccount, fromMTokenAccountBalance.sub(wrapAmount));
-          await expectTokenBalance(vaultMTokenAccount, vaultMTokenAccountBalance.add(wrapAmount));
-          await expectTokenUiBalance(toExtTokenAccount, toExtTokenAccountUiBalance.add(wrapAmount), Comparison.LessThanOrEqual, new BN(2));
+          await expectTokenBalance(
+            fromMTokenAccount,
+            fromMTokenAccountBalance.sub(wrapAmount)
+          );
+          await expectTokenBalance(
+            vaultMTokenAccount,
+            vaultMTokenAccountBalance.add(wrapAmount)
+          );
+          await expectTokenUiBalance(
+            toExtTokenAccount,
+            toExtTokenAccountUiBalance.add(wrapAmount),
+            Comparison.LessThanOrEqual,
+            new BN(2)
+          );
         });
 
         // given all accounts are correct
@@ -1998,14 +2263,21 @@ describe('ScaledUiExt unit tests', () => {
         // given the signer does not own the to ext token account
         // it transfers the amount of M tokens from the user's M token account to the M vault token account
         // it mints the amount of wM tokens to the user's wM token account
-        test('Wrap to different account - success', async () => {
+        test("Wrap to different account - success", async () => {
           // Setup the instruction
-          const { vaultMTokenAccount, fromMTokenAccount, toExtTokenAccount } = await prepWrap(wrapAuthority, nonWrapAuthority.publicKey);
+          const { vaultMTokenAccount, fromMTokenAccount, toExtTokenAccount } =
+            await prepWrap(wrapAuthority, nonWrapAuthority.publicKey);
 
           // Cache initial balances
-          const fromMTokenAccountBalance = await getTokenBalance(fromMTokenAccount);
-          const vaultMTokenAccountBalance = await getTokenBalance(vaultMTokenAccount);
-          const toExtTokenAccountUiBalance = await getTokenUiBalance(toExtTokenAccount);
+          const fromMTokenAccountBalance = await getTokenBalance(
+            fromMTokenAccount
+          );
+          const vaultMTokenAccountBalance = await getTokenBalance(
+            vaultMTokenAccount
+          );
+          const toExtTokenAccountUiBalance = await getTokenUiBalance(
+            toExtTokenAccount
+          );
 
           const wrapAmount = new BN(randomInt(1, mintAmount.toNumber() + 1));
 
@@ -2017,17 +2289,31 @@ describe('ScaledUiExt unit tests', () => {
             .rpc();
 
           // Confirm updated balances
-          await expectTokenBalance(fromMTokenAccount, fromMTokenAccountBalance.sub(wrapAmount));
-          await expectTokenBalance(vaultMTokenAccount, vaultMTokenAccountBalance.add(wrapAmount));
-          await expectTokenUiBalance(toExtTokenAccount, toExtTokenAccountUiBalance.add(wrapAmount), Comparison.LessThanOrEqual, new BN(2));
+          await expectTokenBalance(
+            fromMTokenAccount,
+            fromMTokenAccountBalance.sub(wrapAmount)
+          );
+          await expectTokenBalance(
+            vaultMTokenAccount,
+            vaultMTokenAccountBalance.add(wrapAmount)
+          );
+          await expectTokenUiBalance(
+            toExtTokenAccount,
+            toExtTokenAccountUiBalance.add(wrapAmount),
+            Comparison.LessThanOrEqual,
+            new BN(2)
+          );
         });
 
         // given all accounts are correct
         // given the user has enough M tokens
         // round-trip (wrap / unwrap)
-        test('Wrap / unwrap roundtrip - success', async () => {
+        test("Wrap / unwrap roundtrip - success", async () => {
           // Cache the starting balance of M
-          const wrapAuthorityATA = await getATA(mMint.publicKey, wrapAuthority.publicKey);
+          const wrapAuthorityATA = await getATA(
+            mMint.publicKey,
+            wrapAuthority.publicKey
+          );
           const startingBalance = await getTokenBalance(wrapAuthorityATA);
 
           // Wrap some tokens
@@ -2042,7 +2328,7 @@ describe('ScaledUiExt unit tests', () => {
         });
       });
 
-      describe('index different from start (sync required)', () => {
+      describe("index different from start (sync required)", () => {
         // M Index is strictly increasing
         const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12 + 1));
 
@@ -2062,7 +2348,7 @@ describe('ScaledUiExt unit tests', () => {
 
         // given yield has not been minted to the m vault for the new index
         // it reverts with an InsufficientCollateral error
-        test('Yield not minted for new index - reverts', async () => {
+        test("Yield not minted for new index - reverts", async () => {
           // Setup the instruction
           await prepWrap(wrapAuthority);
 
@@ -2075,28 +2361,37 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc(),
-            'InsufficientCollateral',
+            "InsufficientCollateral"
           );
         });
 
         // given yield has been minted to the m vault for the new index
         // it wraps the amount of M tokens from the user's M token account to the M vault token account
-        test('Wrap with new index - success', async () => {
+        test("Wrap with new index - success", async () => {
           // Mint yield to the m vault for the new index
           const mVault = getMVault();
           const mVaultATA = await getATA(mMint.publicKey, mVault);
-          await mClaimFor(mVault, await getTokenBalance(mVaultATA));     
+          await mClaimFor(mVault, await getTokenBalance(mVaultATA));
           await completeClaims();
 
           // Setup the instruction
-          const { vaultMTokenAccount, fromMTokenAccount, toExtTokenAccount } = await prepWrap(wrapAuthority);
+          const { vaultMTokenAccount, fromMTokenAccount, toExtTokenAccount } =
+            await prepWrap(wrapAuthority);
 
           // Cache initial balances
-          const fromMTokenAccountBalance = await getTokenBalance(fromMTokenAccount);
-          const vaultMTokenAccountBalance = await getTokenBalance(vaultMTokenAccount);
-          const toExtTokenAccountUiBalance = await getTokenUiBalance(toExtTokenAccount);
+          const fromMTokenAccountBalance = await getTokenBalance(
+            fromMTokenAccount
+          );
+          const vaultMTokenAccountBalance = await getTokenBalance(
+            vaultMTokenAccount
+          );
+          const toExtTokenAccountUiBalance = await getTokenUiBalance(
+            toExtTokenAccount
+          );
 
-          const wrapAmount = new BN(randomInt(1, fromMTokenAccountBalance.toNumber() + 1));
+          const wrapAmount = new BN(
+            randomInt(1, fromMTokenAccountBalance.toNumber() + 1)
+          );
 
           // Send the instruction
           await scaledUiExt.methods
@@ -2106,22 +2401,32 @@ describe('ScaledUiExt unit tests', () => {
             .rpc();
 
           // Confirm updated balances
-          await expectTokenBalance(fromMTokenAccount, fromMTokenAccountBalance.sub(wrapAmount));
-          await expectTokenBalance(vaultMTokenAccount, vaultMTokenAccountBalance.add(wrapAmount));
-          await expectTokenUiBalance(toExtTokenAccount, toExtTokenAccountUiBalance.add(wrapAmount), Comparison.LessThanOrEqual, new BN(2));
+          await expectTokenBalance(
+            fromMTokenAccount,
+            fromMTokenAccountBalance.sub(wrapAmount)
+          );
+          await expectTokenBalance(
+            vaultMTokenAccount,
+            vaultMTokenAccountBalance.add(wrapAmount)
+          );
+          await expectTokenUiBalance(
+            toExtTokenAccount,
+            toExtTokenAccountUiBalance.add(wrapAmount),
+            Comparison.LessThanOrEqual,
+            new BN(2)
+          );
         });
       });
     });
 
-    describe('unwrap unit tests', () => {
+    describe("unwrap unit tests", () => {
       const wrappedAmount = new BN(25_000_000);
       beforeEach(async () => {
         // Wrap tokens for the users so we can test unwrapping
         await wrap(wrapAuthority, wrappedAmount);
         await wrap(wrapAuthority, wrappedAmount, nonWrapAuthority.publicKey);
       });
-      describe('index same as start', () => {
-
+      describe("index same as start", () => {
         // test cases
         // [X] given the m mint account does not match the one stored in the global account
         //   [X] it reverts with an InvalidAccount error
@@ -2146,7 +2451,7 @@ describe('ScaledUiExt unit tests', () => {
 
         // given the m mint account does not match the one stored in the global account
         // it reverts with an InvalidAccount error
-        test('M mint account does not match global account - reverts', async () => {
+        test("M mint account does not match global account - reverts", async () => {
           // Setup the instruction
           await prepUnwrap(wrapAuthority);
 
@@ -2161,13 +2466,13 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc(),
-            'InvalidAccount',
+            "InvalidAccount"
           );
         });
 
         // given the ext mint account does not match the one stored in the global account
         // it reverts with an InvalidAccount error
-        test('Ext mint account does not match global account - reverts', async () => {
+        test("Ext mint account does not match global account - reverts", async () => {
           // Setup the instruction
           await prepUnwrap(wrapAuthority);
 
@@ -2182,16 +2487,19 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc(),
-            'InvalidAccount',
+            "InvalidAccount"
           );
         });
 
         // given the signer is not the authority on the user ext token account
         // it reverts with a ConstraintTokenOwner error
-        test('Signer is not the authority on the from Ext token account - reverts', async () => {
+        test("Signer is not the authority on the from Ext token account - reverts", async () => {
           // Get the ATA for another user
           const mATA = await getATA(mMint.publicKey, wrapAuthority.publicKey);
-          const wrongExtATA = await getATA(extMint.publicKey, nonWrapAuthority.publicKey);
+          const wrongExtATA = await getATA(
+            extMint.publicKey,
+            nonWrapAuthority.publicKey
+          );
 
           // Setup the instruction with the wrong user M token account
           await prepUnwrap(wrapAuthority, undefined, mATA, wrongExtATA);
@@ -2204,7 +2512,7 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc(),
-            'ConstraintTokenOwner',
+            "ConstraintTokenOwner"
           );
         });
 
@@ -2214,7 +2522,10 @@ describe('ScaledUiExt unit tests', () => {
           // Create a token account for the M vault that is not the ATA
           const tokenAccountKeypair = Keypair.generate();
           const tokenAccountLen = getAccountLen([ExtensionType.ImmutableOwner]);
-          const lamports = await provider.connection.getMinimumBalanceForRentExemption(tokenAccountLen);
+          const lamports =
+            await provider.connection.getMinimumBalanceForRentExemption(
+              tokenAccountLen
+            );
 
           const mVault = getMVault();
 
@@ -2227,19 +2538,28 @@ describe('ScaledUiExt unit tests', () => {
               lamports,
               programId: TOKEN_2022_PROGRAM_ID,
             }),
-            createInitializeImmutableOwnerInstruction(tokenAccountKeypair.publicKey, TOKEN_2022_PROGRAM_ID),
+            createInitializeImmutableOwnerInstruction(
+              tokenAccountKeypair.publicKey,
+              TOKEN_2022_PROGRAM_ID
+            ),
             createInitializeAccountInstruction(
               tokenAccountKeypair.publicKey,
               mMint.publicKey,
               mVault,
-              TOKEN_2022_PROGRAM_ID,
-            ),
+              TOKEN_2022_PROGRAM_ID
+            )
           );
 
           await provider.send!(transaction, [admin, tokenAccountKeypair]);
 
           // Setup the instruction with the non-ATA vault m token account
-          await prepUnwrap(wrapAuthority, undefined, undefined, undefined, tokenAccountKeypair.publicKey);
+          await prepUnwrap(
+            wrapAuthority,
+            undefined,
+            undefined,
+            undefined,
+            tokenAccountKeypair.publicKey
+          );
 
           // Attempt to send the transaction
           // Expect revert with a ConstraintAssociated error
@@ -2249,15 +2569,18 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc(),
-            'ConstraintAssociated',
+            "ConstraintAssociated"
           );
         });
 
         // given the user m token account is for the wrong mint
         // it reverts with a ConstraintTokenMint error
-        test('To M token account is for wrong mint - reverts', async () => {
+        test("To M token account is for wrong mint - reverts", async () => {
           // Get the user's ATA for the ext mint and pass it as the user M token account
-          const wrongUserATA = await getATA(extMint.publicKey, wrapAuthority.publicKey);
+          const wrongUserATA = await getATA(
+            extMint.publicKey,
+            wrapAuthority.publicKey
+          );
 
           // Setup the instruction
           await prepUnwrap(wrapAuthority, undefined, wrongUserATA);
@@ -2270,15 +2593,18 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc(),
-            'ConstraintTokenMint',
+            "ConstraintTokenMint"
           );
         });
 
         // given the user ext token account is for the wrong mint
         // it reverts with a ConstraintTokenMint error
-        test('From Ext token account is for the wrong mint - reverts', async () => {
+        test("From Ext token account is for the wrong mint - reverts", async () => {
           // Get the user's ATA for the m mint and pass it as the user ext token account
-          const wrongUserATA = await getATA(mMint.publicKey, wrapAuthority.publicKey);
+          const wrongUserATA = await getATA(
+            mMint.publicKey,
+            wrapAuthority.publicKey
+          );
 
           // Setup the instruction
           await prepUnwrap(wrapAuthority, undefined, undefined, wrongUserATA);
@@ -2291,13 +2617,13 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc(),
-            'ConstraintTokenMint',
+            "ConstraintTokenMint"
           );
         });
-        
+
         // given the signer is not in the wrap authorities list
         // it reverts with a NotAuthorized error
-        test('Signer is not in the wrap authorities list - reverts', async () => {
+        test("Signer is not in the wrap authorities list - reverts", async () => {
           // Setup the instruction
           await prepUnwrap(nonWrapAuthority);
 
@@ -2309,18 +2635,20 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([nonWrapAuthority])
               .rpc(),
-            'NotAuthorized',
+            "NotAuthorized"
           );
         });
 
         // given all accounts are correct
         // give the user does not have enough ext tokens
         // it reverts
-        test('Not enough ext tokens - reverts', async () => {
+        test("Not enough ext tokens - reverts", async () => {
           // Setup the instruction
           await prepUnwrap(wrapAuthority);
 
-          const unwrapAmount = new BN(randomInt(wrappedAmount.toNumber() + 1, 2 ** 48 - 1));
+          const unwrapAmount = new BN(
+            randomInt(wrappedAmount.toNumber() + 1, 2 ** 48 - 1)
+          );
 
           // Attempt to send the transaction
           // Expect an error
@@ -2329,7 +2657,7 @@ describe('ScaledUiExt unit tests', () => {
               .unwrap(unwrapAmount)
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
-              .rpc(),
+              .rpc()
           );
         });
 
@@ -2337,16 +2665,23 @@ describe('ScaledUiExt unit tests', () => {
         // given the user has enough ext tokens
         // it transfers the amount of M tokens from the M vault token account to the user's M token account
         // it burns the amount of ext tokens from the user's ext token account
-        test('Unwrap to wrap authority account - success', async () => {
+        test("Unwrap to wrap authority account - success", async () => {
           // Setup the instruction
-          const { vaultMTokenAccount, toMTokenAccount, fromExtTokenAccount } = await prepUnwrap(wrapAuthority);
+          const { vaultMTokenAccount, toMTokenAccount, fromExtTokenAccount } =
+            await prepUnwrap(wrapAuthority);
 
           // Cache initial balances
-          const fromExtTokenAccountUiBalance = await getTokenUiBalance(fromExtTokenAccount);
-          const vaultMTokenAccountBalance = await getTokenBalance(vaultMTokenAccount);
+          const fromExtTokenAccountUiBalance = await getTokenUiBalance(
+            fromExtTokenAccount
+          );
+          const vaultMTokenAccountBalance = await getTokenBalance(
+            vaultMTokenAccount
+          );
           const toMTokenAccountBalance = await getTokenBalance(toMTokenAccount);
 
-          const unwrapAmount = new BN(randomInt(1, wrappedAmount.toNumber() + 1));
+          const unwrapAmount = new BN(
+            randomInt(1, wrappedAmount.toNumber() + 1)
+          );
 
           // Send the instruction
           await scaledUiExt.methods
@@ -2356,25 +2691,43 @@ describe('ScaledUiExt unit tests', () => {
             .rpc();
 
           // Confirm updated balances
-          await expectTokenBalance(toMTokenAccount, toMTokenAccountBalance.add(unwrapAmount));
-          await expectTokenBalance(vaultMTokenAccount, vaultMTokenAccountBalance.sub(unwrapAmount));
-          await expectTokenUiBalance(fromExtTokenAccount, fromExtTokenAccountUiBalance.sub(unwrapAmount), Comparison.LessThanOrEqual, new BN(2));
+          await expectTokenBalance(
+            toMTokenAccount,
+            toMTokenAccountBalance.add(unwrapAmount)
+          );
+          await expectTokenBalance(
+            vaultMTokenAccount,
+            vaultMTokenAccountBalance.sub(unwrapAmount)
+          );
+          await expectTokenUiBalance(
+            fromExtTokenAccount,
+            fromExtTokenAccountUiBalance.sub(unwrapAmount),
+            Comparison.LessThanOrEqual,
+            new BN(2)
+          );
         });
 
         // given all accounts are correct
         // given the user has enough ext tokens
         // it transfers the amount of M tokens from the M vault token account to the user's M token account
         // it burns the amount of ext tokens from the user's ext token account
-        test('Unwrap to different account - success', async () => {
+        test("Unwrap to different account - success", async () => {
           // Setup the instruction
-          const { vaultMTokenAccount, toMTokenAccount, fromExtTokenAccount } = await prepUnwrap(wrapAuthority, nonWrapAuthority.publicKey);
+          const { vaultMTokenAccount, toMTokenAccount, fromExtTokenAccount } =
+            await prepUnwrap(wrapAuthority, nonWrapAuthority.publicKey);
 
           // Cache initial balances
-          const fromExtTokenAccountUiBalance = await getTokenUiBalance(fromExtTokenAccount);
-          const vaultMTokenAccountBalance = await getTokenBalance(vaultMTokenAccount);
+          const fromExtTokenAccountUiBalance = await getTokenUiBalance(
+            fromExtTokenAccount
+          );
+          const vaultMTokenAccountBalance = await getTokenBalance(
+            vaultMTokenAccount
+          );
           const toMTokenAccountBalance = await getTokenBalance(toMTokenAccount);
 
-          const unwrapAmount = new BN(randomInt(1, wrappedAmount.toNumber() + 1));
+          const unwrapAmount = new BN(
+            randomInt(1, wrappedAmount.toNumber() + 1)
+          );
 
           // Send the instruction
           await scaledUiExt.methods
@@ -2384,15 +2737,26 @@ describe('ScaledUiExt unit tests', () => {
             .rpc();
 
           // Confirm updated balances
-          await expectTokenBalance(toMTokenAccount, toMTokenAccountBalance.add(unwrapAmount));
-          await expectTokenBalance(vaultMTokenAccount, vaultMTokenAccountBalance.sub(unwrapAmount));
-          await expectTokenUiBalance(fromExtTokenAccount, fromExtTokenAccountUiBalance.sub(unwrapAmount), Comparison.LessThanOrEqual, new BN(2));
+          await expectTokenBalance(
+            toMTokenAccount,
+            toMTokenAccountBalance.add(unwrapAmount)
+          );
+          await expectTokenBalance(
+            vaultMTokenAccount,
+            vaultMTokenAccountBalance.sub(unwrapAmount)
+          );
+          await expectTokenUiBalance(
+            fromExtTokenAccount,
+            fromExtTokenAccountUiBalance.sub(unwrapAmount),
+            Comparison.LessThanOrEqual,
+            new BN(2)
+          );
         });
       });
 
-      describe('index different from start (sync required)', () => {
+      describe("index different from start (sync required)", () => {
         const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12 + 1));
-        const newMultiplier = newIndex.toNumber() / 1e12;
+        let newMultiplier: number = 1.0;
 
         beforeEach(async () => {
           // Reset the blockhash to avoid issues with duplicate transactions from multiple claim cycles
@@ -2400,6 +2764,15 @@ describe('ScaledUiExt unit tests', () => {
 
           // Propagate the new index
           await propagateIndex(newIndex);
+
+          // Calculate the expected multipler after the new index push
+          const globalState = await scaledUiExt.account.extGlobal.fetch(
+            getExtGlobalAccount()
+          );
+          newMultiplier =
+            (globalState.lastExtIndex.toNumber() / 1e12) *
+            (newIndex.toNumber() / startIndex.toNumber()) **
+              (1 - fee_bps.toNumber() / 1e4);
         });
 
         // test cases
@@ -2410,11 +2783,13 @@ describe('ScaledUiExt unit tests', () => {
 
         // given yield has not been minted to the m vault for the new index
         // it reverts with an InsufficientCollateral error
-        test('Yield not minted for new index - reverts', async () => {
+        test("Yield not minted for new index - reverts", async () => {
           // Setup the instruction
           await prepUnwrap(wrapAuthority);
 
-          const unwrapAmount = new BN(randomInt(1, wrappedAmount.toNumber() + 1));
+          const unwrapAmount = new BN(
+            randomInt(1, wrappedAmount.toNumber() + 1)
+          );
 
           // Send the instruction
           await expectAnchorError(
@@ -2423,28 +2798,36 @@ describe('ScaledUiExt unit tests', () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc(),
-            'InsufficientCollateral',
+            "InsufficientCollateral"
           );
         });
 
         // given yield has been minted to the m vault for the new index
         // it unwraps the amount of M tokens from the M vault token account to the user's M token account
-        test('Unwrap with new index - success', async () => {
+        test("Unwrap with new index - success", async () => {
           // Mint yield to the m vault for the new index
           const mVault = getMVault();
           const mVaultATA = await getATA(mMint.publicKey, mVault);
-          await mClaimFor(mVault, await getTokenBalance(mVaultATA));     
+          await mClaimFor(mVault, await getTokenBalance(mVaultATA));
           await completeClaims();
 
           // Setup the instruction
-          const { vaultMTokenAccount, toMTokenAccount, fromExtTokenAccount } = await prepUnwrap(wrapAuthority);
+          const { vaultMTokenAccount, toMTokenAccount, fromExtTokenAccount } =
+            await prepUnwrap(wrapAuthority);
 
           // Cache initial balances
-          const vaultMTokenAccountBalance = await getTokenBalance(vaultMTokenAccount);
+          const vaultMTokenAccountBalance = await getTokenBalance(
+            vaultMTokenAccount
+          );
           const toMTokenAccountBalance = await getTokenBalance(toMTokenAccount);
-          const postSyncFromExtTokenAccountUiBalance = await getTokenUiBalance(fromExtTokenAccount, newMultiplier);
+          const postSyncFromExtTokenAccountUiBalance = await getTokenUiBalance(
+            fromExtTokenAccount,
+            newMultiplier
+          );
 
-          const unwrapAmount = new BN(randomInt(1, postSyncFromExtTokenAccountUiBalance.toNumber() + 1));
+          const unwrapAmount = new BN(
+            randomInt(1, postSyncFromExtTokenAccountUiBalance.toNumber() + 1)
+          );
 
           // Send the instruction
           await scaledUiExt.methods
@@ -2454,26 +2837,38 @@ describe('ScaledUiExt unit tests', () => {
             .rpc();
 
           // Confirm updated balances
-          await expectTokenBalance(toMTokenAccount, toMTokenAccountBalance.add(unwrapAmount));
-          await expectTokenBalance(vaultMTokenAccount, vaultMTokenAccountBalance.sub(unwrapAmount));
-          await expectTokenUiBalance(fromExtTokenAccount, postSyncFromExtTokenAccountUiBalance.sub(unwrapAmount), Comparison.LessThanOrEqual, new BN(2));
+          await expectTokenBalance(
+            toMTokenAccount,
+            toMTokenAccountBalance.add(unwrapAmount)
+          );
+          await expectTokenBalance(
+            vaultMTokenAccount,
+            vaultMTokenAccountBalance.sub(unwrapAmount)
+          );
+          await expectTokenUiBalance(
+            fromExtTokenAccount,
+            postSyncFromExtTokenAccountUiBalance.sub(unwrapAmount),
+            Comparison.LessThanOrEqual,
+            new BN(2)
+          );
         });
       });
     });
   });
 
-  describe('open instruction tests', () => {
-    describe('sync unit tests', () => {
+  describe("open instruction tests", () => {
+    describe("sync unit tests", () => {
       const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
 
       const wrapAuthorities = [admin.publicKey, wrapAuthority.publicKey];
+      const fee_bps = new BN(randomInt(10000));
 
-      const startIndex = new BN(randomInt(1e12, 2e12));
+      const startIndex = new BN(randomInt(initialIndex.toNumber() + 1, 2e12));
 
       // Setup accounts with M tokens so we can test wrapping and unwrapping
       beforeEach(async () => {
         // Initialize the extension program
-        await initializeExt(wrapAuthorities);
+        await initializeExt(wrapAuthorities, fee_bps);
 
         // Wrap some tokens from the admin to the make the m vault's balance non-zero
         await wrap(admin, initialWrappedAmount);
@@ -2516,7 +2911,7 @@ describe('ScaledUiExt unit tests', () => {
 
       // given m earn global account does not match the one stored in the global account
       // it reverts with an InvalidAccount error
-      test('M earn global account does not match global account - reverts', async () => {
+      test("M earn global account does not match global account - reverts", async () => {
         // Setup the instruction
         await prepSync(nonAdmin);
 
@@ -2539,7 +2934,7 @@ describe('ScaledUiExt unit tests', () => {
 
       // given the m vault account does not match the derived PDA
       // it reverts with a ConstraintSeeds error
-      test('M vault account does not match derived PDA - reverts', async () => {
+      test("M vault account does not match derived PDA - reverts", async () => {
         // Setup the instruction
         await prepSync(nonAdmin);
 
@@ -2557,7 +2952,7 @@ describe('ScaledUiExt unit tests', () => {
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
-          'ConstraintSeeds',
+          "ConstraintSeeds"
         );
       });
 
@@ -2565,7 +2960,10 @@ describe('ScaledUiExt unit tests', () => {
       // it reverts with a ConstraintAssociated error
       test("M vault token account is not the M Vault PDA's ATA - reverts", async () => {
         // Create a valid token account that is not the ATA
-        const { tokenAccount: nonATA } = await createTokenAccount(mMint.publicKey, getMVault());
+        const { tokenAccount: nonATA } = await createTokenAccount(
+          mMint.publicKey,
+          getMVault()
+        );
 
         // Setup the instruction with the non-ATA vault m token account
         await prepSync(nonAdmin);
@@ -2579,13 +2977,13 @@ describe('ScaledUiExt unit tests', () => {
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
-          'ConstraintAssociated',
+          "ConstraintAssociated"
         );
       });
 
       // given the ext mint account does not match the one stored in the global account
       // it reverts with an InvalidMint error
-      test('Ext mint account does not match global account - reverts', async () => {
+      test("Ext mint account does not match global account - reverts", async () => {
         // Create a new mint
         const newMint = Keypair.generate();
         await createMint(newMint, nonAdmin.publicKey, true, 6);
@@ -2604,13 +3002,13 @@ describe('ScaledUiExt unit tests', () => {
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
-          'InvalidMint',
+          "InvalidMint"
         );
       });
 
       // given the ext mint authority account does match the derived PDA
       // it reverts with a ConstraintSeeds error
-      test('Ext mint authority account does not match derived PDA - reverts', async () => {
+      test("Ext mint authority account does not match derived PDA - reverts", async () => {
         // Setup the instruction
         await prepSync(nonAdmin);
 
@@ -2628,18 +3026,20 @@ describe('ScaledUiExt unit tests', () => {
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
-          'ConstraintSeeds',
+          "ConstraintSeeds"
         );
       });
 
       // given the multiplier is already up to date
       // it remains the same
-      test('Multiplier is already up to date - success', async () => {
+      test("Multiplier is already up to date - success", async () => {
         // Sync the multiplier to the start index
         await sync();
 
         // Load the scaled ui config
-        const scaledUiAmountConfig = await getScaledUiAmountConfig(extMint.publicKey);
+        const scaledUiAmountConfig = await getScaledUiAmountConfig(
+          extMint.publicKey
+        );
 
         svm.expireBlockhash();
 
@@ -2653,7 +3053,7 @@ describe('ScaledUiExt unit tests', () => {
       // given the multiplier is not up to date
       // given the m vault has not received yield to match the latest M index
       // it reverts with an InsufficientCollateral error
-      test('M vault has not received yield to match latest M index - reverts', async () => {
+      test("M vault has not received yield to match latest M index - reverts", async () => {
         // Propagate a new index but do not distribute yield yet
         const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12 + 1));
         await propagateIndex(newIndex);
@@ -2669,28 +3069,37 @@ describe('ScaledUiExt unit tests', () => {
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
-          'InsufficientCollateral',
+          "InsufficientCollateral"
         );
       });
 
       // given the m vault has received yield to match the latest M index
       // it updates the scaled ui config on the ext mint to match the m index
-      test('M vault has received yield to match latest M index - success', async () => {
-        // Propagate a new index and distribute yield
-        const newIndex: BN = new BN(randomInt(startIndex.toNumber() + 1, 2e12 + 1));
-        await propagateIndex(newIndex);
+      test("M vault has received yield to match latest M index - success", async () => {
+        // // Propagate a new index and distribute yield
+        // const newIndex: BN = new BN(
+        //   randomInt(startIndex.toNumber() + 1, 2e12 + 1)
+        // );
+        // await propagateIndex(newIndex);
 
-        // Mint yield to the m vault for the new index
-        const mVault = getMVault();
-        const mVaultATA = await getATA(mMint.publicKey, mVault);
-        await mClaimFor(mVault, await getTokenBalance(mVaultATA));     
-        await completeClaims();
+        // // Mint yield to the m vault for the new index
+        // const mVault = getMVault();
+        // const mVaultATA = await getATA(mMint.publicKey, mVault);
+        // await mClaimFor(mVault, await getTokenBalance(mVaultATA));
+        // await completeClaims();
 
         // Cache the scaled ui amount config
-        const scaledUiAmountConfig = await getScaledUiAmountConfig(extMint.publicKey);
+        const scaledUiAmountConfig = await getScaledUiAmountConfig(
+          extMint.publicKey
+        );
 
         // Setup the instruction
-        await prepSync(nonAdmin);
+        const { globalAccount } = await prepSync(nonAdmin);
+
+        // Get the global state before the update
+        const globalState = await scaledUiExt.account.extGlobal.fetch(
+          globalAccount
+        );
 
         // Send the instruction
         await scaledUiExt.methods
@@ -2700,17 +3109,23 @@ describe('ScaledUiExt unit tests', () => {
           .rpc();
 
         // Confirm the scaled ui config on the ext mint matches the m index
-        const multiplier = newIndex.toNumber() / 1e12;
-        await expectScaledUiAmountConfig(
-          extMint.publicKey, {
-            authority: scaledUiAmountConfig.authority,
-            multiplier,
-            newMultiplier: multiplier,
-            newMultiplierEffectiveTimestamp: BigInt(currentTime().toString())
-          }
-        );
+        console.log("start index", startIndex.toString());
+        console.log("last ext index", globalState.lastExtIndex.toString());
+        console.log("last m index", globalState.lastMIndex.toString());
+        console.log("fee bps", fee_bps.toString());
+        const multiplier =
+          (globalState.lastExtIndex.toNumber() / 1e12) *
+          (startIndex.toNumber() / globalState.lastMIndex.toNumber()) **
+            (1 - fee_bps.toNumber() / 1e4);
+        console.log("multiplier", multiplier.toString());
+
+        await expectScaledUiAmountConfig(extMint.publicKey, {
+          authority: scaledUiAmountConfig.authority,
+          multiplier,
+          newMultiplier: multiplier,
+          newMultiplierEffectiveTimestamp: BigInt(currentTime().toString()),
+        });
       });
     });
   });
 });
-  

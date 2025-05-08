@@ -26,6 +26,7 @@ pub struct Wrap<'info> {
     pub ext_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
+        mut,
         seeds = [EXT_GLOBAL_SEED],
         bump = global_account.bump,
         has_one = m_mint @ ExtError::InvalidAccount,
