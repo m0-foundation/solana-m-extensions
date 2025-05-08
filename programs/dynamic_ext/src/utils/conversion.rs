@@ -263,3 +263,54 @@ pub fn principal_to_amount_up(principal: u64, multiplier: f64) -> u64 {
 
     amount
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(feature = "ibt")]
+    mod ibt_tests {
+        use super::*;
+        use anchor_spl::token_interface::spl_pod::{
+            optional_keys::OptionalNonZeroPubkey, primitives::PodI64,
+        };
+
+        fn create_test_config(
+            init_timestamp: i64,
+            last_update_timestamp: i64,
+            pre_update_rate: i16,
+            current_rate: i16,
+        ) -> InterestBearingConfig {
+            InterestBearingConfig {
+                initialization_timestamp: PodI64::from(init_timestamp),
+                last_update_timestamp: PodI64::from(last_update_timestamp),
+                pre_update_average_rate: PodI16::from(pre_update_rate),
+                current_rate: PodI16::from(current_rate),
+                rate_authority: OptionalNonZeroPubkey::default(),
+            }
+        }
+
+        #[test]
+        fn test_get_ibt_multiplier_one_year() {
+            let init_ts = 1630000000;
+            let last_update_ts = 1630000000 + SECONDS_PER_YEAR as i64 / 2;
+            let now = 1630000000 + SECONDS_PER_YEAR as i64;
+
+            // 5% rate for entire year
+            let config = create_test_config(init_ts, last_update_ts, 500, 500);
+            let result = get_ibt_multiplier(&config, now);
+
+            // 6 months at 5%, then 6 months at 5% = 5% for a year
+            // Expected ≈ exp(0.05) ≈ 1.05127
+            let expected = (0.05_f64).exp();
+            assert!((result - expected).abs() < 0.001);
+
+            // Use multiplier to calculate principal and compare
+            let amount = 100_000e6 as u64;
+            let expected_tokens = principal_to_amount_down(amount, expected);
+            let result_tokens = principal_to_amount_down(amount, result);
+            assert!(result_tokens == expected_tokens);
+            assert!(result_tokens == 105127109637);
+        }
+    }
+}
