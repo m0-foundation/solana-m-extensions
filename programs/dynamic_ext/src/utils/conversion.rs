@@ -159,7 +159,8 @@ pub fn sync_rate<'info>(
     authority_seeds: &[&[&[u8]]],
 ) -> Result<f64> {
     // Adjust the rate to include the yield fee
-    let fee_pct = (m_earn_global.earner_rate as f64 * ext_global.yield_fee_bps as f64) / 10000.;
+    let rate = m_earn_global.earner_rate as f64;
+    let fee_pct = (rate * ext_global.yield_fee_bps as f64) / ONE_IN_BASIS_POINTS;
     let current_rate = m_earn_global.earner_rate - (fee_pct as u16);
 
     // Parse ibt config from mint
