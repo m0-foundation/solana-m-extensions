@@ -1,20 +1,21 @@
 [toolchain]
-anchor_version = "0.31.1"    # `anchor-cli` version to use(requires `avm`)
-solana_version = "2.1.0"     # Solana version to use(applies to all Solana tools)
-package_manager = "yarn"     # JS package manager to use
+anchor_version = "0.31.1"
+solana_version = "2.1.0"
+package_manager = "yarn"
 
 [features]
-seeds = false
+resolution = true
 skip-lint = false
 
 [programs.localnet]
+m_ext = "29MecrtFgHzVJYUsSa7xgng1LA1eogpfgoNhHwxJvVr4"
 scaled_ui_ext = "3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
+cluster = "localnet"
 wallet = "tests/keys/user.json"
 
 [scripts]
