@@ -28,6 +28,9 @@ fn get_latest_multiplier_and_timestamp<'info>(
         return (last_ext_multiplier, timestamp);
     }
 
+    // Calculate the new ext multiplier from the formula:
+    // new_ext_multiplier = last_ext_multiplier * (current_m_multiplier / last_m_multiplier) ^ (1 - fee_on_yield)
+    // The derivation of this formula is explained in this document: https://gist.github.com/Oighty/89dd1288a0a7fb53eb6f0314846cb746
     let m_increase_factor = current_m_multiplier / last_m_multiplier;
 
     // Calculate the increase factor for the ext index, if the fee is zero, then the increase factor is the same as M
