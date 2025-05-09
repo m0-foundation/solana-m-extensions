@@ -102,7 +102,7 @@ pub fn handler(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
 
     // Calculate the principal amount of ext tokens to burn
     // from the amount of m tokens to unwrap
-    let mut principal = amount_to_principal_up(amount, multiplier);
+    let mut principal = amount_to_principal_up(amount, multiplier)?;
     if principal > ctx.accounts.from_ext_token_account.amount {
         principal = ctx.accounts.from_ext_token_account.amount;
     }
