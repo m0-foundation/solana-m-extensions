@@ -1149,6 +1149,45 @@ const sync = async () => {
   return globalAccount;
 };
 
+const prepClaimExcess = async (signer: Keypair, toTokenAccount?: PublicKey) => {
+  // Get the global PDA
+  const globalAccount = getExtGlobalAccount();
+
+  // Populate accounts for the instruction
+  accounts = {};
+  accounts.admin = signer.publicKey;
+  accounts.globalAccount = globalAccount;
+  accounts.mEarnGlobalAccount = getEarnGlobalAccount();
+  accounts.mMint = mMint.publicKey;
+  accounts.extMint = extMint.publicKey;
+  accounts.extMintAuthority = getExtMintAuthority();
+  accounts.mVault = getMVault();
+  accounts.vaultMTokenAccount = await getATA(
+    mMint.publicKey,
+    accounts.mVault,
+    true
+  );
+  accounts.recipientMTokenAccount =
+    toTokenAccount ?? (await getATA(mMint.publicKey, signer.publicKey, true));
+  accounts.token2022 = TOKEN_2022_PROGRAM_ID;
+
+  return { globalAccount };
+};
+
+const claimExcess = async (toTokenAccount?: PublicKey) => {
+  // Setup the instruction
+  const { globalAccount } = await prepClaimExcess(admin, toTokenAccount);
+
+  // Send the instruction
+  await scaledUiExt.methods
+    .claimExcess()
+    .accountsPartial({ ...accounts })
+    .signers([admin])
+    .rpc();
+
+  return globalAccount;
+};
+
 describe("ScaledUiExt unit tests", () => {
   let currentTime: () => BN;
 
@@ -1972,6 +2011,13 @@ describe("ScaledUiExt unit tests", () => {
 
       // Sync the scaled ui multiplier with the m index
       await sync();
+
+      // Claim excess tokens to make it easier to test collateral checks
+      try {
+        await claimExcess();
+      } catch (e) {
+        // Ignore the error if there are no excess tokens
+      }
     });
 
     describe("wrap unit tests", () => {
@@ -2332,6 +2378,9 @@ describe("ScaledUiExt unit tests", () => {
         // M Index is strictly increasing
         const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12 + 1));
 
+        // console.log("new index", newIndex.toString());
+        // console.log("start index", startIndex.toString());
+
         beforeEach(async () => {
           // Reset the blockhash to avoid issues with duplicate transactions from multiple claim cycles
           svm.expireBlockhash();
@@ -2353,6 +2402,37 @@ describe("ScaledUiExt unit tests", () => {
           await prepWrap(wrapAuthority);
 
           const wrapAmount = new BN(randomInt(1, mintAmount.toNumber() + 1));
+
+          // const collateral = getTokenBalance(
+          //   await getATA(mMint.publicKey, getMVault())
+          // );
+          // console.log("m vault balance before", (await collateral).toString());
+
+          // const extSupply = await getMint(
+          //   provider.connection,
+          //   extMint.publicKey,
+          //   undefined,
+          //   TOKEN_2022_PROGRAM_ID
+          // ).then((mint) => mint.supply);
+
+          // console.log("ext supply before", extSupply.toString());
+
+          // const multiplierIncrease =
+          //   (newIndex.toNumber() / startIndex.toNumber()) **
+          //   (1 - fee_bps.toNumber() / 1e4);
+
+          // const lastMultiplier =
+          //   (
+          //     await scaledUiExt.account.extGlobal.fetch(getExtGlobalAccount())
+          //   ).lastExtIndex.toNumber() / 1e12;
+
+          // console.log("last multiplier", lastMultiplier.toString());
+
+          // const newMultiplier = lastMultiplier * multiplierIncrease;
+
+          // console.log("new multiplier", newMultiplier.toString());
+
+          // console.log("required collateral", newMultiplier * Number(extSupply));
 
           // Send the instruction
           await expectAnchorError(
@@ -2901,8 +2981,8 @@ describe("ScaledUiExt unit tests", () => {
       //   [X] it reverts with an InvalidMint error
       // [X] given the ext mint authority account does match the derived PDA
       //   [X] it reverts with a ConstraintSeeds error
-      // [ ] given the multiplier is already up to date
-      //   [ ] it remains the same
+      // [X] given the multiplier is already up to date
+      //   [X] it remains the same
       // [X] given the multiplier is not up to date
       //   [X] given the m vault has not received yield to match the latest M index
       //     [X] it reverts with an InsufficientCollateral error
@@ -3054,8 +3134,18 @@ describe("ScaledUiExt unit tests", () => {
       // given the m vault has not received yield to match the latest M index
       // it reverts with an InsufficientCollateral error
       test("M vault has not received yield to match latest M index - reverts", async () => {
+        // Claim excess tokens to make it easier to test collateral checks
+        try {
+          await claimExcess();
+        } catch (e) {
+          // Ignore the error if there are no excess tokens
+        }
+
         // Propagate a new index but do not distribute yield yet
         const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12 + 1));
+        console.log("new index", newIndex.toString());
+        console.log("start index", startIndex.toString());
+
         await propagateIndex(newIndex);
 
         // Setup the instruction
@@ -3076,18 +3166,6 @@ describe("ScaledUiExt unit tests", () => {
       // given the m vault has received yield to match the latest M index
       // it updates the scaled ui config on the ext mint to match the m index
       test("M vault has received yield to match latest M index - success", async () => {
-        // // Propagate a new index and distribute yield
-        // const newIndex: BN = new BN(
-        //   randomInt(startIndex.toNumber() + 1, 2e12 + 1)
-        // );
-        // await propagateIndex(newIndex);
-
-        // // Mint yield to the m vault for the new index
-        // const mVault = getMVault();
-        // const mVaultATA = await getATA(mMint.publicKey, mVault);
-        // await mClaimFor(mVault, await getTokenBalance(mVaultATA));
-        // await completeClaims();
-
         // Cache the scaled ui amount config
         const scaledUiAmountConfig = await getScaledUiAmountConfig(
           extMint.publicKey
