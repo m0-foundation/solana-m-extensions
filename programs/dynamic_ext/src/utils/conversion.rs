@@ -121,13 +121,16 @@ pub fn sync_multiplier<'info>(
 ) -> Result<f64> {
     let (multiplier, timestamp) = get_multiplier_and_timestamp(m_earn_global);
 
-    let ext_account_info = &ext_mint.to_account_info();
-    let ext_data = ext_account_info.try_borrow_data()?;
-    let ext_mint_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&ext_data)?;
-    let scaled_ui_config = ext_mint_data.get_extension::<ScaledUiAmountConfig>()?;
+    // Parse scaled-ui config from mint
+    {
+        let ext_account_info = &ext_mint.to_account_info();
+        let ext_data = ext_account_info.try_borrow_data()?;
+        let ext_mint_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&ext_data)?;
+        let scaled_ui_config = ext_mint_data.get_extension::<ScaledUiAmountConfig>()?;
 
-    if scaled_ui_config.new_multiplier == PodF64::from(multiplier) {
-        return Ok(multiplier);
+        if scaled_ui_config.new_multiplier == PodF64::from(multiplier) {
+            return Ok(multiplier);
+        }
     }
 
     // Update the multiplier and timestamp in the mint account

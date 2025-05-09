@@ -2,13 +2,10 @@ import { BN, Program } from "@coral-xyz/anchor";
 import { DynamicExt } from "../../target/types/dynamic_ext";
 import { fromWorkspace, LiteSVMProvider } from "anchor-litesvm";
 import {
-  createAssociatedTokenAccountInstruction,
   createInitializeInterestBearingMintInstruction,
   createInitializeMintInstruction,
   createInitializeScaledUiAmountConfigInstruction,
-  createMintToCheckedInstruction,
   ExtensionType,
-  getAssociatedTokenAddressSync,
   getMintLen,
   TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
@@ -20,7 +17,6 @@ import {
   Transaction,
 } from "@solana/web3.js";
 import { Earn } from "../programs/earn";
-import { TransactionMetadata } from "litesvm";
 import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
 
 const EARN_IDL = require("../programs/earn.json");

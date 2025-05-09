@@ -16,4 +16,6 @@ pub enum ExtError {
     InsufficientCollateral,
     #[msg("Invalid Mint.")]
     InvalidMint,
+    #[msg("Transfer hook called when not transferring.")]
+    NotCurrentlyTransferring,
 }

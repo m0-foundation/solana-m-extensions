@@ -3,7 +3,11 @@
 use anchor_lang::prelude::*;
 
 #[cfg(feature = "transfer-hook")]
-use spl_transfer_hook_interface::instruction::TransferHookInstruction;
+use spl_discriminator::SplDiscriminate;
+#[cfg(feature = "transfer-hook")]
+use spl_transfer_hook_interface::instruction::{
+    ExecuteInstruction, InitializeExtraAccountMetaListInstruction,
+};
 
 pub use instructions::*;
 
@@ -28,6 +32,17 @@ const _: () = {
         0 => panic!("No yield distribution feature enabled"),
         1 => {}
         2.. => panic!("Only one yield distribution feature can be enabled at a time"),
+    }
+};
+
+const _: () = {
+    let hook_features = {
+        cfg!(feature = "transfer-hook") as u32 + cfg!(any(feature = "transfer-whitelist")) as u32
+    };
+
+    match hook_features {
+        1 => panic!("Tranfer hook is required with transfer hook features"),
+        _ => {}
     }
 };
 
@@ -70,28 +85,14 @@ pub mod dynamic_ext {
     // Transfer hook
 
     #[cfg(feature = "transfer-hook")]
-    pub fn transfer_hook(ctx: Context<TransferHook>, amount: u64) -> Result<()> {
-        instructions::transfer_hook::TransferHook::handler(ctx, amount)
+    #[instruction(discriminator = InitializeExtraAccountMetaListInstruction::SPL_DISCRIMINATOR_SLICE)]
+    pub fn initialize_transfer_hook(ctx: Context<InitializeExtraAccountMetaList>) -> Result<()> {
+        instructions::transfer_hook::InitializeExtraAccountMetaList::handler(ctx)
     }
 
-    // fallback instruction handler as workaround to anchor instruction discriminator check
     #[cfg(feature = "transfer-hook")]
-    pub fn fallback<'info>(
-        program_id: &Pubkey,
-        accounts: &'info [AccountInfo<'info>],
-        data: &[u8],
-    ) -> Result<()> {
-        let instruction = TransferHookInstruction::unpack(data)?;
-
-        // match instruction discriminator to transfer hook interface execute instruction
-        match instruction {
-            TransferHookInstruction::Execute { amount } => {
-                let amount_bytes = amount.to_le_bytes();
-
-                // invoke custom transfer hook instruction on our program
-                __private::__global::transfer_hook(program_id, accounts, &amount_bytes)
-            }
-            _ => return Err(ProgramError::InvalidInstructionData.into()),
-        }
+    #[instruction(discriminator = ExecuteInstruction::SPL_DISCRIMINATOR_SLICE)]
+    pub fn transfer_hook(ctx: Context<TransferHook>, amount: u64) -> Result<()> {
+        instructions::transfer_hook::TransferHook::handler(ctx, amount)
     }
 }

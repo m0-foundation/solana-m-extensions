@@ -9,21 +9,28 @@ crate-type = ["cdylib", "lib"]
 name = "dynamic_ext"
 
 [features]
-default = ["transfer-hook", "permissioned-wrapping", "ibt"]
+default = ["transfer-whitelist", "permissioned-wrapping", "ibt"]
+
+# anchor features
 cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
-transfer-hook = [
-    "dep:spl-transfer-hook-interface",
-    "dep:spl-tlv-account-resolution",
-]
+
+# yield features
 scaled-ui = []
 ibt = []
 permissioned-wrapping = []
 yield-crank = []
 no-yield = []
+
+# transfer hook features
+transfer-hook = [
+    "dep:spl-transfer-hook-interface",
+    "dep:spl-tlv-account-resolution",
+]
+transfer-whitelist = ["transfer-hook"]
 
 [dependencies]
 anchor-lang.workspace = true
@@ -32,3 +39,4 @@ earn.workspace = true
 spl-token-2022.workspace = true
 spl-tlv-account-resolution = { version = "0.9.0", optional = true }
 spl-transfer-hook-interface = { version = "0.9.0", optional = true }
+spl-discriminator = "0.4"
