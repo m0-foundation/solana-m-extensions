@@ -1977,6 +1977,422 @@ describe("ScaledUiExt unit tests", () => {
         });
       });
     });
+
+    describe("claim_excess unit tests", () => {
+      // test cases
+      // [X] given the admin does not sign the transaction
+      //   [X] it reverts with a NotAuthorized error
+      // [X] given the admin signs the transaction
+      //   [X] given the m vault is not the m vault PDA
+      //     [X] it reverts with a ConstraintSeeds error
+      //   [X] given the m vault token account is not the m vault PDA's ATA
+      //     [X] it reverts with a ConstraintAssociated error
+      //   [X] given the m mint does not match the one on the global account
+      //     [X] it reverts with an InvalidMint error
+      //   [X] given the ext mint does not match the one on the global account
+      //     [X] it reverts with an InvalidMint error
+      //   [X] given the ext mint authority is not the ext mint authority PDA
+      //     [X] it reverts with a ConstraintSeeds error
+      //   [X] given the m earn global account does not match the one on the global account
+      //     [X] it reverts with a InvalidAccount error
+      //   [X] given the recipient token account is not a token account for the m mint
+      //     [X] it reverts with a ConstraintTokenMint error
+      //   [X] given all the accounts are correct
+      //     [X] given the multiplier is not synced
+      //       [X] it syncs the multiplier to the current
+      //       [X] given the m vault has excess collateral
+      //         [X] it transfers the excess collateral to the recipient token account
+      //       [X] given the m vault does not have excess collateral
+      //         [X] it reverts with an InsufficientCollateral error
+      //     [X] given the multiplier is already synced
+      //       [X] given the m vault has excess collateral
+      //         [X] it transfers the excess collateral to the recipient token account
+      //       [X] given the m vault does not have excess collateral
+      //         [X] it completes but doesn't transfer any tokens
+
+      const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
+      const wrapAuthorities = [admin.publicKey, wrapAuthority.publicKey];
+      const fee_bps = new BN(randomInt(1, 10000)); // non-zero
+      const startIndex = new BN(randomInt(initialIndex.toNumber() + 1, 2e12));
+
+      beforeEach(async () => {
+        // Initialize the extension program
+        await initializeExt(wrapAuthorities, fee_bps);
+
+        // Wrap some tokens from the admin to make the m vault's balance non-zero
+        await wrap(admin, initialWrappedAmount);
+
+        // Propagate the start index
+        await propagateIndex(startIndex);
+
+        // Claim yield for the m vault and complete the claim cycle
+        const mVault = getMVault();
+        const mVaultATA = await getATA(mMint.publicKey, mVault);
+        await mClaimFor(mVault, await getTokenBalance(mVaultATA));
+        await completeClaims();
+
+        // Sync the multiplier
+        await sync();
+
+        // Reset the blockhash to avoid issues with duplicate transactions
+        svm.expireBlockhash();
+      });
+
+      // given the admin does not sign the transaction
+      // it reverts with a NotAuthorized error
+      test("admin does not sign - reverts", async () => {
+        // Setup the instruction
+        await prepClaimExcess(nonAdmin);
+
+        // Attempt to send the transaction
+        await expectAnchorError(
+          scaledUiExt.methods
+            .claimExcess()
+            .accountsPartial({ ...accounts })
+            .signers([nonAdmin])
+            .rpc(),
+          "NotAuthorized"
+        );
+      });
+
+      // given the m vault is not the m vault PDA
+      // it reverts with a ConstraintSeeds error
+      test("m vault is not the m vault PDA - reverts", async () => {
+        // Setup the instruction
+        await prepClaimExcess(admin);
+
+        // Change the m vault
+        accounts.mVault = PublicKey.unique();
+
+        // Attempt to send the transaction
+        await expectAnchorError(
+          scaledUiExt.methods
+            .claimExcess()
+            .accountsPartial({ ...accounts })
+            .signers([admin])
+            .rpc(),
+          "ConstraintSeeds"
+        );
+      });
+
+      // given the m vault token account is not the m vault PDA's ATA
+      // it reverts with a ConstraintAssociated error
+      test("m vault token account is not the m vault PDA's ATA - reverts", async () => {
+        // Create a token account for the M vault that is not the ATA
+        const { tokenAccount: nonAtaAccount } = await createTokenAccount(
+          mMint.publicKey,
+          getMVault()
+        );
+
+        // Setup the instruction
+        await prepClaimExcess(admin);
+        accounts.vaultMTokenAccount = nonAtaAccount;
+
+        // Attempt to send the transaction
+        await expectAnchorError(
+          scaledUiExt.methods
+            .claimExcess()
+            .accountsPartial({ ...accounts })
+            .signers([admin])
+            .rpc(),
+          "ConstraintAssociated"
+        );
+      });
+
+      // given the m mint does not match the one on the global account
+      // it reverts with an InvalidMint error
+      test("m mint does not match global account - reverts", async () => {
+        // Create a new mint
+        const wrongMint = new Keypair();
+        await createMint(wrongMint, nonAdmin.publicKey, true, 6);
+
+        // Setup the instruction
+        await prepClaimExcess(admin);
+        accounts.mMint = wrongMint.publicKey;
+
+        // Attempt to send the transaction
+        await expectAnchorError(
+          scaledUiExt.methods
+            .claimExcess()
+            .accountsPartial({ ...accounts })
+            .signers([admin])
+            .rpc(),
+          "InvalidMint"
+        );
+      });
+
+      // given the ext mint does not match the one on the global account
+      // it reverts with an InvalidMint error
+      test("ext mint does not match global account - reverts", async () => {
+        // Create a new mint
+        const wrongMint = new Keypair();
+        await createMint(wrongMint, nonAdmin.publicKey, true, 6);
+
+        // Setup the instruction
+        await prepClaimExcess(admin);
+        accounts.extMint = wrongMint.publicKey;
+
+        // Attempt to send the transaction
+        await expectAnchorError(
+          scaledUiExt.methods
+            .claimExcess()
+            .accountsPartial({ ...accounts })
+            .signers([admin])
+            .rpc(),
+          "InvalidMint"
+        );
+      });
+
+      // given the ext mint authority is not the ext mint authority PDA
+      // it reverts with a ConstraintSeeds error
+      test("ext mint authority is not the ext mint authority PDA - reverts", async () => {
+        // Setup the instruction
+        await prepClaimExcess(admin);
+
+        // Change the ext mint authority
+        accounts.extMintAuthority = PublicKey.unique();
+
+        // Attempt to send the transaction
+        await expectAnchorError(
+          scaledUiExt.methods
+            .claimExcess()
+            .accountsPartial({ ...accounts })
+            .signers([admin])
+            .rpc(),
+          "ConstraintSeeds"
+        );
+      });
+
+      // given the m earn global account does not match the one on the global account
+      // it reverts with a InvalidAccount error
+      test("m earn global account does not match global account - reverts", async () => {
+        // Setup the instruction
+        await prepClaimExcess(admin);
+
+        // Change the m earn global account
+        accounts.mEarnGlobalAccount = PublicKey.unique();
+
+        // Attempt to send the transaction
+        await expectSystemError(
+          scaledUiExt.methods
+            .claimExcess()
+            .accountsPartial({ ...accounts })
+            .signers([admin])
+            .rpc()
+        );
+      });
+
+      // given the recipient token account is not a token account for the m mint
+      // it reverts with a ConstraintTokenMint error
+      test("recipient token account is not for m mint - reverts", async () => {
+        // Create a token account for the ext mint
+        const wrongTokenAccount = await getATA(
+          extMint.publicKey,
+          admin.publicKey
+        );
+
+        // Setup the instruction
+        await prepClaimExcess(admin, wrongTokenAccount);
+
+        // Attempt to send the transaction
+        await expectAnchorError(
+          scaledUiExt.methods
+            .claimExcess()
+            .accountsPartial({ ...accounts })
+            .signers([admin])
+            .rpc(),
+          "ConstraintTokenMint"
+        );
+      });
+
+      // given all accounts are correct
+      // given the multiplier is not synced
+      // it syncs the multiplier to the current
+      // given the m vault has excess collateral
+      // it transfers the excess collateral to the recipient token account
+      test("multiplier not synced, excess collateral exists - success", async () => {
+        // warp forward in time slightly
+        warp(new BN(60), true);
+
+        // Propagate a new index to create a situation where multiplier needs sync
+        const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12));
+        await propagateIndex(newIndex);
+
+        // Claim yield to ensure vault has enough collateral
+        const mVault = getMVault();
+        const mVaultATA = await getATA(mMint.publicKey, mVault);
+        await mClaimFor(mVault, await getTokenBalance(mVaultATA));
+        await completeClaims();
+
+        // Cache balances before claim excess
+        const initialVaultBalance = await getTokenBalance(mVaultATA);
+        const recipientATA = await getATA(mMint.publicKey, admin.publicKey);
+        const initialRecipientBalance = await getTokenBalance(recipientATA);
+
+        // Get the global state before the update and calculate the expected excess
+        const globalState = await scaledUiExt.account.extGlobal.fetch(
+          getExtGlobalAccount()
+        );
+
+        const multiplier =
+          (globalState.lastExtIndex.toNumber() / 1e12) *
+          (newIndex.toNumber() / globalState.lastMIndex.toNumber()) **
+            (1 - fee_bps.toNumber() / 1e4);
+
+        const extSupply = await getMint(
+          provider.connection,
+          extMint.publicKey,
+          undefined,
+          TOKEN_2022_PROGRAM_ID
+        ).then((mint) => mint.supply);
+
+        const requiredCollateral = new BN(
+          Math.ceil(Number(extSupply) * multiplier)
+        );
+
+        const expectedExcess = initialVaultBalance.sub(requiredCollateral);
+
+        // Setup and execute the instruction
+        await prepClaimExcess(admin);
+        await scaledUiExt.methods
+          .claimExcess()
+          .accountsPartial({ ...accounts })
+          .signers([admin])
+          .rpc();
+
+        // Verify multiplier was updated
+
+        expectScaledUiAmountConfig(extMint.publicKey, {
+          authority: getExtMintAuthority(),
+          multiplier,
+          newMultiplier: multiplier,
+          newMultiplierEffectiveTimestamp: BigInt(currentTime().toString()),
+        });
+
+        // Verify excess tokens were transferred
+        const finalVaultBalance = await getTokenBalance(mVaultATA);
+        const finalRecipientBalance = await getTokenBalance(recipientATA);
+        expect(finalVaultBalance.toString()).toEqual(
+          initialVaultBalance.sub(expectedExcess).toString()
+        );
+        expect(finalRecipientBalance.toString()).toEqual(
+          initialRecipientBalance.add(expectedExcess).toString()
+        );
+      });
+
+      // given all accounts are correct
+      // given the multiplier is already synced
+      // given the m vault has excess collateral
+      // it transfers the excess collateral to the recipient token account
+      test("multiplier already synced, excess collateral exists - success", async () => {
+        // Cache balances before claim excess
+        const mVaultATA = await getATA(mMint.publicKey, getMVault());
+        const initialVaultBalance = await getTokenBalance(mVaultATA);
+        const recipientATA = await getATA(mMint.publicKey, admin.publicKey);
+        const initialRecipientBalance = await getTokenBalance(recipientATA);
+
+        // Get the global state and calculate the expected excess
+        const globalState = await scaledUiExt.account.extGlobal.fetch(
+          getExtGlobalAccount()
+        );
+
+        const multiplier = globalState.lastExtIndex.toNumber() / 1e12;
+
+        const extSupply = await getMint(
+          provider.connection,
+          extMint.publicKey,
+          undefined,
+          TOKEN_2022_PROGRAM_ID
+        ).then((mint) => mint.supply);
+
+        const requiredCollateral = new BN(
+          Math.ceil(Number(extSupply) * multiplier)
+        );
+
+        const expectedExcess = initialVaultBalance.sub(requiredCollateral);
+
+        // Setup and execute the instruction
+        await prepClaimExcess(admin);
+        await scaledUiExt.methods
+          .claimExcess()
+          .accountsPartial({ ...accounts })
+          .signers([admin])
+          .rpc();
+
+        // Verify excess tokens were transferred
+        const finalVaultBalance = await getTokenBalance(mVaultATA);
+        const finalRecipientBalance = await getTokenBalance(recipientATA);
+        expect(finalRecipientBalance.toString()).toEqual(
+          initialRecipientBalance.add(expectedExcess).toString()
+        );
+        expect(finalVaultBalance.toString()).toEqual(
+          initialVaultBalance.sub(expectedExcess).toString()
+        );
+      });
+
+      // given all accounts are correct
+      // given the multiplier is not synced
+      // given the m vault does not have excess collateral
+      // it reverts with an InsufficientCollateral error
+      test("multiplier not synced, no excess collateral - reverts", async () => {
+        // claim the existing excess so there isn't extra
+        await claimExcess();
+        svm.expireBlockhash();
+
+        // Propagate a new index to create a situation where multiplier needs sync
+        const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12));
+        await propagateIndex(newIndex);
+
+        // Setup the instruction
+        await prepClaimExcess(admin);
+
+        // Attempt to send the transaction
+        await expectAnchorError(
+          scaledUiExt.methods
+            .claimExcess()
+            .accountsPartial({ ...accounts })
+            .signers([admin])
+            .rpc(),
+          "InsufficientCollateral"
+        );
+      });
+
+      // given all accounts are correct
+      // given the multiplier is already synced
+      // given the m vault does not have excess collateral
+      // it completes successfully and does not transfer any tokens
+      test("multiplier already synced, no excess collateral - success", async () => {
+        // claim the existing excess so there isn't extra
+        await claimExcess();
+        svm.expireBlockhash();
+
+        // Cache balances before claim excess
+        const mVaultATA = await getATA(mMint.publicKey, getMVault());
+        const initialVaultBalance = await getTokenBalance(mVaultATA);
+        const recipientATA = await getATA(mMint.publicKey, admin.publicKey);
+        const initialRecipientBalance = await getTokenBalance(recipientATA);
+
+        // Setup the instruction
+        await prepClaimExcess(admin);
+
+        // Attempt to send the transaction
+        await scaledUiExt.methods
+          .claimExcess()
+          .accountsPartial({ ...accounts })
+          .signers([admin])
+          .rpc();
+
+        // Verify no tokens were transferred
+        const finalVaultBalance = await getTokenBalance(mVaultATA);
+        const finalRecipientBalance = await getTokenBalance(recipientATA);
+        expect(finalRecipientBalance.toString()).toEqual(
+          initialRecipientBalance.toString()
+        );
+        expect(finalVaultBalance.toString()).toEqual(
+          initialVaultBalance.toString()
+        );
+      });
+    });
   });
 
   describe("wrap_authority instruction tests", () => {
@@ -2043,8 +2459,8 @@ describe("ScaledUiExt unit tests", () => {
         //   [X] given the user has enough M tokens
         //     [X] it transfers the amount of M tokens from the user's M token account to the M vault token account
         //     [X] it mints the amount of ext tokens to the user's ext token account
-        //     [ ] given the user wraps and then unwraps (roundtrip)
-        //       [ ] the starting balance and ending balance of the user's M token account are the same
+        //     [X] given the user wraps and then unwraps (roundtrip)
+        //       [X] the starting balance and ending balance of the user's M token account are the same
 
         // given the m mint account does not match the one stored in the global account
         // it reverts with an InvalidAccount error
