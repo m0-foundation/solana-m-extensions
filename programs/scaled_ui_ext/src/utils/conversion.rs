@@ -18,23 +18,17 @@ fn get_latest_multiplier_and_timestamp<'info>(
     ext_global_account: &Account<'info, ExtGlobal>,
     m_earn_global_account: &Account<'info, EarnGlobal>,
 ) -> (f64, i64) {
-    // TODO explore fixed point math to avoid floating point precision unpredictability
     let current_m_multiplier = m_earn_global_account.index as f64 / INDEX_SCALE_F64;
     let last_m_multiplier = ext_global_account.last_m_index as f64 / INDEX_SCALE_F64;
     let timestamp: i64 = m_earn_global_account.timestamp as i64;
     let last_ext_multiplier = ext_global_account.last_ext_index as f64 / INDEX_SCALE_F64;
 
-    msg!("current_m_multiplier: {}", current_m_multiplier);
-    msg!("last_m_multiplier: {}", last_m_multiplier);
-
     // If no change, return early
     if current_m_multiplier == last_m_multiplier {
-        msg!("Hasn't changed");
         return (last_ext_multiplier, timestamp);
     }
 
     let m_increase_factor = current_m_multiplier / last_m_multiplier;
-    msg!("m_increase_factor: {}", m_increase_factor);
 
     // Calculate the increase factor for the ext index, if the fee is zero, then the increase factor is the same as M
     let ext_increase_factor = if ext_global_account.fee_bps == 0 {
@@ -42,15 +36,18 @@ fn get_latest_multiplier_and_timestamp<'info>(
     } else {
         // Calculate the increase factor for the ext index
         let fee_on_yield = ext_global_account.fee_bps as f64 / ONE_HUNDRED_PERCENT_F64;
+        // The precision of the powf operation is non-deterministic
+        // However, the margin of error is ~10^-16, which is smaller than the 10^-12 precision
+        // that we need for this use case. See: https://doc.rust-lang.org/std/primitive.f64.html#method.powf
         m_increase_factor.powf(1.0f64 - fee_on_yield)
     };
-
-    msg!("ext_increase_factor: {}", ext_increase_factor);
 
     // Calculate the new extension multiplier (index in f64 scaled down)
     let new_ext_multiplier = last_ext_multiplier * ext_increase_factor;
 
-    msg!("new_ext_multiplier: {}", new_ext_multiplier);
+    // We need to round the new multiplier down and truncate at 10^-12
+    // to return a consistent value
+    let new_ext_multiplier = (new_ext_multiplier * INDEX_SCALE_F64).floor() / INDEX_SCALE_F64;
 
     (new_ext_multiplier, timestamp)
 }
@@ -71,7 +68,7 @@ pub fn check_solvency<'info>(
     // Calculate the amount of tokens needed to be solvent
     // Reduce it by two to avoid rounding errors (there is an edge cases where the rounding error
     // from one index (down) to the next (up) can cause the difference to be 2)
-    let mut required_amount = principal_to_amount_down(ext_mint.supply, multiplier);
+    let mut required_amount = principal_to_amount_down(ext_mint.supply, multiplier)?;
     required_amount -= std::cmp::min(2, required_amount);
 
     // Check if the vault has enough tokens
@@ -129,12 +126,12 @@ pub fn sync_multiplier<'info>(
 
     // Update the last m index and last ext index in the global account
     ext_global_account.last_m_index = m_earn_global_account.index;
-    ext_global_account.last_ext_index = (multiplier * INDEX_SCALE_F64).trunc() as u64;
+    ext_global_account.last_ext_index = (multiplier * INDEX_SCALE_F64).floor() as u64;
 
     return Ok(multiplier);
 }
 
-pub fn amount_to_principal_down(amount: u64, multiplier: f64) -> u64 {
+pub fn amount_to_principal_down(amount: u64, multiplier: f64) -> Result<u64> {
     // We want to avoid precision errors with floating point numbers
     // Therefore, we use integer math.
     let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
@@ -142,16 +139,15 @@ pub fn amount_to_principal_down(amount: u64, multiplier: f64) -> u64 {
     // Calculate the principal from the amount and index, rounding down
     let principal: u64 = (amount as u128)
         .checked_mul(INDEX_SCALE_U64 as u128)
-        .expect("amount * INDEX_SCALE_U64 overflow")
+        .ok_or(ExtError::MathOverflow)?
         .checked_div(index)
-        .expect("amount * INDEX_SCALE_U64 / index underflow")
-        .try_into()
-        .expect("conversion overflow");
+        .ok_or(ExtError::MathUnderflow)?
+        .try_into()?;
 
-    principal
+    Ok(principal)
 }
 
-pub fn amount_to_principal_up(amount: u64, multiplier: f64) -> u64 {
+pub fn amount_to_principal_up(amount: u64, multiplier: f64) -> Result<u64> {
     // We want to avoid precision errors with floating point numbers
     // Therefore, we use integer math.
     let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
@@ -159,18 +155,17 @@ pub fn amount_to_principal_up(amount: u64, multiplier: f64) -> u64 {
     // Calculate the principal from the amount and index, rounding up
     let principal: u64 = (amount as u128)
         .checked_mul(INDEX_SCALE_U64 as u128)
-        .expect("amount * INDEX_SCALE_U64 overflow")
-        .checked_add(index.checked_sub(1u128).expect("index - 1 underflow"))
-        .expect("amount * INDEX_SCALE_U64 + index overflow")
+        .ok_or(ExtError::MathOverflow)?
+        .checked_add(index.checked_sub(1u128).ok_or(ExtError::MathUnderflow)?)
+        .ok_or(ExtError::MathOverflow)?
         .checked_div(index)
-        .expect("amount * INDEX_SCALE_U64 + index / index underflow")
-        .try_into()
-        .expect("conversion overflow");
+        .ok_or(ExtError::MathUnderflow)?
+        .try_into()?;
 
-    principal
+    Ok(principal)
 }
 
-pub fn principal_to_amount_down(principal: u64, multiplier: f64) -> u64 {
+pub fn principal_to_amount_down(principal: u64, multiplier: f64) -> Result<u64> {
     // We want to avoid precision errors with floating point numbers
     // Therefore, we use integer math.
     let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
@@ -178,16 +173,15 @@ pub fn principal_to_amount_down(principal: u64, multiplier: f64) -> u64 {
     // Calculate the amount from the principal and index, rounding down
     let amount: u64 = index
         .checked_mul(principal as u128)
-        .expect("index * principal overflow")
+        .ok_or(ExtError::MathOverflow)?
         .checked_div(INDEX_SCALE_U64 as u128)
-        .expect("index * principal / INDEX_SCALE_U64 underflow")
-        .try_into()
-        .expect("conversion overflow");
+        .ok_or(ExtError::MathUnderflow)?
+        .try_into()?;
 
-    amount
+    Ok(amount)
 }
 
-pub fn principal_to_amount_up(principal: u64, multiplier: f64) -> u64 {
+pub fn principal_to_amount_up(principal: u64, multiplier: f64) -> Result<u64> {
     // We want to avoid precision errors with floating point numbers
     // Therefore, we use integer math.
     let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
@@ -195,13 +189,16 @@ pub fn principal_to_amount_up(principal: u64, multiplier: f64) -> u64 {
     // Calculate the amount from the principal and index, rounding up
     let amount: u64 = index
         .checked_mul(principal as u128)
-        .expect("index * principal overflow")
-        .checked_add(INDEX_SCALE_U64 as u128 - 1u128)
-        .expect("index * principal + INDEX_SCALE_U64 - 1 overflow")
+        .ok_or(ExtError::MathOverflow)?
+        .checked_add(
+            (INDEX_SCALE_U64 as u128)
+                .checked_sub(1u128)
+                .ok_or(ExtError::MathUnderflow)?,
+        )
+        .ok_or(ExtError::MathOverflow)?
         .checked_div(INDEX_SCALE_U64 as u128)
-        .expect("index * principal + INDEX_SCALE_U64 - 1 / INDEX_SCALE_U64 underflow")
-        .try_into()
-        .expect("conversion overflow");
+        .ok_or(ExtError::MathUnderflow)?
+        .try_into()?;
 
-    amount
+    Ok(amount)
 }
