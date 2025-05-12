@@ -18,20 +18,20 @@ fn get_latest_multiplier_and_timestamp<'info>(
     ext_global_account: &Account<'info, ExtGlobal>,
     m_earn_global_account: &Account<'info, EarnGlobal>,
 ) -> (f64, i64) {
-    let current_m_multiplier = m_earn_global_account.index as f64 / INDEX_SCALE_F64;
-    let last_m_multiplier = ext_global_account.last_m_index as f64 / INDEX_SCALE_F64;
-    let timestamp: i64 = m_earn_global_account.timestamp as i64;
-    let last_ext_multiplier = ext_global_account.last_ext_index as f64 / INDEX_SCALE_F64;
+    let latest_m_multiplier = m_earn_global_account.index as f64 / INDEX_SCALE_F64;
+    let cached_m_multiplier = ext_global_account.last_m_index as f64 / INDEX_SCALE_F64;
+    let latest_timestamp: i64 = m_earn_global_account.timestamp as i64;
+    let cached_ext_multiplier = ext_global_account.last_ext_index as f64 / INDEX_SCALE_F64;
 
     // If no change, return early
-    if current_m_multiplier == last_m_multiplier {
-        return (last_ext_multiplier, timestamp);
+    if latest_m_multiplier == cached_m_multiplier {
+        return (cached_ext_multiplier, latest_timestamp);
     }
 
     // Calculate the new ext multiplier from the formula:
-    // new_ext_multiplier = last_ext_multiplier * (current_m_multiplier / last_m_multiplier) ^ (1 - fee_on_yield)
+    // new_ext_multiplier = cached_ext_multiplier * (latest_m_multiplier / last_m_multiplier) ^ (1 - fee_on_yield)
     // The derivation of this formula is explained in this document: https://gist.github.com/Oighty/89dd1288a0a7fb53eb6f0314846cb746
-    let m_increase_factor = current_m_multiplier / last_m_multiplier;
+    let m_increase_factor = latest_m_multiplier / cached_m_multiplier;
 
     // Calculate the increase factor for the ext index, if the fee is zero, then the increase factor is the same as M
     let ext_increase_factor = if ext_global_account.fee_bps == 0 {
@@ -46,51 +46,25 @@ fn get_latest_multiplier_and_timestamp<'info>(
     };
 
     // Calculate the new extension multiplier (index in f64 scaled down)
-    let new_ext_multiplier = last_ext_multiplier * ext_increase_factor;
+    let new_ext_multiplier = cached_ext_multiplier * ext_increase_factor;
 
     // We need to round the new multiplier down and truncate at 10^-12
     // to return a consistent value
     let new_ext_multiplier = (new_ext_multiplier * INDEX_SCALE_F64).floor() / INDEX_SCALE_F64;
 
-    (new_ext_multiplier, timestamp)
-}
-
-pub fn check_solvency<'info>(
-    ext_mint: &InterfaceAccount<'info, Mint>,
-    ext_global_account: &Account<'info, ExtGlobal>,
-    m_earn_global_account: &Account<'info, EarnGlobal>,
-    vault_m_token_account: &InterfaceAccount<'info, TokenAccount>,
-) -> Result<()> {
-    // Get the current index and timestamp from the m_earn_global_account
-    let (multiplier, _): (f64, i64) =
-        get_latest_multiplier_and_timestamp(ext_global_account, m_earn_global_account);
-
-    // Calculate the amount of tokens in the vault
-    let vault_amount = vault_m_token_account.amount;
-
-    // Calculate the amount of tokens needed to be solvent
-    // Reduce it by two to avoid rounding errors (there is an edge cases where the rounding error
-    // from one index (down) to the next (up) can cause the difference to be 2)
-    let mut required_amount = principal_to_amount_down(ext_mint.supply, multiplier)?;
-    required_amount -= std::cmp::min(2, required_amount);
-
-    // Check if the vault has enough tokens
-    if vault_amount < required_amount {
-        return err!(ExtError::InsufficientCollateral);
-    }
-
-    Ok(())
+    (new_ext_multiplier, latest_timestamp)
 }
 
 pub fn sync_multiplier<'info>(
     ext_mint: &mut InterfaceAccount<'info, Mint>,
     ext_global_account: &mut Account<'info, ExtGlobal>,
     m_earn_global_account: &Account<'info, EarnGlobal>,
+    vault_m_token_account: &InterfaceAccount<'info, TokenAccount>,
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
     token_program: &Program<'info, Token2022>,
 ) -> Result<f64> {
-    // Get the current index and timestamp from the m_earn_global_account
+    // Get the current index and timestamp from the m_earn_global_account and cached values
     let (multiplier, timestamp): (f64, i64) =
         get_latest_multiplier_and_timestamp(ext_global_account, m_earn_global_account);
 
@@ -130,6 +104,25 @@ pub fn sync_multiplier<'info>(
     // Update the last m index and last ext index in the global account
     ext_global_account.last_m_index = m_earn_global_account.index;
     ext_global_account.last_ext_index = (multiplier * INDEX_SCALE_F64).floor() as u64;
+
+    // Check solvency of the vault
+    // i.e. that it holds enough M for each extension UI amount
+    // after the multiplier has been updated
+    if ext_mint.supply > 0 {
+        // Calculate the amount of tokens in the vault
+        let vault_m = vault_m_token_account.amount;
+
+        // Calculate the amount of tokens needed to be solvent
+        // Reduce it by two to avoid rounding errors (there is an edge cases where the rounding error
+        // from one index (down) to the next (up) can cause the difference to be 2)
+        let mut required_m = principal_to_amount_down(ext_mint.supply, multiplier)?;
+        required_m -= std::cmp::min(2, required_m);
+
+        // Check if the vault has enough tokens
+        if vault_m < required_m {
+            return err!(ExtError::InsufficientCollateral);
+        }
+    }
 
     return Ok(multiplier);
 }

@@ -922,7 +922,7 @@ const addRegistrarEarner = async (earner: PublicKey, proof: ProofElement[]) => {
 
 // Helper functions for preparing and executing ScaledUiExt instructions
 
-const prepExtInitialize = (signer: Keypair) => {
+const prepExtInitialize = async (signer: Keypair) => {
   // Get the global PDA
   const globalAccount = getExtGlobalAccount();
 
@@ -934,6 +934,8 @@ const prepExtInitialize = (signer: Keypair) => {
   accounts.extMint = extMint.publicKey;
   accounts.extMintAuthority = getExtMintAuthority();
   accounts.mEarnGlobalAccount = getEarnGlobalAccount();
+  accounts.mVault = getMVault();
+  accounts.vaultMTokenAccount = await getATA(mMint.publicKey, accounts.mVault);
   accounts.systemProgram = SystemProgram.programId;
   accounts.token2022 = TOKEN_2022_PROGRAM_ID;
 
@@ -942,7 +944,7 @@ const prepExtInitialize = (signer: Keypair) => {
 
 const initializeExt = async (wrapAuthorities: PublicKey[], fee_bps: BN) => {
   // Setup the instruction
-  const { globalAccount } = prepExtInitialize(admin);
+  const { globalAccount } = await prepExtInitialize(admin);
 
   // Send the transaction
   await scaledUiExt.methods
@@ -1300,8 +1302,13 @@ describe("ScaledUiExt unit tests", () => {
         // Setup the instruction call
         prepExtInitialize(nonAdmin);
 
-        // Change the M mint
+        // Change the M mint and vault token account
         accounts.mMint = wrongMint.publicKey;
+        accounts.vaultMTokenAccount = await getATA(
+          wrongMint.publicKey,
+          getMVault(),
+          false
+        );
 
         // Attempt to send the transaction
         await expectAnchorError(
@@ -3559,8 +3566,8 @@ describe("ScaledUiExt unit tests", () => {
 
         // Propagate a new index but do not distribute yield yet
         const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12 + 1));
-        console.log("new index", newIndex.toString());
-        console.log("start index", startIndex.toString());
+        // console.log("new index", newIndex.toString());
+        // console.log("start index", startIndex.toString());
 
         await propagateIndex(newIndex);
 
@@ -3603,15 +3610,15 @@ describe("ScaledUiExt unit tests", () => {
           .rpc();
 
         // Confirm the scaled ui config on the ext mint matches the m index
-        console.log("start index", startIndex.toString());
-        console.log("last ext index", globalState.lastExtIndex.toString());
-        console.log("last m index", globalState.lastMIndex.toString());
-        console.log("fee bps", fee_bps.toString());
+        // console.log("start index", startIndex.toString());
+        // console.log("last ext index", globalState.lastExtIndex.toString());
+        // console.log("last m index", globalState.lastMIndex.toString());
+        // console.log("fee bps", fee_bps.toString());
         const multiplier =
           (globalState.lastExtIndex.toNumber() / 1e12) *
           (startIndex.toNumber() / globalState.lastMIndex.toNumber()) **
             (1 - fee_bps.toNumber() / 1e4);
-        console.log("multiplier", multiplier.toString());
+        // console.log("multiplier", multiplier.toString());
 
         await expectScaledUiAmountConfig(extMint.publicKey, {
           authority: scaledUiAmountConfig.authority,

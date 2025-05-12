@@ -4,7 +4,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey,
-    token_interface::{Mint, Token2022},
+    token_interface::{Mint, Token2022, TokenAccount},
 };
 use spl_token_2022::extension::{
     scaled_ui_amount::ScaledUiAmountConfig, BaseStateWithExtensions, ExtensionType,
@@ -58,6 +58,20 @@ pub struct Initialize<'info> {
     )]
     pub ext_mint_authority: AccountInfo<'info>,
 
+    /// CHECK: Validated by the seeds, stores no data
+    #[account(
+        seeds = [M_VAULT_SEED],
+        bump
+    )]
+    pub m_vault: AccountInfo<'info>,
+
+    #[account(
+        associated_token::mint = m_mint,
+        associated_token::authority = m_vault,
+        associated_token::token_program = token_2022,
+    )]
+    pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
+
     #[account(
         seeds = [EARN_GLOBAL_SEED],
         seeds::program = EARN_PROGRAM,
@@ -75,8 +89,6 @@ pub fn handler(
     wrap_authorities: Vec<Pubkey>,
     fee_bps: u64,
 ) -> Result<()> {
-    let m_vault_bump = Pubkey::find_program_address(&[M_VAULT_SEED], ctx.program_id).1;
-
     // Validate the ext_mint_authority PDA is the mint authority for the ext mint
     let ext_mint_authority = ctx.accounts.ext_mint_authority.key();
     if ctx.accounts.ext_mint.mint_authority.unwrap_or_default() != ext_mint_authority {
@@ -130,7 +142,7 @@ pub fn handler(
         last_m_index: ctx.accounts.m_earn_global_account.index,
         last_ext_index: INDEX_SCALE_U64, // we set the extension index to 1.0 initially
         bump: ctx.bumps.global_account,
-        m_vault_bump,
+        m_vault_bump: ctx.bumps.m_vault,
         ext_mint_authority_bump: ctx.bumps.ext_mint_authority,
         wrap_authorities: wrap_authorities_array,
     });
@@ -145,6 +157,7 @@ pub fn handler(
         &mut ctx.accounts.ext_mint,
         &mut ctx.accounts.global_account,
         &ctx.accounts.m_earn_global_account,
+        &ctx.accounts.vault_m_token_account,
         &ctx.accounts.ext_mint_authority,
         &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
         &ctx.accounts.token_2022,

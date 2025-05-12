@@ -7,7 +7,7 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{amount_to_principal_up, check_solvency, sync_multiplier},
+        conversion::{amount_to_principal_up, sync_multiplier},
         token::{burn_tokens, transfer_tokens_from_program},
     },
 };
@@ -83,18 +83,11 @@ pub fn handler(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
 
     // Update the scaled UI multiplier with the current M index
     // before unwrapping tokens
-    // Check solvency of the vault
-    check_solvency(
-        &ctx.accounts.ext_mint,
-        &ctx.accounts.global_account,
-        &ctx.accounts.m_earn_global_account,
-        &ctx.accounts.vault_m_token_account,
-    )?;
-
     let multiplier = sync_multiplier(
         &mut ctx.accounts.ext_mint,
         &mut ctx.accounts.global_account,
         &ctx.accounts.m_earn_global_account,
+        &ctx.accounts.vault_m_token_account,
         &ctx.accounts.ext_mint_authority,
         authority_seeds,
         &ctx.accounts.token_2022,

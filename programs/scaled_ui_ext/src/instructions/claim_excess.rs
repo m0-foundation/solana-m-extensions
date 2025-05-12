@@ -10,7 +10,7 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{check_solvency, principal_to_amount_up, sync_multiplier},
+        conversion::{principal_to_amount_up, sync_multiplier},
         token::transfer_tokens_from_program,
     },
 };
@@ -77,6 +77,7 @@ pub fn handler(ctx: Context<ClaimExcess>) -> Result<()> {
         &mut ctx.accounts.ext_mint,
         &mut ctx.accounts.global_account,
         &ctx.accounts.m_earn_global_account,
+        &ctx.accounts.vault_m_token_account,
         &ctx.accounts.ext_mint_authority,
         &[&[MINT_AUTHORITY_SEED, &[signer_bump]]],
         &ctx.accounts.token_2022,
@@ -85,13 +86,13 @@ pub fn handler(ctx: Context<ClaimExcess>) -> Result<()> {
     // Calculate the required collateral, rounding down to be conservative
     // This amount will always be greater than what is required in the check_solvency function
     // since it allows a rounding error of up to 2e-6
-    let req_collateral = principal_to_amount_up(ctx.accounts.ext_mint.supply, multiplier)?;
+    let required_m = principal_to_amount_up(ctx.accounts.ext_mint.supply, multiplier)?;
 
     // Excess M is the amount of M in the vault above the amount needed to fully collateralize the extension
-    let vault_balance = ctx.accounts.vault_m_token_account.amount;
+    let vault_m = ctx.accounts.vault_m_token_account.amount;
 
-    let excess = vault_balance
-        .checked_sub(req_collateral)
+    let excess = vault_m
+        .checked_sub(required_m)
         .ok_or(ExtError::InsufficientCollateral)?; // This shouldn't underflow, but we check for safety
 
     // Only transfer a positive amount of excess
@@ -105,17 +106,6 @@ pub fn handler(ctx: Context<ClaimExcess>) -> Result<()> {
             &[&[M_VAULT_SEED, &[ctx.accounts.global_account.m_vault_bump]]],
             &ctx.accounts.token_2022,
         )?;
-
-        // Reload the mint and check solvency to be sure the system is still solvent
-        // This is probably overkill, but it is a good sanity check
-        ctx.accounts.ext_mint.reload()?;
-        check_solvency(
-            &ctx.accounts.ext_mint,
-            &ctx.accounts.global_account,
-            &ctx.accounts.m_earn_global_account,
-            &ctx.accounts.vault_m_token_account,
-        )?;
-
         // TODO emit event?
     }
 
