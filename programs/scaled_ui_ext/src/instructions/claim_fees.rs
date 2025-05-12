@@ -106,8 +106,18 @@ pub fn handler(ctx: Context<ClaimFees>) -> Result<()> {
             &[&[M_VAULT_SEED, &[ctx.accounts.global_account.m_vault_bump]]],
             &ctx.accounts.token_2022,
         )?;
-        // TODO emit event?
+
+        emit!(FeesClaimed {
+            recipient_token_account: ctx.accounts.recipient_m_token_account.key(),
+            amount: excess,
+        });
     }
 
     Ok(())
+}
+
+#[event]
+pub struct FeesClaimed {
+    pub recipient_token_account: Pubkey,
+    pub amount: u64,
 }
