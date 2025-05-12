@@ -83,6 +83,7 @@ pub fn handler(ctx: Context<Wrap>, amount: u64) -> Result<()> {
 
     // Update the scaled UI multiplier with the current M index
     // before wrapping new tokens
+    // If multiplier up to date, just reads the current value
     let multiplier = sync_multiplier(
         &mut ctx.accounts.ext_mint,
         &mut ctx.accounts.global_account,

@@ -31,7 +31,11 @@ pub mod scaled_ui_ext {
 
     // Admin instructions
 
-    pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>, fee_bps: u64) -> Result<()> {
+    pub fn initialize(
+        ctx: Context<Initialize>,
+        wrap_authorities: Vec<Pubkey>,
+        fee_bps: u64,
+    ) -> Result<()> {
         instructions::initialize::handler(ctx, wrap_authorities, fee_bps)
     }
 
@@ -51,8 +55,8 @@ pub mod scaled_ui_ext {
         instructions::update_wrap_authority::handler(ctx, index, new_wrap_authority)
     }
 
-    pub fn claim_excess(ctx: Context<ClaimExcess>) -> Result<()> {
-        instructions::claim_excess::handler(ctx)
+    pub fn claim_fees(ctx: Context<ClaimFees>) -> Result<()> {
+        instructions::claim_fees::handler(ctx)
     }
 
     // Wrap authority instructions

@@ -16,7 +16,7 @@ use crate::{
 };
 
 #[derive(Accounts)]
-pub struct ClaimExcess<'info> {
+pub struct ClaimFees<'info> {
     pub admin: Signer<'info>,
 
     #[account(
@@ -70,7 +70,7 @@ pub struct ClaimExcess<'info> {
     pub token_2022: Program<'info, Token2022>,
 }
 
-pub fn handler(ctx: Context<ClaimExcess>) -> Result<()> {
+pub fn handler(ctx: Context<ClaimFees>) -> Result<()> {
     // Sync the multiplier before allowing any collateral withdrawals
     let signer_bump = ctx.accounts.global_account.ext_mint_authority_bump;
     let multiplier: f64 = sync_multiplier(

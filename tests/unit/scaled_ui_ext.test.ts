@@ -1151,7 +1151,7 @@ const sync = async () => {
   return globalAccount;
 };
 
-const prepClaimExcess = async (signer: Keypair, toTokenAccount?: PublicKey) => {
+const prepclaimFees = async (signer: Keypair, toTokenAccount?: PublicKey) => {
   // Get the global PDA
   const globalAccount = getExtGlobalAccount();
 
@@ -1176,13 +1176,13 @@ const prepClaimExcess = async (signer: Keypair, toTokenAccount?: PublicKey) => {
   return { globalAccount };
 };
 
-const claimExcess = async (toTokenAccount?: PublicKey) => {
+const claimFees = async (toTokenAccount?: PublicKey) => {
   // Setup the instruction
-  const { globalAccount } = await prepClaimExcess(admin, toTokenAccount);
+  const { globalAccount } = await prepclaimFees(admin, toTokenAccount);
 
   // Send the instruction
   await scaledUiExt.methods
-    .claimExcess()
+    .claimFees()
     .accountsPartial({ ...accounts })
     .signers([admin])
     .rpc();
@@ -1985,7 +1985,7 @@ describe("ScaledUiExt unit tests", () => {
       });
     });
 
-    describe("claim_excess unit tests", () => {
+    describe("claim_fees unit tests", () => {
       // test cases
       // [X] given the admin does not sign the transaction
       //   [X] it reverts with a NotAuthorized error
@@ -2049,12 +2049,12 @@ describe("ScaledUiExt unit tests", () => {
       // it reverts with a NotAuthorized error
       test("admin does not sign - reverts", async () => {
         // Setup the instruction
-        await prepClaimExcess(nonAdmin);
+        await prepclaimFees(nonAdmin);
 
         // Attempt to send the transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .claimExcess()
+            .claimFees()
             .accountsPartial({ ...accounts })
             .signers([nonAdmin])
             .rpc(),
@@ -2066,7 +2066,7 @@ describe("ScaledUiExt unit tests", () => {
       // it reverts with a ConstraintSeeds error
       test("m vault is not the m vault PDA - reverts", async () => {
         // Setup the instruction
-        await prepClaimExcess(admin);
+        await prepclaimFees(admin);
 
         // Change the m vault
         accounts.mVault = PublicKey.unique();
@@ -2074,7 +2074,7 @@ describe("ScaledUiExt unit tests", () => {
         // Attempt to send the transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .claimExcess()
+            .claimFees()
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc(),
@@ -2092,13 +2092,13 @@ describe("ScaledUiExt unit tests", () => {
         );
 
         // Setup the instruction
-        await prepClaimExcess(admin);
+        await prepclaimFees(admin);
         accounts.vaultMTokenAccount = nonAtaAccount;
 
         // Attempt to send the transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .claimExcess()
+            .claimFees()
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc(),
@@ -2114,13 +2114,13 @@ describe("ScaledUiExt unit tests", () => {
         await createMint(wrongMint, nonAdmin.publicKey, true, 6);
 
         // Setup the instruction
-        await prepClaimExcess(admin);
+        await prepclaimFees(admin);
         accounts.mMint = wrongMint.publicKey;
 
         // Attempt to send the transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .claimExcess()
+            .claimFees()
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc(),
@@ -2136,13 +2136,13 @@ describe("ScaledUiExt unit tests", () => {
         await createMint(wrongMint, nonAdmin.publicKey, true, 6);
 
         // Setup the instruction
-        await prepClaimExcess(admin);
+        await prepclaimFees(admin);
         accounts.extMint = wrongMint.publicKey;
 
         // Attempt to send the transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .claimExcess()
+            .claimFees()
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc(),
@@ -2154,7 +2154,7 @@ describe("ScaledUiExt unit tests", () => {
       // it reverts with a ConstraintSeeds error
       test("ext mint authority is not the ext mint authority PDA - reverts", async () => {
         // Setup the instruction
-        await prepClaimExcess(admin);
+        await prepclaimFees(admin);
 
         // Change the ext mint authority
         accounts.extMintAuthority = PublicKey.unique();
@@ -2162,7 +2162,7 @@ describe("ScaledUiExt unit tests", () => {
         // Attempt to send the transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .claimExcess()
+            .claimFees()
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc(),
@@ -2174,7 +2174,7 @@ describe("ScaledUiExt unit tests", () => {
       // it reverts with a InvalidAccount error
       test("m earn global account does not match global account - reverts", async () => {
         // Setup the instruction
-        await prepClaimExcess(admin);
+        await prepclaimFees(admin);
 
         // Change the m earn global account
         accounts.mEarnGlobalAccount = PublicKey.unique();
@@ -2182,7 +2182,7 @@ describe("ScaledUiExt unit tests", () => {
         // Attempt to send the transaction
         await expectSystemError(
           scaledUiExt.methods
-            .claimExcess()
+            .claimFees()
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc()
@@ -2199,12 +2199,12 @@ describe("ScaledUiExt unit tests", () => {
         );
 
         // Setup the instruction
-        await prepClaimExcess(admin, wrongTokenAccount);
+        await prepclaimFees(admin, wrongTokenAccount);
 
         // Attempt to send the transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .claimExcess()
+            .claimFees()
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc(),
@@ -2260,9 +2260,9 @@ describe("ScaledUiExt unit tests", () => {
         const expectedExcess = initialVaultBalance.sub(requiredCollateral);
 
         // Setup and execute the instruction
-        await prepClaimExcess(admin);
+        await prepclaimFees(admin);
         await scaledUiExt.methods
-          .claimExcess()
+          .claimFees()
           .accountsPartial({ ...accounts })
           .signers([admin])
           .rpc();
@@ -2319,9 +2319,9 @@ describe("ScaledUiExt unit tests", () => {
         const expectedExcess = initialVaultBalance.sub(requiredCollateral);
 
         // Setup and execute the instruction
-        await prepClaimExcess(admin);
+        await prepclaimFees(admin);
         await scaledUiExt.methods
-          .claimExcess()
+          .claimFees()
           .accountsPartial({ ...accounts })
           .signers([admin])
           .rpc();
@@ -2343,7 +2343,7 @@ describe("ScaledUiExt unit tests", () => {
       // it reverts with an InsufficientCollateral error
       test("multiplier not synced, no excess collateral - reverts", async () => {
         // claim the existing excess so there isn't extra
-        await claimExcess();
+        await claimFees();
         svm.expireBlockhash();
 
         // Propagate a new index to create a situation where multiplier needs sync
@@ -2351,12 +2351,12 @@ describe("ScaledUiExt unit tests", () => {
         await propagateIndex(newIndex);
 
         // Setup the instruction
-        await prepClaimExcess(admin);
+        await prepclaimFees(admin);
 
         // Attempt to send the transaction
         await expectAnchorError(
           scaledUiExt.methods
-            .claimExcess()
+            .claimFees()
             .accountsPartial({ ...accounts })
             .signers([admin])
             .rpc(),
@@ -2370,7 +2370,7 @@ describe("ScaledUiExt unit tests", () => {
       // it completes successfully and does not transfer any tokens
       test("multiplier already synced, no excess collateral - success", async () => {
         // claim the existing excess so there isn't extra
-        await claimExcess();
+        await claimFees();
         svm.expireBlockhash();
 
         // Cache balances before claim excess
@@ -2380,11 +2380,11 @@ describe("ScaledUiExt unit tests", () => {
         const initialRecipientBalance = await getTokenBalance(recipientATA);
 
         // Setup the instruction
-        await prepClaimExcess(admin);
+        await prepclaimFees(admin);
 
         // Attempt to send the transaction
         await scaledUiExt.methods
-          .claimExcess()
+          .claimFees()
           .accountsPartial({ ...accounts })
           .signers([admin])
           .rpc();
@@ -2437,7 +2437,7 @@ describe("ScaledUiExt unit tests", () => {
 
       // Claim excess tokens to make it easier to test collateral checks
       try {
-        await claimExcess();
+        await claimFees();
       } catch (e) {
         // Ignore the error if there are no excess tokens
       }
@@ -3559,7 +3559,7 @@ describe("ScaledUiExt unit tests", () => {
       test("M vault has not received yield to match latest M index - reverts", async () => {
         // Claim excess tokens to make it easier to test collateral checks
         try {
-          await claimExcess();
+          await claimFees();
         } catch (e) {
           // Ignore the error if there are no excess tokens
         }
