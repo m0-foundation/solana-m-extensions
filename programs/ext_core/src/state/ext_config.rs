@@ -9,8 +9,6 @@ pub struct ExtConfig {
     pub ext_authority: Pubkey,
     pub ext_mint: Pubkey,
     pub ext_program: Pubkey,
-    pub sync_on_op: bool,
     pub bump: u8,
     pub m_vault_bump: u8,
-    pub ext_mint_authority_bump: u8,
 }

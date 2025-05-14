@@ -29,7 +29,11 @@ pub struct Wrap<'info> {
     )]
     pub config: Account<'info, Config>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        mint::token_program = ext_token_program,
+        mint::authority = ext_mint_authority,
+    )]
     pub ext_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
