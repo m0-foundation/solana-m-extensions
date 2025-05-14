@@ -4,7 +4,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey,
-    token_interface::{Mint, Token2022},
+    token_interface::{Mint, Token2022, TokenAccount},
 };
 use spl_token_2022::extension::{
     scaled_ui_amount::ScaledUiAmountConfig, BaseStateWithExtensions, ExtensionType,
@@ -13,7 +13,7 @@ use spl_token_2022::extension::{
 
 // local dependencies
 use crate::{
-    constants::ANCHOR_DISCRIMINATOR_SIZE,
+    constants::{ANCHOR_DISCRIMINATOR_SIZE, INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::conversion::sync_multiplier,
@@ -58,6 +58,20 @@ pub struct Initialize<'info> {
     )]
     pub ext_mint_authority: AccountInfo<'info>,
 
+    /// CHECK: Validated by the seeds, stores no data
+    #[account(
+        seeds = [M_VAULT_SEED],
+        bump
+    )]
+    pub m_vault: AccountInfo<'info>,
+
+    #[account(
+        associated_token::mint = m_mint,
+        associated_token::authority = m_vault,
+        associated_token::token_program = token_2022,
+    )]
+    pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
+
     #[account(
         seeds = [EARN_GLOBAL_SEED],
         seeds::program = EARN_PROGRAM,
@@ -70,9 +84,11 @@ pub struct Initialize<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
-    let m_vault_bump = Pubkey::find_program_address(&[M_VAULT_SEED], ctx.program_id).1;
-
+pub fn handler(
+    ctx: Context<Initialize>,
+    wrap_authorities: Vec<Pubkey>,
+    fee_bps: u64,
+) -> Result<()> {
     // Validate the ext_mint_authority PDA is the mint authority for the ext mint
     let ext_mint_authority = ctx.accounts.ext_mint_authority.key();
     if ctx.accounts.ext_mint.mint_authority.unwrap_or_default() != ext_mint_authority {
@@ -98,16 +114,10 @@ pub fn handler(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Resul
         }
     }
 
-    // Sync the ScaledUiAmount multiplier with the M Index
-    // We don't need to check collateralization here because
-    // the ext mint must have a supply of 0 to start
-    sync_multiplier(
-        &mut ctx.accounts.ext_mint,
-        &ctx.accounts.m_earn_global_account,
-        &ctx.accounts.ext_mint_authority,
-        &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
-        &ctx.accounts.token_2022,
-    )?;
+    // Validate the fee_bps is within the allowed range
+    if fee_bps > ONE_HUNDRED_PERCENT_U64 {
+        return err!(ExtError::InvalidParam);
+    }
 
     // Validate and create the wrap authorities array
     if wrap_authorities.len() > 10 {
@@ -128,11 +138,30 @@ pub fn handler(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Resul
         ext_mint: ctx.accounts.ext_mint.key(),
         m_mint: ctx.accounts.m_mint.key(),
         m_earn_global_account: ctx.accounts.m_earn_global_account.key(),
+        fee_bps,
+        last_m_index: ctx.accounts.m_earn_global_account.index,
+        last_ext_index: INDEX_SCALE_U64, // we set the extension index to 1.0 initially
         bump: ctx.bumps.global_account,
-        m_vault_bump,
+        m_vault_bump: ctx.bumps.m_vault,
         ext_mint_authority_bump: ctx.bumps.ext_mint_authority,
         wrap_authorities: wrap_authorities_array,
     });
+
+    // Set the ScaledUi multiplier to 1.0
+    // We can do this by calling the sync_multiplier function
+    // when the last_m_index equals the index on the m_earn_global_account
+    // and having last_ext_index set to 1e12
+    // We don't need to check collateralization here because
+    // the ext mint must have a supply of 0 to start
+    sync_multiplier(
+        &mut ctx.accounts.ext_mint,
+        &mut ctx.accounts.global_account,
+        &ctx.accounts.m_earn_global_account,
+        &ctx.accounts.vault_m_token_account,
+        &ctx.accounts.ext_mint_authority,
+        &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
+        &ctx.accounts.token_2022,
+    )?;
 
     Ok(())
 }

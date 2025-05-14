@@ -7,7 +7,7 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{amount_to_principal_up, check_solvency, sync_multiplier},
+        conversion::{amount_to_principal_up, sync_multiplier},
         token::{burn_tokens, transfer_tokens_from_program},
     },
 };
@@ -26,6 +26,7 @@ pub struct Unwrap<'info> {
     pub ext_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
+        mut,
         seeds = [EXT_GLOBAL_SEED],
         bump = global_account.bump,
         has_one = m_mint @ ExtError::InvalidAccount,
@@ -82,16 +83,12 @@ pub fn handler(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
 
     // Update the scaled UI multiplier with the current M index
     // before unwrapping tokens
-    // Check solvency of the vault
-    check_solvency(
-        &ctx.accounts.ext_mint,
-        &ctx.accounts.m_earn_global_account,
-        &ctx.accounts.vault_m_token_account,
-    )?;
-
+    // If multiplier up to date, just reads the current value
     let multiplier = sync_multiplier(
         &mut ctx.accounts.ext_mint,
+        &mut ctx.accounts.global_account,
         &ctx.accounts.m_earn_global_account,
+        &ctx.accounts.vault_m_token_account,
         &ctx.accounts.ext_mint_authority,
         authority_seeds,
         &ctx.accounts.token_2022,
@@ -99,7 +96,7 @@ pub fn handler(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
 
     // Calculate the principal amount of ext tokens to burn
     // from the amount of m tokens to unwrap
-    let mut principal = amount_to_principal_up(amount, multiplier);
+    let mut principal = amount_to_principal_up(amount, multiplier)?;
     if principal > ctx.accounts.from_ext_token_account.amount {
         principal = ctx.accounts.from_ext_token_account.amount;
     }

@@ -7,7 +7,7 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{amount_to_principal_down, check_solvency, sync_multiplier},
+        conversion::{amount_to_principal_down, sync_multiplier},
         token::{mint_tokens, transfer_tokens},
     },
 };
@@ -26,6 +26,7 @@ pub struct Wrap<'info> {
     pub ext_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
+        mut,
         seeds = [EXT_GLOBAL_SEED],
         bump = global_account.bump,
         has_one = m_mint @ ExtError::InvalidAccount,
@@ -82,16 +83,12 @@ pub fn handler(ctx: Context<Wrap>, amount: u64) -> Result<()> {
 
     // Update the scaled UI multiplier with the current M index
     // before wrapping new tokens
-    // Check solvency before syncing
-    check_solvency(
-        &ctx.accounts.ext_mint,
-        &ctx.accounts.m_earn_global_account,
-        &ctx.accounts.vault_m_token_account,
-    )?;
-
+    // If multiplier up to date, just reads the current value
     let multiplier = sync_multiplier(
         &mut ctx.accounts.ext_mint,
+        &mut ctx.accounts.global_account,
         &ctx.accounts.m_earn_global_account,
+        &ctx.accounts.vault_m_token_account,
         &ctx.accounts.ext_mint_authority,
         authority_seeds,
         &ctx.accounts.token_2022,
@@ -109,8 +106,7 @@ pub fn handler(ctx: Context<Wrap>, amount: u64) -> Result<()> {
 
     // Calculate the amount of ext tokens to mint based
     // on the amount of m tokens wrapped
-    // TODO handle rounding
-    let principal = amount_to_principal_down(amount, multiplier);
+    let principal = amount_to_principal_down(amount, multiplier)?;
 
     // Mint the amount of ext tokens to the user
     mint_tokens(
