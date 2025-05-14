@@ -1,0 +1,25 @@
+[package]
+name = "ext_core"
+version = "0.1.0"
+description = "Created with Anchor"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "ext_core"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang.workspace = true
+anchor-spl.workspace = true
+spl-token-2022.workspace = true
+earn.workspace = true
+cfg-if.workspace = true
+ext_yield_interface = { version = "0.1.0", path = "../ext_yield_interface", features = ["cpi"] }
