@@ -3,17 +3,11 @@ use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::{
     errors::ExtError,
-    state::{
-        Config, ExtConfig, CONFIG_SEED, EXT_CONFIG_SEED_PREFIX, MINT_AUTHORITY_SEED_PREFIX,
-        M_VAULT_SEED_PREFIX,
-    },
-    utils::{
-        conversion::{amount_to_principal_up, MULTIPLIER_SCALE},
-        token::{burn_tokens, transfer_tokens_from_program},
-    },
+    state::{Config, ExtConfig, CONFIG_SEED, EXT_CONFIG_SEED_PREFIX, M_VAULT_SEED_PREFIX},
+    utils::token::{burn_tokens, transfer_tokens_from_program},
 };
 use earn::state::Global as EarnGlobal;
-use ext_yield_interface::cpi::accounts::Sync;
+use ext_yield_interface::cpi::accounts::GetEquivalent;
 
 #[derive(Accounts)]
 pub struct Unwrap<'info> {
@@ -52,11 +46,7 @@ pub struct Unwrap<'info> {
     )]
     pub m_vault: AccountInfo<'info>,
 
-    /// CHECK: This account is validated by the seed, it stores no data
-    #[account(
-        seeds = [MINT_AUTHORITY_SEED_PREFIX, ext_mint.key().as_ref()],
-        bump = ext_config.ext_mint_authority_bump,
-    )]
+    /// CHECK: This account is validated in the CPI call to the extension program
     pub ext_mint_authority: AccountInfo<'info>,
 
     #[account(
@@ -91,45 +81,32 @@ pub struct Unwrap<'info> {
     pub ext_program: AccountInfo<'info>,
 }
 
-pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, Unwrap<'info>>, amount: u64) -> Result<()> {
-    // If the extension requires syncing before conversions,
-    // Sync the ext token before wrapping and get the current multiplier
-    // of ext tokens to m tokens. This will most often be 1:1,
-    // but a few yield distribution formats, such as IBT and ScaledUiAmount,
-    // will have a different multiplier.
-    // Formats that have permissioned syncs do not have multipliers
-    let multiplier = if ctx.accounts.ext_config.sync_on_op {
-        let cpi_context = CpiContext::new(
-            ctx.accounts.ext_program.to_account_info(),
-            Sync {
-                m_mint: ctx.accounts.m_mint.to_account_info(),
-                ext_mint: ctx.accounts.ext_mint.to_account_info(),
-                ext_global_account: ctx.accounts.m_earn_global_account.to_account_info(),
-                m_earn_global_account: ctx.accounts.m_earn_global_account.to_account_info(),
-                core_config: ctx.accounts.config.to_account_info(),
-                ext_config: ctx.accounts.ext_config.to_account_info(),
-                m_vault: ctx.accounts.m_vault.to_account_info(),
-                vault_m_token_account: ctx.accounts.vault_m_token_account.to_account_info(),
-            },
-        )
-        .with_remaining_accounts(ctx.remaining_accounts.to_vec());
+pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, Unwrap<'info>>, amount_m: u64) -> Result<()> {
+    // Get the equivalent amount of ext tokens to burn from the ext program
+    // The ext program should handle any conversion between m tokens and ext tokens
+    // and sync its multiplier if necessary
+    let cpi_context = CpiContext::new(
+        ctx.accounts.ext_program.to_account_info(),
+        GetEquivalent {
+            m_mint: ctx.accounts.m_mint.to_account_info(),
+            ext_mint: ctx.accounts.ext_mint.to_account_info(),
+            ext_global_account: ctx.accounts.m_earn_global_account.to_account_info(),
+            m_earn_global_account: ctx.accounts.m_earn_global_account.to_account_info(),
+            core_config: ctx.accounts.config.to_account_info(),
+            ext_config: ctx.accounts.ext_config.to_account_info(),
+            m_vault: ctx.accounts.m_vault.to_account_info(),
+            vault_m_token_account: ctx.accounts.vault_m_token_account.to_account_info(),
+            ext_mint_authority: ctx.accounts.ext_mint_authority.to_account_info(),
+        },
+    )
+    .with_remaining_accounts(ctx.remaining_accounts.to_vec());
 
-        ext_yield_interface::cpi::sync(cpi_context)?.get()
-    } else {
-        MULTIPLIER_SCALE
-    };
-
-    // Calculate the principal amount of ext tokens to burn
-    // from the amount of m tokens to unwrap
-    let mut principal = amount_to_principal_up(amount, multiplier)?;
-    if principal > ctx.accounts.from_ext_token_account.amount {
-        principal = ctx.accounts.from_ext_token_account.amount;
-    }
+    let amount_ext = ext_yield_interface::cpi::get_equivalent(cpi_context, amount_m)?.get();
 
     // Burn the amount of ext tokens from the user
     burn_tokens(
         &ctx.accounts.from_ext_token_account,   // from
-        principal,                              // amount
+        amount_ext,                             // amount
         &ctx.accounts.ext_mint,                 // mint
         &ctx.accounts.signer.to_account_info(), // authority
         &ctx.accounts.ext_token_program,        // token program
@@ -139,7 +116,7 @@ pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, Unwrap<'info>>, amount: u6
     transfer_tokens_from_program(
         &ctx.accounts.vault_m_token_account, // from
         &ctx.accounts.to_m_token_account,    // to
-        amount,                              // amount
+        amount_m,                            // amount
         &ctx.accounts.m_mint,                // mint
         &ctx.accounts.m_vault,               // authority
         &[&[
