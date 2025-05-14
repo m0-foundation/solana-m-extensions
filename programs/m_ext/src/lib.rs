@@ -52,8 +52,8 @@ pub mod m_ext {
         instructions::swap::handler(ctx, amount)
     }
 
-    pub fn wrap(ctx: Context<Wrap>, amount: u64) -> Result<()> {
-        instructions::wrap::handler(ctx, amount)
+    pub fn wrap<'info>(ctx: Context<'_, '_, '_, 'info, Wrap<'info>>, amount_m: u64) -> Result<()> {
+        Wrap::handler(ctx, amount_m)
     }
 
     pub fn unwrap(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
