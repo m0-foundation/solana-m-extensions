@@ -12,5 +12,5 @@ pub struct Config {
     pub m_token_program: Pubkey,
     pub bump: u8,
     // TODO how to restrict unwraps to protocol-approved accounts? same as earner list?
-    pub unwrap_authorities: [Pubkey; 32],
+    // pub unwrap_authorities: [Pubkey; 32],
 }

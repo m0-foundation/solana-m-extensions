@@ -1,5 +1,5 @@
 [workspace]
-members = [
+members = [ "crates/spl_multisig_interface",
     "programs/*"
 ]
 resolver = "2"
