@@ -21,14 +21,14 @@ use {
 /// additional account infos to create the proper instruction
 pub fn invoke_wrap<'a>(
     program_id: &Pubkey,
-    source_info: AccountInfo<'a>,
+    mint: AccountInfo<'a>,
     extra_account_metas: &AccountInfo<'a>,
     additional_accounts: &[AccountInfo<'a>],
     amount: u64,
 ) -> ProgramResult {
     let mut cpi_instruction = Instruction {
         program_id: *program_id,
-        accounts: vec![AccountMeta::new_readonly(*source_info.key, false)],
+        accounts: vec![AccountMeta::new_readonly(*mint.key, false)],
         data: MExtensionInstruction::Wrap { amount }.pack(),
     };
 
@@ -36,7 +36,7 @@ pub fn invoke_wrap<'a>(
     let extra_accounts = ExtraAccountMetas::try_from_slice(data.as_ref())?;
 
     // Start with accounts required for the CPI and add additional account below
-    let mut cpi_account_infos = vec![source_info];
+    let mut cpi_account_infos = vec![mint];
 
     cpi_instruction
         .accounts
