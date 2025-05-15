@@ -125,6 +125,8 @@ impl<'info> Claim<'info> {
             return err!(ExtError::InvalidAccount);
         }
 
+        // TODO: figure out how fees are handled in this version and send them
+
         // Mint the claimable amount to the user's token account
         // The MerkleClaims yield variant has a 1:1 conversion ratio
         // so we can mint the amount directly
