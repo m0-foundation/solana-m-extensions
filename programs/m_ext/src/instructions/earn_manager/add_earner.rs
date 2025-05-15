@@ -53,8 +53,7 @@ impl<'info> AddEarner<'info> {
     fn validate(&self) -> Result<()> {
         // Revert if extension does not support earner accounts
         match self.ext_config.yield_config {
-            YieldConfig::Crank(_) => {}
-            YieldConfig::MerkleClaims(_) => {}
+            YieldConfig::Manual(_) => {}
             _ => {
                 return err!(ExtError::InstructionNotSupported);
             }
@@ -65,20 +64,28 @@ impl<'info> AddEarner<'info> {
 
     #[access_control(ctx.accounts.validate())]
     pub fn handler(ctx: Context<Self>, user: Pubkey) -> Result<()> {
-        let (start_index, start_timestamp) = match ctx.accounts.ext_config.yield_config {
-            YieldConfig::Crank(config) => (config.last_ext_index, config.last_timestamp),
-            YieldConfig::MerkleClaims(config) => (config.last_ext_index, config.last_timestamp),
+        // Construct the earner type data
+        let earner_type = match ctx.accounts.ext_config.yield_config {
+            YieldConfig::Manual(config) => match config.manual_type {
+                ManualType::Crank => EarnerType::Crank {
+                    last_claim_index: config.ext_index,
+                    last_claim_timestamp: config.timestamp,
+                },
+                ManualType::MerkleClaims(_) => EarnerType::MerkleClaims {
+                    claimed_amount: 0, // TODO need to think about how to handle situations where the earner account is closed and re-created
+                    claim_delegate: None,
+                },
+            },
             _ => unreachable!(),
         };
 
         ctx.accounts.earner_account.set_inner(Earner {
-            earn_manager: ctx.accounts.signer.key(),
-            recipient_token_account: None,
-            last_claim_index: start_index,
-            last_claim_timestamp: start_timestamp,
-            bump: ctx.bumps.earner_account,
             user,
             user_token_account: ctx.accounts.user_token_account.key(),
+            earn_manager: ctx.accounts.signer.key(),
+            earner_type,
+            bump: ctx.bumps.earner_account,
+            recipient_token_account: None,
         });
 
         Ok(())

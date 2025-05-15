@@ -1,5 +1,3 @@
-// ext_earn_authority
-
 // external dependencies
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface};
@@ -31,8 +29,8 @@ pub struct ClaimFor<'info> {
     #[account(
         mut,
         has_one = ext_mint @ ExtError::InvalidMint,
-        constraint = if let YieldConfig::Crank(crank_config) = ext_config.yield_config {
-            crank_config.earn_authority == earn_authority.key()
+        constraint = if let YieldConfig::Manual(manual_config) = ext_config.yield_config {
+            manual_config.earn_authority == earn_authority.key()
         } else {
             false
         } @ ExtError::NotAuthorized,
@@ -103,7 +101,12 @@ impl<'info> ClaimFor<'info> {
     fn validate(&self) -> Result<()> {
         // Revert if extension is not crank based
         match self.ext_config.yield_config {
-            YieldConfig::Crank(_) => {}
+            YieldConfig::Manual(manual_config) => match manual_config.manual_type {
+                ManualType::Crank => {}
+                _ => {
+                    return err!(ExtError::InstructionNotSupported);
+                }
+            },
             _ => {
                 return err!(ExtError::InstructionNotSupported);
             }
@@ -125,17 +128,17 @@ impl<'info> ClaimFor<'info> {
 
     #[access_control(ctx.accounts.validate())]
     pub fn handler(ctx: Context<Self>, snapshot_balance: u64) -> Result<()> {
-        let crank_config = match &ctx.accounts.ext_config.yield_config {
-            YieldConfig::Crank(config) => config,
+        let manual_config = match &ctx.accounts.ext_config.yield_config {
+            YieldConfig::Manual(config) => config,
             _ => unreachable!(),
         };
 
         // Calculate the amount of tokens to send to the user
         // Cast to u128 for multiplication to avoid overflows
         let mut rewards: u64 = (snapshot_balance as u128)
-            .checked_mul(crank_config.last_ext_index.into())
+            .checked_mul(manual_config.ext_index as u128)
             .unwrap()
-            .checked_div(ctx.accounts.earner_account.last_claim_index.into())
+            .checked_div(ctx.accounts.earner_account.last_claim_index as u128)
             .unwrap()
             .try_into()
             .unwrap();
@@ -151,8 +154,8 @@ impl<'info> ClaimFor<'info> {
         }
 
         // Set the earner's last claim index to the global index and update the last claim timestamp
-        ctx.accounts.earner_account.last_claim_index = crank_config.last_ext_index;
-        ctx.accounts.earner_account.last_claim_timestamp = crank_config.last_timestamp;
+        ctx.accounts.earner_account.last_claim_index = manual_config.ext_index;
+        ctx.accounts.earner_account.last_claim_timestamp = manual_config.ext_timestamp;
 
         // Setup the signer seeds for the mint CPI(s)
         let mint_authority_seeds: &[&[&[u8]]] = &[&[

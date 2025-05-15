@@ -1,5 +1,5 @@
 use crate::{
-    constants::{ANCHOR_DISCRIMINATOR_SIZE, ONE_HUNDRED_PERCENT_U64},
+    constants::{ANCHOR_DISCRIMINATOR_SIZE, INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
     errors::ExtError,
     state::{
         Config, CustomConfig, ExtConfig, RebasingType, CONFIG_SEED, EXT_CONFIG_SEED_PREFIX,
@@ -82,10 +82,14 @@ pub struct InitializeExt<'info> {
 
 pub enum YieldParams {
     None,
-    Crank(Pubkey),        // earn_authority
-    MerkleClaims(Pubkey), // earn_authority
+    Manual(ManualParams),
     Rebasing(RebasingParams),
     Custom(CustomConfig),
+}
+
+pub struct ManualParams {
+    pub earn_authority: Pubkey,
+    pub manual_type: ManualType,
 }
 
 pub struct RebasingParams {
@@ -174,6 +178,21 @@ impl<'info> InitializeExt<'info> {
                     }
                 }
             }
+            YieldParams::Manual(params) => {
+                // Validate the merkle claims params
+                if let ManualParams::MerkleClaims(config) = params {
+                    if config.max_claimable_amount > config.claimed_amount {
+                        return err!(ExtError::InvalidParam);
+                    }
+                    // Because this is a new extension (to this program),
+                    // the ext_index applicable to the root must be
+                    // less than or equal to the starting ext_index
+                    // which is 1e12 (aka 1.0)
+                    if config.root_ext_index > INDEX_SCALE_U64 {
+                        return err!(ExtError::InvalidParam);
+                    }
+                }
+            }
             _ => {}
         }
 
@@ -200,17 +219,12 @@ impl<'info> InitializeExt<'info> {
         // Construct the YieldConfig
         let yield_config = match yield_params {
             YieldParams::None => YieldConfig::None,
-            YieldParams::Crank(earn_authority) => YieldConfig::Crank(CrankConfig {
+            YieldParams::Manual(params) => YieldConfig::Manual(CrankConfig {
                 earn_authority,
-                last_m_index: ctx.accounts.m_earn_global_account.index,
-                last_ext_index: INDEX_SCALE_U64,
-                last_timestamp: ctx.accounts.m_earn_global_account.timestamp,
-            }),
-            YieldParams::MerkleClaims(earn_authority) => YieldConfig::MerkleClaims(MerkleConfig {
-                earn_authority,
-                last_m_index: ctx.accounts.m_earn_global_account.index,
-                last_ext_index: INDEX_SCALE_U64,
-                last_timestamp: ctx.accounts.m_earn_global_account.timestamp,
+                m_index: ctx.accounts.m_earn_global_account.index,
+                ext_index: INDEX_SCALE_U64,
+                timestamp: ctx.accounts.m_earn_global_account.timestamp,
+                manual_type: params.manual_type,
             }),
             YieldParams::Rebasing(params) => YieldConfig::Rebasing(RebasingConfig {
                 rebasing_type: params.rebasing_type,

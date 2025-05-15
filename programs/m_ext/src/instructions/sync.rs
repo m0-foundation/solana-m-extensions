@@ -77,13 +77,8 @@ impl<'info> Sync<'info> {
     fn validate(&self) -> Result<()> {
         match &self.ext_config.yield_config {
             // Some yield distributions methods require the sync instruction to be permissioned
-            YieldConfig::Crank(crank_config) => {
-                if self.signer.key() != crank_config.earn_authority {
-                    return err!(ExtError::NotAuthorized);
-                }
-            }
-            YieldConfig::MerkleClaims(merkle_config) => {
-                if self.signer.key() != merkle_config.earn_authority {
+            YieldConfig::Manual(manual_config) => {
+                if self.signer.key() != manual_config.earn_authority {
                     return err!(ExtError::NotAuthorized);
                 }
             }
@@ -94,19 +89,14 @@ impl<'info> Sync<'info> {
     }
 
     #[access_control(ctx.accounts.validate())]
-    pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, amount_m: u64) -> Result<()> {
+    pub fn handler(ctx: Context<Self>) -> Result<()> {
         match &mut ctx.accounts.ext_config.yield_config {
             YieldConfig::None => {
                 // no sync required
             }
-            YieldConfig::Crank(crank_config) => {
+            YieldConfig::Manual(manual_config) => {
                 // sync the extension if required
-                crank_config.sync(&ctx.accounts.m_earn_global_account)?;
-            }
-            YieldConfig::MerkleClaims(merkle_config) => {
-                // sync the extension if required
-                // merkle_config.sync(ctx)?;
-                // TODO figure out the right pattern for these
+                manual_config.sync(&ctx.accounts.m_earn_global_account)?;
             }
             YieldConfig::Rebasing(rebasing_config) => {
                 // sync the extension if required

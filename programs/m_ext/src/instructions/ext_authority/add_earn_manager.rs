@@ -36,24 +36,25 @@ pub struct AddEarnManager<'info> {
 }
 
 impl<'info> AddEarnManager<'info> {
-    fn validate(&self) -> Result<()> {
+    fn validate(&self, fee_bps: u64) -> Result<()> {
         // Revert if extension does not support earner accounts
         match self.ext_config.yield_config {
-            YieldConfig::Crank(_) => {}
-            YieldConfig::MerkleClaims(_) => {}
+            YieldConfig::Manual(_) => {}
             _ => {
                 return err!(ExtError::InstructionNotSupported);
             }
         }
 
-        Ok(())
-    }
-    #[access_control(ctx.accounts.validate())]
-    pub fn handler(ctx: Context<Self>, earn_manager: Pubkey, fee_bps: u64) -> Result<()> {
+        // Revert if fee_bps is greater than 100%
         if fee_bps > ONE_HUNDRED_PERCENT_U64 {
             return err!(ExtError::InvalidParam);
         }
 
+        Ok(())
+    }
+
+    #[access_control(ctx.accounts.validate(fee_bps))]
+    pub fn handler(ctx: Context<Self>, earn_manager: Pubkey, fee_bps: u64) -> Result<()> {
         ctx.accounts.earn_manager_account.set_inner(EarnManager {
             earn_manager,
             is_active: true,

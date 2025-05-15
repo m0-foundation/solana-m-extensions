@@ -46,8 +46,7 @@ impl<'info> TransferEarner<'info> {
     fn validate(&self) -> Result<()> {
         // Revert if extension does not support earner accounts
         match self.ext_config.yield_config {
-            YieldConfig::Crank(_) => {}
-            YieldConfig::MerkleClaims(_) => {}
+            YieldConfig::Manual(_) => {}
             _ => {
                 return err!(ExtError::InstructionNotSupported);
             }
