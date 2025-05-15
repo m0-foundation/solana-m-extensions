@@ -841,6 +841,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "earn"
+version = "0.1.0"
+source = "git+https://github.com/m0-foundation/solana-m?branch=solana-v2-earner-rate#f9b7a24f3d2a532910ebdc1e1e9f601ee84a8cfe"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "cfg-if",
+ "solana-program",
+ "solana-security-txt",
+ "spl-token-2022 7.0.0",
+]
+
+[[package]]
 name = "ed25519"
 version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -886,15 +899,6 @@ name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
-
-[[package]]
-name = "example_custom"
-version = "0.1.0"
-dependencies = [
- "anchor-lang",
- "m_ext_interface",
- "spl-discriminator",
-]
 
 [[package]]
 name = "feature-probe"
@@ -1174,7 +1178,6 @@ dependencies = [
  "spl-discriminator",
  "spl-pod",
  "spl-tlv-account-resolution",
- "spl-transfer-hook-interface",
  "thiserror 2.0.12",
 ]
 
@@ -1533,7 +1536,7 @@ dependencies = [
  "anchor-lang",
  "anchor-spl",
  "cfg-if",
- "earn",
+ "earn 0.1.0 (git+https://github.com/m0-foundation/solana-m?branch=solana-2.1.0)",
  "solana-program",
  "solana-security-txt",
  "spl-token-2022 7.0.0",
@@ -2866,6 +2869,20 @@ checksum = "fc1de2c688dc15305988b563c3854064043356019f97a4b46276fe734c4f07ea"
 dependencies = [
  "crypto-common",
  "subtle",
+]
+
+[[package]]
+name = "unwrap_fee_example"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "earn 0.1.0 (git+https://github.com/m0-foundation/solana-m?branch=solana-v2-earner-rate)",
+ "m_ext_interface",
+ "scaled_ui_ext",
+ "solana-program",
+ "spl-discriminator",
+ "spl-token-2022 7.0.0",
 ]
 
 [[package]]

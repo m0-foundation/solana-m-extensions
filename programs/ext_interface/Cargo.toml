@@ -7,7 +7,6 @@ edition = "2024"
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
-spl-transfer-hook-interface.workspace = true
 spl-discriminator.workspace = true
 spl-tlv-account-resolution.workspace = true
 solana-program.workspace = true
