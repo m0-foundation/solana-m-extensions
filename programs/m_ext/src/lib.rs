@@ -31,33 +31,33 @@ pub mod m_ext {
 
     // Admin instructions
 
-    pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
-        instructions::initialize::handler(ctx, wrap_authorities)
-    }
+    // pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
+    //     instructions::initialize::handler(ctx, wrap_authorities)
+    // }
 
-    pub fn set_m_mint(ctx: Context<SetMMint>) -> Result<()> {
-        instructions::set_m_mint::handler(ctx)
-    }
+    // pub fn set_m_mint(ctx: Context<SetMMint>) -> Result<()> {
+    //     instructions::set_m_mint::handler(ctx)
+    // }
 
-    pub fn update_wrap_authority(
-        ctx: Context<UpdateWrapAuthority>,
-        index: u8,
-        new_wrap_authority: Pubkey,
-    ) -> Result<()> {
-        instructions::update_wrap_authority::handler(ctx, index, new_wrap_authority)
-    }
+    // pub fn update_wrap_authority(
+    //     ctx: Context<UpdateWrapAuthority>,
+    //     index: u8,
+    //     new_wrap_authority: Pubkey,
+    // ) -> Result<()> {
+    //     instructions::update_wrap_authority::handler(ctx, index, new_wrap_authority)
+    // }
 
     // User instructions
-    pub fn swap(ctx: Context<Swap>, amount: u64) -> Result<()> {
-        instructions::swap::handler(ctx, amount)
+    pub fn swap(ctx: Context<Swap>, amount_m: u64) -> Result<()> {
+        instructions::swap::handler(ctx, amount_m)
     }
 
     pub fn wrap<'info>(ctx: Context<'_, '_, '_, 'info, Wrap<'info>>, amount_m: u64) -> Result<()> {
         Wrap::handler(ctx, amount_m)
     }
 
-    pub fn unwrap(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
-        instructions::unwrap::handler(ctx, amount)
+    pub fn unwrap(ctx: Context<Unwrap>, amount_m: u64) -> Result<()> {
+        instructions::unwrap::handler(ctx, amount_m)
     }
 
     pub fn sync(ctx: Context<Sync>) -> Result<()> {

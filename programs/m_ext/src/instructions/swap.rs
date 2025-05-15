@@ -4,8 +4,8 @@ use crate::{
     errors::ExtError,
     state::{
         Config, CONFIG_SEED,
-        ExtGlobal, EXT_GLOBAL_SEED_PREFIX,
-        EXT_MINT_AUTHORITY_SEED_PREFIX,
+        ExtConfig, EXT_CONFIG_SEED_PREFIX,
+        MINT_AUTHORITY_SEED_PREFIX,
         M_VAULT_SEED_PREFIX,
     },
     utils::{
@@ -43,10 +43,10 @@ pub struct Swap<'info> {
     #[account(
         mut,
         has_one = from_ext_mint,
-        seeds = [EXT_GLOBAL_SEED_PREFIX, from_ext_mint.key().as_ref()],
+        seeds = [EXT_CONFIG_SEED_PREFIX, from_ext_mint.key().as_ref()],
         bump = from_ext_global.bump,
     )]
-    pub from_ext_global: Account<'info, ExtGlobal>,
+    pub from_ext_config: Account<'info, ExtConfig>,
 
     /// CHECK: The account is checked by the seeds and holds no data.
     #[account(
@@ -61,10 +61,10 @@ pub struct Swap<'info> {
     #[account(
         mut,
         has_one = to_ext_mint,
-        seeds = [EXT_GLOBAL_SEED_PREFIX, to_ext_mint.key().as_ref()],
+        seeds = [EXT_CONFIG_SEED_PREFIX, to_ext_mint.key().as_ref()],
         bump = to_ext_global.bump,
     )]
-    pub to_ext_global: Account<'info, ExtGlobal>,
+    pub to_ext_config: Account<'info, ExtConfig>,
 
     #[account(
         seeds = [M_VAULT_SEED_PREFIX, to_ext_mint.key().as_ref()],
@@ -74,7 +74,7 @@ pub struct Swap<'info> {
 
     /// CHECK: The account is checked by the seeds and holds no data.
     #[account(
-        seeds = [EXT_MINT_AUTHORITY_SEED_PREFIX, to_ext_mint.key().as_ref()],
+        seeds = [MINT_AUTHORITY_SEED_PREFIX, to_ext_mint.key().as_ref()],
         bump = to_ext_global.ext_mint_authority_bump,  
     )]
     pub to_ext_mint_authority: AccountInfo<'info>,
@@ -116,99 +116,157 @@ pub struct Swap<'info> {
     pub to_ext_token_program: Program<'info, TokenInterface>,
 }
 
-pub fn handler(ctx: Context<Swap>, amount: u64) -> Result<()> {
-    // Check access permissions for the signer on both tokens
-    // TODO should we check the recipient on the to token account instead?
-
-    match ctx.accounts.from_ext_global.ext_access {
-        ExtAccess::Open => {},
-        ExtAccess::Finite(ext_finite) => {
-            // Check if the user is allowed to swap
-            if !ext_finite.wrap_authorities.contains(&ctx.accounts.user.key()) {
-                return err!(ExtError::Unauthorized);
+impl<'info> Swap<'info> {
+    fn validate(&self) -> Result<()> {
+        match ctx.accounts.from_ext_global.ext_access {
+            ExtAccess::Open => {},
+            ExtAccess::Finite(ext_finite) => {
+                // Check if the user is allowed to swap
+                if !ext_finite.wrap_authorities.contains(&ctx.accounts.user.key()) {
+                    return err!(ExtError::Unauthorized);
+                }
             }
         }
-    }
 
-    match ctx.accounts.to_ext_global.ext_access {
-        ExtAccess::Open => {},
-        ExtAccess::Finite(ext_finite) => {
-            // Check if the user is allowed to swap
-            if !ext_finite.wrap_authorities.contains(&ctx.accounts.user.key()) {
-                return err!(ExtError::Unauthorized);
+        // TODO should we check the recipient or the signer here?
+        match ctx.accounts.to_ext_global.ext_access {
+            ExtAccess::Open => {},
+            ExtAccess::Finite(ext_finite) => {
+                // Check if the user is allowed to swap
+                if !ext_finite.wrap_authorities.contains(&ctx.accounts.user.key()) {
+                    return err!(ExtError::Unauthorized);
+                }
             }
         }
+
+        Ok(())
     }
 
-    // Burn the from token's from the user's token account
-    let from_amount = match ctx.accounts.from_ext_global.ext_yield {
-        ExtYield::Rebasing(_) => {
-            let multiplier = sync_multiplier(
-                &mut ctx.accounts.from_ext_mint,
-                &mut ctx.accounts.m_earn_global_account,
-                &ctx.accounts.from_ext_mint_authority,
-                &[&[
-                    EXT_MINT_AUTHORITY_SEED_PREFIX,
-                    ctx.accounts.from_ext_mint.key().as_ref(),
-                    &[ctx.accounts.from_ext_global.ext_mint_authority_bump],
-                ]],
-                &ctx.accounts.from_ext_token_program,
-            )?;
-            amount_to_principal_up(amount, multiplier)
-        },
-        _ => amount
-    };
-    burn_tokens(
-        &ctx.accounts.from_user_token_account,
-        from_amount,
-        &ctx.accounts.from_ext_mint,
-        &ctx.accounts.user,
-        &ctx.accounts.from_ext_token_program,
-    )?;
+    #[access_control(ctx.accounts.validate())]
+    pub fn handler(ctx: Context<Swap>, amount_m: u64) -> Result<()> {
+        // Order:
+        // 1. sync from token or call unwrap hook
+        // 2. sync to token or call wrap hook
+        // 3. burn from token
+        // 4. transfer M from from vault to to vault
+        // 5. mint to token
 
-    // Transfer M from the from ext m vault to the to ext m vault
-    transfer_tokens_from_program(
-        &ctx.accounts.from_m_vault_token_account,
-        &ctx.accounts.to_m_vault_token_account,
-        amount,
-        &ctx.accounts.m_mint,
-        &ctx.accounts.from_m_vault,
-        &[&[
-            M_VAULT_SEED_PREFIX,
-            ctx.accounts.from_ext_mint.key().as_ref(),
-            &[ctx.accounts.from_ext_global.m_vault_bump],
-        ]],
-        &ctx.accounts.m_token_program,
-    )?;
+        // sync from token or call unwrap hook
+        // get the from multiplier
+        let from_multiplier = match ctx.accounts.from_ext_config.yield_config {
+            YieldConfig::Rebasing(rebasing_config) => {
+                // sync the extension if required and return the conversion rate (aka multiplier)
+                rebasing_config.sync(
+                    &mut ctx.accounts.from_ext_mint,
+                    &mut ctx.accounts.m_earn_global_account,
+                    &ctx.accounts.from_ext_mint_authority,
+                    &[&[
+                        MINT_AUTHORITY_SEED_PREFIX,
+                        ctx.accounts.from_ext_mint.key().as_ref(),
+                        &[ctx.accounts.from_ext_global.ext_mint_authority_bump],
+                    ]],
+                    &ctx.accounts.from_ext_token_program,
+                )?.get()
+            },
+            YieldConfig::Custom(custom_config) => {
+                if custom_config.unwrap_hook {
+                    // custom extensions may implement a unwrap hook to perform custom logic
+                    // and/or be able to provide a conversion rate (aka multiplier)
+                    // if the ratio is not 1:1 between m and ext tokens
+                    // if no unwrap hook is provided, we assume a 1:1 ratio
+                    custom_config.unwrap_hook(ctx)? // TODO need to implement
+                } else {
+                    // if no unwrap hook is provided, we assume a 1:1 ratio
+                    MULTIPLIER_SCALE
+                }
+            },
+            _ => {
+                MULTIPLIER_SCALE
+            }
+        };
 
-    // Mint the to token to the to token account
-    let to_amount = match ctx.accounts.to_ext_global.ext_yield {
-        ExtYield::Rebasing(_) => {
-            let multiplier = sync_multiplier(
-                &mut ctx.accounts.to_ext_mint,
-                &mut ctx.accounts.m_earn_global_account,
-                &ctx.accounts.to_ext_mint_authority,
-                &[&[
-                    EXT_MINT_AUTHORITY_SEED_PREFIX,
-                    ctx.accounts.to_ext_mint.key().as_ref(),
-                    &[ctx.accounts.to_ext_global.ext_mint_authority_bump],
-                ]],
-                &ctx.accounts.to_ext_token_program,
-            )?;
-            amount_to_principal_down(amount, multiplier)
-        },
-        _ => amount
-    };
-    mint_tokens(
-        &ctx.accounts.to_user_token_account,
-        to_amount,
-        &ctx.accounts.to_ext_mint,
-        &ctx.accounts.to_ext_mint_authority,
-        &[&[
-            EXT_MINT_AUTHORITY_SEED_PREFIX,
-            ctx.accounts.to_ext_mint.key().as_ref(),
-            &[ctx.accounts.to_ext_global.ext_mint_authority_bump],
-        ]],
-        &ctx.accounts.to_ext_token_program,
-    )?;
+        // sync to token or call wrap hook
+        // get the to multiplier
+        let to_multiplier = match ctx.accounts.to_ext_config.yield_config {
+            YieldConfig::Rebasing(rebasing_config) => {
+                // sync the extension if required and return the conversion rate (aka multiplier)
+                rebasing_config.sync(
+                    &mut ctx.accounts.to_ext_mint,
+                    &mut ctx.accounts.m_earn_global_account,
+                    &ctx.accounts.to_ext_mint_authority,
+                    &[&[
+                        MINT_AUTHORITY_SEED_PREFIX,
+                        ctx.accounts.to_ext_mint.key().as_ref(),
+                        &[ctx.accounts.to_ext_global.ext_mint_authority_bump],
+                    ]],
+                    &ctx.accounts.to_ext_token_program,
+                )?.get()
+            },
+            YieldConfig::Custom(custom_config) => {
+                if custom_config.wrap_hook {
+                    // custom extensions may implement a wrap hook to perform custom logic
+                    // and/or be able to provide a conversion rate (aka multiplier)
+                    // if the ratio is not 1:1 between m and ext tokens
+                    // if no wrap hook is provided, we assume a 1:1 ratio
+                    custom_config.wrap_hook(ctx)? // TODO need to implement
+                } else {
+                    // if no wrap hook is provided, we assume a 1:1 ratio
+                    MULTIPLIER_SCALE
+                }
+            },
+            _ => {
+                MULTIPLIER_SCALE
+            }
+        };
+        
+
+        // Burn the from token's from the user's token account
+        let mut amount_from = amount_to_principal_up(amount_m, multiplier)?;
+        // Decrease by 1 if rounding error causes user to not be able to swap
+        // whole balance.
+        if from_amount - 1 == ctx.accounts.from_ext_token_account.amount {
+            from_amount = ctx.accounts.from_ext_token_account.amount;
+        }
+
+        burn_tokens(
+            &ctx.accounts.from_user_token_account,
+            from_amount,
+            &ctx.accounts.from_ext_mint,
+            &ctx.accounts.user,
+            &ctx.accounts.from_ext_token_program,
+        )?;
+
+        // Transfer M from the from ext m vault to the to ext m vault
+        transfer_tokens_from_program(
+            &ctx.accounts.from_m_vault_token_account,
+            &ctx.accounts.to_m_vault_token_account,
+            amount,
+            &ctx.accounts.m_mint,
+            &ctx.accounts.from_m_vault,
+            &[&[
+                M_VAULT_SEED_PREFIX,
+                ctx.accounts.from_ext_mint.key().as_ref(),
+                &[ctx.accounts.from_ext_global.m_vault_bump],
+            ]],
+            &ctx.accounts.m_token_program,
+        )?;
+
+        // Mint the to token to the to token account
+        let to_amount = amount_to_principal_down(amount_from, to_multiplier)?;
+
+        mint_tokens(
+            &ctx.accounts.to_user_token_account,
+            to_amount,
+            &ctx.accounts.to_ext_mint,
+            &ctx.accounts.to_ext_mint_authority,
+            &[&[
+                MINT_AUTHORITY_SEED_PREFIX,
+                ctx.accounts.to_ext_mint.key().as_ref(),
+                &[ctx.accounts.to_ext_global.ext_mint_authority_bump],
+            ]],
+            &ctx.accounts.to_ext_token_program,
+        )?;
+
+        Ok(())
+    }
 }

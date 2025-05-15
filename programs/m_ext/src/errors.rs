@@ -18,4 +18,8 @@ pub enum ExtError {
     InvalidMint,
     #[msg("Invalid Token Program.")]
     InvalidTokenProgram,
+    #[msg("Extension configuration does not support instruction.")]
+    InstructionNotSupported,
+    #[msg("Already claimed for user.")]
+    AlreadyClaimed,
 }

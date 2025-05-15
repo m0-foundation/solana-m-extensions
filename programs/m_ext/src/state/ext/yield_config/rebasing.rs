@@ -4,7 +4,10 @@ use anchor_lang::prelude::{
 };
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount, TokenInterface};
 
-use crate::errors::ExtError;
+use crate::{
+    constants::{INDEX_SCALE_F64, ONE_HUNDRED_PERCENT_F64},
+    errors::ExtError,
+};
 
 use earn::state::Global as EarnGlobal;
 use solana_program::program::invoke_signed;
@@ -12,11 +15,6 @@ use spl_token_2022::extension::{
     scaled_ui_amount::{PodF64, ScaledUiAmountConfig, UnixTimestamp},
     BaseStateWithExtensions, StateWithExtensions,
 };
-
-pub const INDEX_SCALE_F64: f64 = 1e12;
-pub const INDEX_SCALE_U64: u64 = 1_000_000_000_000;
-pub const ONE_HUNDRED_PERCENT_F64: f64 = 1e4;
-pub const ONE_HUNDRED_PERCENT_U64: u64 = 100_00;
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, InitSpace)]
 pub enum RebasingType {

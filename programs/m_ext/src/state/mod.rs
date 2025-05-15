@@ -1,8 +1,10 @@
 pub mod config;
+pub mod earn_manager;
 pub mod earner;
 pub mod ext;
 
 pub use config::*;
+pub use earn_manager::*;
 pub use earner::*;
 pub use ext::*;
 

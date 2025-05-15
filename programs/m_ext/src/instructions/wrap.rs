@@ -100,6 +100,12 @@ impl<'info> Wrap<'info> {
 
     #[access_control(ctx.accounts.validate())]
     pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, amount_m: u64) -> Result<()> {
+        let ext_mint_authority_seeds: &[&[&[u8]]] = &[&[
+            MINT_AUTHORITY_SEED_PREFIX,
+            ctx.accounts.ext_mint.key().as_ref(),
+            &[ctx.accounts.ext_config.ext_mint_authority_bump],
+        ]];
+
         let amount_ext = match ctx.accounts.ext_config.yield_config {
             YieldConfig::Rebasing(rebasing_config) => {
                 // most yield distribution methods maintain 1:1 ratio
@@ -107,7 +113,13 @@ impl<'info> Wrap<'info> {
                 // on the token accounts even though it is displayed that way on the UI
 
                 // sync the extension if required and return the conversion rate (aka multiplier)
-                let multiplier = rebasing_config.sync(ctx)?;
+                let multiplier = rebasing_config.sync(
+                    &mut ctx.accounts.ext_mint,
+                    &ctx.accounts.m_earn_global_account,
+                    &ctx.accounts.ext_mint_authority,
+                    ext_mint_authority_seeds,
+                    &ctx.accounts.m_token_program,
+                )?;
 
                 // calculate the amount of ext tokens to mint and return
                 amount_to_principal_down(amount_m, multiplier)?
@@ -146,11 +158,7 @@ impl<'info> Wrap<'info> {
             amount_ext,                         // amount
             &ctx.accounts.ext_mint,             // mint
             &ctx.accounts.ext_mint_authority,   // authority
-            &[&[
-                MINT_AUTHORITY_SEED_PREFIX,
-                ctx.accounts.ext_mint.key().as_ref(),
-                &[ctx.accounts.ext_config.ext_mint_authority_bump],
-            ]], // authority seeds
+            ext_mint_authority_seeds,           // authority seeds
             &ctx.accounts.ext_token_program,    // token program
         )?;
 

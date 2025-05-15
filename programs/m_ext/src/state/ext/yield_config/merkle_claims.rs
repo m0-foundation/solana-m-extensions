@@ -5,7 +5,8 @@ use anchor_lang::prelude::{
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, InitSpace)]
 pub struct MerkleClaimsConfig {
-    pub merkle_root: Pubkey,
+    pub earn_authority: Pubkey,
+    pub merkle_root: [u8; 32],
     pub fee_bps: u64, // TODO move this to earn manager to allow multiple fee tiers
     pub last_m_index: u64,
     pub last_ext_index: u64,
