@@ -557,9 +557,9 @@ dependencies = [
 
 [[package]]
 name = "bytemuck"
-version = "1.22.0"
+version = "1.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6b1fc10dbac614ebc03540c9dbd60e83887fda27794998c6528f1782047d540"
+checksum = "9134a6ef01ce4b366b50689c94f82c14bc72bc5d0386829828a2e2752ef7958c"
 dependencies = [
  "bytemuck_derive",
 ]
@@ -888,6 +888,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
+name = "example_custom"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "m_ext_interface",
+ "spl-discriminator",
+]
+
+[[package]]
 name = "feature-probe"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1154,6 +1163,20 @@ name = "log"
 version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
+
+[[package]]
+name = "m_ext_interface"
+version = "0.1.0"
+dependencies = [
+ "num-derive",
+ "num-traits",
+ "solana-program",
+ "spl-discriminator",
+ "spl-pod",
+ "spl-tlv-account-resolution",
+ "spl-transfer-hook-interface",
+ "thiserror 2.0.12",
+]
 
 [[package]]
 name = "memchr"
