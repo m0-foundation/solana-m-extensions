@@ -18,7 +18,7 @@ idl-build = ["anchor-lang/idl-build"]
 
 
 [dependencies]
-anchor-lang = {version = "0.31.1", features = ["interface-instructions"]}
+anchor-lang.workspace = true
 anchor-spl = "0.31.1"
 solana-program.workspace = true
 m_ext_interface = {path = "../ext_interface"}

@@ -14,7 +14,7 @@ pub struct ExtGlobal {
     pub m_earn_global_account: Pubkey, // m earn global account
     pub fee_bps: u64,
     pub last_m_index: u64,
-    pub last_ext_index: u64,    
+    pub last_ext_index: u64,
     pub bump: u8,
     pub m_vault_bump: u8,
     pub ext_mint_authority_bump: u8,

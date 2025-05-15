@@ -24,23 +24,17 @@ pub struct Unwrap<'info> {
     #[account(mut)]
     pub mint: InterfaceAccount<'info, Mint>,
 
-    #[account(
-        seeds = [WRAP_CONFIG_SEED],
-        bump = wrap_config.bump,
-    )]
-    pub wrap_config: Account<'info, WrapConfig>,
-
-    pub m_global_account: Account<'info, EarnGlobal>,
-
-    /// CHECK: TODO: Add vault seeds
-    pub m_vault: AccountInfo<'info>,
-
     /// CHECK: This account is validated by the seed
     #[account(
         seeds = [MINT_AUTH_SEED],
         bump
     )]
     pub mint_authority: AccountInfo<'info>,
+
+    pub m_global_account: Account<'info, EarnGlobal>,
+
+    /// CHECK: TODO: Add vault seeds
+    pub m_vault: AccountInfo<'info>,
 
     #[account(
         mut,
@@ -68,6 +62,16 @@ pub struct Unwrap<'info> {
     /// CHECK: This account is validated by address
     #[account(address = Pubkey::from_str("Sysvar1nstructions1111111111111111111111111").unwrap())]
     pub sysvar_instructions_account: AccountInfo<'info>,
+
+    #[account(seeds = [b"extra-account-metas", mint.key().as_ref()], bump)]
+    pub extra_account_metas: UncheckedAccount<'info>,
+
+    /// Account from ExtraAccountMetas
+    #[account(
+        seeds = [WRAP_CONFIG_SEED],
+        bump = wrap_config.bump,
+    )]
+    pub wrap_config: Account<'info, WrapConfig>,
 }
 
 impl Unwrap<'_> {

@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use earn::state::Global as EarnGlobal;
+use m_ext_interface::state::ExtraAccountMetas;
 use scaled_ui_ext::utils::{
     conversion::amount_to_principal_down,
     token::{mint_tokens, transfer_tokens},
@@ -24,23 +25,17 @@ pub struct Wrap<'info> {
     #[account(mut)]
     pub mint: InterfaceAccount<'info, Mint>,
 
-    #[account(
-        seeds = [WRAP_CONFIG_SEED],
-        bump = wrap_config.bump,
-    )]
-    pub wrap_config: Account<'info, WrapConfig>,
-
-    pub m_global_account: Account<'info, EarnGlobal>,
-
-    /// CHECK: TODO: Add vault seeds
-    pub m_vault: AccountInfo<'info>,
-
     /// CHECK: This account is validated by the seed
     #[account(
         seeds = [MINT_AUTH_SEED],
         bump
     )]
     pub mint_authority: AccountInfo<'info>,
+
+    pub m_global_account: Account<'info, EarnGlobal>,
+
+    /// CHECK: TODO: Add vault seeds
+    pub m_vault: AccountInfo<'info>,
 
     #[account(
         mut,
@@ -68,6 +63,21 @@ pub struct Wrap<'info> {
     /// CHECK: This account is validated by address
     #[account(address = Pubkey::from_str("Sysvar1nstructions1111111111111111111111111").unwrap())]
     pub sysvar_instructions_account: AccountInfo<'info>,
+
+    #[account(
+        seeds = [b"extra-account-metas", mint.key().as_ref()],
+        constraint = extra_account_metas.extra_accounts.len() > 0,
+        bump
+    )]
+    pub extra_account_metas: InterfaceAccount<'info, ExtraAccountMetas>,
+
+    /// Account from ExtraAccountMetas
+    #[account(
+        address = Pubkey::new_from_array(extra_account_metas.extra_accounts[0].address_config),
+        seeds = [WRAP_CONFIG_SEED],
+        bump = wrap_config.bump,
+    )]
+    pub wrap_config: Account<'info, WrapConfig>,
 }
 
 impl Wrap<'_> {
