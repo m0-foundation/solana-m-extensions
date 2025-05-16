@@ -69,6 +69,11 @@ pub mod m_ext {
         SetEarnAuthority::handler(ctx, new_earn_authority)
     }
 
+    // only YieldConfig::Rebasing, YieldConfig::None
+    pub fn claim_excess(ctx: Context<ClaimExcess>) -> Result<()> {
+        ClaimExcess::handler(ctx)
+    }
+
     // Earn Manager instructions (only YieldConfig::Manual)
 
     pub fn add_earner(ctx: Context<AddEarner>, user: Pubkey) -> Result<()> {
