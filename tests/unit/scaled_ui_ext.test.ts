@@ -1151,7 +1151,7 @@ const sync = async () => {
   return globalAccount;
 };
 
-const prepclaimFees = async (signer: Keypair, toTokenAccount?: PublicKey) => {
+const prepClaimFees = async (signer: Keypair, toTokenAccount?: PublicKey) => {
   // Get the global PDA
   const globalAccount = getExtGlobalAccount();
 
@@ -1160,7 +1160,6 @@ const prepclaimFees = async (signer: Keypair, toTokenAccount?: PublicKey) => {
   accounts.admin = signer.publicKey;
   accounts.globalAccount = globalAccount;
   accounts.mEarnGlobalAccount = getEarnGlobalAccount();
-  accounts.mMint = mMint.publicKey;
   accounts.extMint = extMint.publicKey;
   accounts.extMintAuthority = getExtMintAuthority();
   accounts.mVault = getMVault();
@@ -1169,8 +1168,8 @@ const prepclaimFees = async (signer: Keypair, toTokenAccount?: PublicKey) => {
     accounts.mVault,
     true
   );
-  accounts.recipientMTokenAccount =
-    toTokenAccount ?? (await getATA(mMint.publicKey, signer.publicKey, true));
+  accounts.recipientExtTokenAccount =
+    toTokenAccount ?? (await getATA(extMint.publicKey, signer.publicKey, true));
   accounts.token2022 = TOKEN_2022_PROGRAM_ID;
 
   return { globalAccount };
@@ -1178,7 +1177,7 @@ const prepclaimFees = async (signer: Keypair, toTokenAccount?: PublicKey) => {
 
 const claimFees = async (toTokenAccount?: PublicKey) => {
   // Setup the instruction
-  const { globalAccount } = await prepclaimFees(admin, toTokenAccount);
+  const { globalAccount } = await prepClaimFees(admin, toTokenAccount);
 
   // Send the instruction
   await scaledUiExt.methods
@@ -1994,8 +1993,6 @@ describe("ScaledUiExt unit tests", () => {
       //     [X] it reverts with a ConstraintSeeds error
       //   [X] given the m vault token account is not the m vault PDA's ATA
       //     [X] it reverts with a ConstraintAssociated error
-      //   [X] given the m mint does not match the one on the global account
-      //     [X] it reverts with an InvalidMint error
       //   [X] given the ext mint does not match the one on the global account
       //     [X] it reverts with an InvalidMint error
       //   [X] given the ext mint authority is not the ext mint authority PDA
@@ -2049,7 +2046,7 @@ describe("ScaledUiExt unit tests", () => {
       // it reverts with a NotAuthorized error
       test("admin does not sign - reverts", async () => {
         // Setup the instruction
-        await prepclaimFees(nonAdmin);
+        await prepClaimFees(nonAdmin);
 
         // Attempt to send the transaction
         await expectAnchorError(
@@ -2066,7 +2063,7 @@ describe("ScaledUiExt unit tests", () => {
       // it reverts with a ConstraintSeeds error
       test("m vault is not the m vault PDA - reverts", async () => {
         // Setup the instruction
-        await prepclaimFees(admin);
+        await prepClaimFees(admin);
 
         // Change the m vault
         accounts.mVault = PublicKey.unique();
@@ -2092,7 +2089,7 @@ describe("ScaledUiExt unit tests", () => {
         );
 
         // Setup the instruction
-        await prepclaimFees(admin);
+        await prepClaimFees(admin);
         accounts.vaultMTokenAccount = nonAtaAccount;
 
         // Attempt to send the transaction
@@ -2106,28 +2103,6 @@ describe("ScaledUiExt unit tests", () => {
         );
       });
 
-      // given the m mint does not match the one on the global account
-      // it reverts with an InvalidMint error
-      test("m mint does not match global account - reverts", async () => {
-        // Create a new mint
-        const wrongMint = new Keypair();
-        await createMint(wrongMint, nonAdmin.publicKey, true, 6);
-
-        // Setup the instruction
-        await prepclaimFees(admin);
-        accounts.mMint = wrongMint.publicKey;
-
-        // Attempt to send the transaction
-        await expectAnchorError(
-          scaledUiExt.methods
-            .claimFees()
-            .accountsPartial({ ...accounts })
-            .signers([admin])
-            .rpc(),
-          "InvalidMint"
-        );
-      });
-
       // given the ext mint does not match the one on the global account
       // it reverts with an InvalidMint error
       test("ext mint does not match global account - reverts", async () => {
@@ -2136,7 +2111,7 @@ describe("ScaledUiExt unit tests", () => {
         await createMint(wrongMint, nonAdmin.publicKey, true, 6);
 
         // Setup the instruction
-        await prepclaimFees(admin);
+        await prepClaimFees(admin);
         accounts.extMint = wrongMint.publicKey;
 
         // Attempt to send the transaction
@@ -2154,7 +2129,7 @@ describe("ScaledUiExt unit tests", () => {
       // it reverts with a ConstraintSeeds error
       test("ext mint authority is not the ext mint authority PDA - reverts", async () => {
         // Setup the instruction
-        await prepclaimFees(admin);
+        await prepClaimFees(admin);
 
         // Change the ext mint authority
         accounts.extMintAuthority = PublicKey.unique();
@@ -2174,7 +2149,7 @@ describe("ScaledUiExt unit tests", () => {
       // it reverts with a InvalidAccount error
       test("m earn global account does not match global account - reverts", async () => {
         // Setup the instruction
-        await prepclaimFees(admin);
+        await prepClaimFees(admin);
 
         // Change the m earn global account
         accounts.mEarnGlobalAccount = PublicKey.unique();
@@ -2189,17 +2164,17 @@ describe("ScaledUiExt unit tests", () => {
         );
       });
 
-      // given the recipient token account is not a token account for the m mint
+      // given the recipient token account is not a token account for the ext mint
       // it reverts with a ConstraintTokenMint error
-      test("recipient token account is not for m mint - reverts", async () => {
-        // Create a token account for the ext mint
+      test("recipient token account is not for ext mint - reverts", async () => {
+        // Create a token account for the m mint
         const wrongTokenAccount = await getATA(
-          extMint.publicKey,
+          mMint.publicKey,
           admin.publicKey
         );
 
         // Setup the instruction
-        await prepclaimFees(admin, wrongTokenAccount);
+        await prepClaimFees(admin, wrongTokenAccount);
 
         // Attempt to send the transaction
         await expectAnchorError(
@@ -2233,8 +2208,7 @@ describe("ScaledUiExt unit tests", () => {
 
         // Cache balances before claim excess
         const initialVaultBalance = await getTokenBalance(mVaultATA);
-        const recipientATA = await getATA(mMint.publicKey, admin.publicKey);
-        const initialRecipientBalance = await getTokenBalance(recipientATA);
+        const recipientATA = await getATA(extMint.publicKey, admin.publicKey);
 
         // Get the global state before the update and calculate the expected excess
         const globalState = await scaledUiExt.account.extGlobal.fetch(
@@ -2245,6 +2219,12 @@ describe("ScaledUiExt unit tests", () => {
           (globalState.lastExtIndex.toNumber() / 1e12) *
           (newIndex.toNumber() / globalState.lastMIndex.toNumber()) **
             (1 - fee_bps.toNumber() / 1e4);
+
+        const initialRecipientPrincipal = await getTokenBalance(recipientATA);
+        const initialRecipientBalance = await getTokenUiBalance(
+          recipientATA,
+          multiplier
+        );
 
         const extSupply = await getMint(
           provider.connection,
@@ -2258,9 +2238,12 @@ describe("ScaledUiExt unit tests", () => {
         );
 
         const expectedExcess = initialVaultBalance.sub(requiredCollateral);
+        const expectedExcessPrincipal = new BN(
+          Math.floor(Number(expectedExcess) / multiplier)
+        );
 
         // Setup and execute the instruction
-        await prepclaimFees(admin);
+        await prepClaimFees(admin);
         await scaledUiExt.methods
           .claimFees()
           .accountsPartial({ ...accounts })
@@ -2277,13 +2260,17 @@ describe("ScaledUiExt unit tests", () => {
         });
 
         // Verify excess tokens were transferred
-        const finalVaultBalance = await getTokenBalance(mVaultATA);
-        const finalRecipientBalance = await getTokenBalance(recipientATA);
-        expect(finalVaultBalance.toString()).toEqual(
-          initialVaultBalance.sub(expectedExcess).toString()
+
+        expectTokenBalance(mVaultATA, initialVaultBalance);
+        expectTokenUiBalance(
+          recipientATA,
+          initialRecipientBalance.add(expectedExcess),
+          Comparison.LessThanOrEqual,
+          new BN(1)
         );
-        expect(finalRecipientBalance.toString()).toEqual(
-          initialRecipientBalance.add(expectedExcess).toString()
+        expectTokenBalance(
+          recipientATA,
+          initialRecipientPrincipal.add(expectedExcessPrincipal)
         );
       });
 
@@ -2295,8 +2282,7 @@ describe("ScaledUiExt unit tests", () => {
         // Cache balances before claim excess
         const mVaultATA = await getATA(mMint.publicKey, getMVault());
         const initialVaultBalance = await getTokenBalance(mVaultATA);
-        const recipientATA = await getATA(mMint.publicKey, admin.publicKey);
-        const initialRecipientBalance = await getTokenBalance(recipientATA);
+        const recipientATA = await getATA(extMint.publicKey, admin.publicKey);
 
         // Get the global state and calculate the expected excess
         const globalState = await scaledUiExt.account.extGlobal.fetch(
@@ -2304,6 +2290,11 @@ describe("ScaledUiExt unit tests", () => {
         );
 
         const multiplier = globalState.lastExtIndex.toNumber() / 1e12;
+        const initialRecipientBalance = await getTokenUiBalance(
+          recipientATA,
+          multiplier
+        );
+        const initialRecipientPrincipal = await getTokenBalance(recipientATA);
 
         const extSupply = await getMint(
           provider.connection,
@@ -2317,9 +2308,12 @@ describe("ScaledUiExt unit tests", () => {
         );
 
         const expectedExcess = initialVaultBalance.sub(requiredCollateral);
+        const expectedExcessPrincipal = new BN(
+          Math.floor(Number(expectedExcess) / multiplier)
+        );
 
         // Setup and execute the instruction
-        await prepclaimFees(admin);
+        await prepClaimFees(admin);
         await scaledUiExt.methods
           .claimFees()
           .accountsPartial({ ...accounts })
@@ -2327,13 +2321,16 @@ describe("ScaledUiExt unit tests", () => {
           .rpc();
 
         // Verify excess tokens were transferred
-        const finalVaultBalance = await getTokenBalance(mVaultATA);
-        const finalRecipientBalance = await getTokenBalance(recipientATA);
-        expect(finalRecipientBalance.toString()).toEqual(
-          initialRecipientBalance.add(expectedExcess).toString()
+        expectTokenBalance(mVaultATA, initialVaultBalance);
+        expectTokenUiBalance(
+          recipientATA,
+          initialRecipientBalance.add(expectedExcess),
+          Comparison.LessThanOrEqual,
+          new BN(1)
         );
-        expect(finalVaultBalance.toString()).toEqual(
-          initialVaultBalance.sub(expectedExcess).toString()
+        expectTokenBalance(
+          recipientATA,
+          initialRecipientPrincipal.add(expectedExcessPrincipal)
         );
       });
 
@@ -2351,7 +2348,7 @@ describe("ScaledUiExt unit tests", () => {
         await propagateIndex(newIndex);
 
         // Setup the instruction
-        await prepclaimFees(admin);
+        await prepClaimFees(admin);
 
         // Attempt to send the transaction
         await expectAnchorError(
@@ -2376,11 +2373,11 @@ describe("ScaledUiExt unit tests", () => {
         // Cache balances before claim excess
         const mVaultATA = await getATA(mMint.publicKey, getMVault());
         const initialVaultBalance = await getTokenBalance(mVaultATA);
-        const recipientATA = await getATA(mMint.publicKey, admin.publicKey);
+        const recipientATA = await getATA(extMint.publicKey, admin.publicKey);
         const initialRecipientBalance = await getTokenBalance(recipientATA);
 
         // Setup the instruction
-        await prepclaimFees(admin);
+        await prepClaimFees(admin);
 
         // Attempt to send the transaction
         await scaledUiExt.methods
@@ -2390,14 +2387,8 @@ describe("ScaledUiExt unit tests", () => {
           .rpc();
 
         // Verify no tokens were transferred
-        const finalVaultBalance = await getTokenBalance(mVaultATA);
-        const finalRecipientBalance = await getTokenBalance(recipientATA);
-        expect(finalRecipientBalance.toString()).toEqual(
-          initialRecipientBalance.toString()
-        );
-        expect(finalVaultBalance.toString()).toEqual(
-          initialVaultBalance.toString()
-        );
+        expectTokenBalance(mVaultATA, initialVaultBalance);
+        expectTokenBalance(recipientATA, initialRecipientBalance);
       });
     });
   });

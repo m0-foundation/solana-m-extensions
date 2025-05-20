@@ -10,8 +10,8 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{principal_to_amount_up, sync_multiplier},
-        token::transfer_tokens_from_program,
+        conversion::{amount_to_principal_down, principal_to_amount_up, sync_multiplier},
+        token::mint_tokens,
     },
 };
 
@@ -24,15 +24,12 @@ pub struct ClaimFees<'info> {
         seeds = [EXT_GLOBAL_SEED],
         has_one = admin @ ExtError::NotAuthorized,
         has_one = m_earn_global_account @ ExtError::InvalidAccount,
-        has_one = m_mint @ ExtError::InvalidMint,
         has_one = ext_mint @ ExtError::InvalidMint,
         bump = global_account.bump,
     )]
     pub global_account: Account<'info, ExtGlobal>,
 
     pub m_earn_global_account: Account<'info, EarnGlobal>,
-
-    pub m_mint: InterfaceAccount<'info, Mint>,
 
     #[account(mut)]
     pub ext_mint: InterfaceAccount<'info, Mint>,
@@ -53,7 +50,7 @@ pub struct ClaimFees<'info> {
 
     #[account(
         mut,
-        associated_token::mint = m_mint,
+        associated_token::mint = global_account.m_mint,
         associated_token::authority = m_vault,
         associated_token::token_program = token_2022,
     )]
@@ -63,9 +60,9 @@ pub struct ClaimFees<'info> {
     /// so the authority of this token account is not checked
     #[account(
         mut,
-        token::mint = m_mint,
+        token::mint = ext_mint,
     )]
-    pub recipient_m_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub recipient_ext_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub token_2022: Program<'info, Token2022>,
 }
@@ -95,20 +92,24 @@ pub fn handler(ctx: Context<ClaimFees>) -> Result<()> {
         .checked_sub(required_m)
         .ok_or(ExtError::InsufficientCollateral)?; // This shouldn't underflow, but we check for safety
 
+    let excess_principal = amount_to_principal_down(excess, multiplier)?;
+
     // Only transfer a positive amount of excess
-    if excess > 0 {
-        transfer_tokens_from_program(
-            &ctx.accounts.vault_m_token_account,
-            &ctx.accounts.recipient_m_token_account,
-            excess,
-            &ctx.accounts.m_mint,
-            &ctx.accounts.m_vault,
-            &[&[M_VAULT_SEED, &[ctx.accounts.global_account.m_vault_bump]]],
+    if excess_principal > 0 {
+        mint_tokens(
+            &ctx.accounts.recipient_ext_token_account,
+            excess_principal,
+            &ctx.accounts.ext_mint,
+            &ctx.accounts.ext_mint_authority,
+            &[&[
+                MINT_AUTHORITY_SEED,
+                &[ctx.accounts.global_account.ext_mint_authority_bump],
+            ]],
             &ctx.accounts.token_2022,
         )?;
 
         emit!(FeesClaimed {
-            recipient_token_account: ctx.accounts.recipient_m_token_account.key(),
+            recipient_token_account: ctx.accounts.recipient_ext_token_account.key(),
             amount: excess,
         });
     }
