@@ -21,14 +21,34 @@ use {
 /// additional account infos to create the proper instruction
 pub fn invoke_wrap<'a>(
     program_id: &Pubkey,
+    m_mint: AccountInfo<'a>,
     mint: AccountInfo<'a>,
+    mint_authority: AccountInfo<'a>,
+    m_global_account: AccountInfo<'a>,
+    m_vault: AccountInfo<'a>,
+    vault_m_token_account: AccountInfo<'a>,
+    from_m_token_account: AccountInfo<'a>,
+    to_token_account: AccountInfo<'a>,
+    token_program: AccountInfo<'a>,
+    sysvar_instructions_account: AccountInfo<'a>,
     extra_account_metas: &AccountInfo<'a>,
     additional_accounts: &[AccountInfo<'a>],
     amount: u64,
 ) -> ProgramResult {
     let mut cpi_instruction = Instruction {
         program_id: *program_id,
-        accounts: vec![AccountMeta::new_readonly(*mint.key, false)],
+        accounts: vec![
+            AccountMeta::new_readonly(*m_mint.key, false),
+            AccountMeta::new(*mint.key, false),
+            AccountMeta::new_readonly(*mint_authority.key, true),
+            AccountMeta::new_readonly(*m_global_account.key, false),
+            AccountMeta::new_readonly(*m_vault.key, false),
+            AccountMeta::new(*vault_m_token_account.key, false),
+            AccountMeta::new(*from_m_token_account.key, false),
+            AccountMeta::new(*to_token_account.key, false),
+            AccountMeta::new_readonly(*token_program.key, false),
+            AccountMeta::new_readonly(*sysvar_instructions_account.key, false),
+        ],
         data: MExtensionInstruction::Wrap { amount }.pack(),
     };
 
@@ -36,7 +56,18 @@ pub fn invoke_wrap<'a>(
     let extra_accounts = ExtraAccountMetas::try_from_slice(data.as_ref())?;
 
     // Start with accounts required for the CPI and add additional account below
-    let mut cpi_account_infos = vec![mint];
+    let mut cpi_account_infos = vec![
+        m_mint,
+        mint,
+        mint_authority,
+        m_global_account,
+        m_vault,
+        vault_m_token_account,
+        from_m_token_account,
+        to_token_account,
+        token_program,
+        sysvar_instructions_account,
+    ];
 
     cpi_instruction
         .accounts

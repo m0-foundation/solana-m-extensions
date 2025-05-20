@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use earn::state::Global as EarnGlobal;
 use m_ext_interface::state::ExtraAccountMetas;
 use scaled_ui_ext::utils::{
@@ -39,6 +39,14 @@ pub struct Wrap<'info> {
 
     #[account(
         mut,
+        associated_token::mint = m_mint,
+        associated_token::authority = m_vault,
+        associated_token::token_program = token_program,
+    )]
+    pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(
+        mut,
         token::mint = m_mint,
         token::authority = signer,
     )]
@@ -46,19 +54,11 @@ pub struct Wrap<'info> {
 
     #[account(
         mut,
-        associated_token::mint = m_mint,
-        associated_token::authority = m_vault,
-        associated_token::token_program = token_2022,
-    )]
-    pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
-
-    #[account(
-        mut,
         token::mint = mint,
     )]
     pub to_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    pub token_2022: Program<'info, Token2022>,
+    pub token_program: Interface<'info, TokenInterface>,
 
     /// CHECK: This account is validated by address
     #[account(address = Pubkey::from_str("Sysvar1nstructions1111111111111111111111111").unwrap())]
@@ -108,7 +108,7 @@ impl Wrap<'_> {
             amount,
             &ctx.accounts.m_mint,
             &ctx.accounts.signer.to_account_info(),
-            &ctx.accounts.token_2022,
+            &ctx.accounts.token_program,
         )?;
 
         // Calculate the amount of ext tokens to mint based on the amount of m tokens wrapped
@@ -121,7 +121,7 @@ impl Wrap<'_> {
             &ctx.accounts.mint,
             &ctx.accounts.mint_authority,
             &[&[MINT_AUTH_SEED, &[ctx.bumps.mint_authority]]],
-            &ctx.accounts.token_2022,
+            &ctx.accounts.token_program,
         )?;
 
         Ok(())

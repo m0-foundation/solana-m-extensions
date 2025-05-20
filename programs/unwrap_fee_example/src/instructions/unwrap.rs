@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{
-    transfer_checked, Mint, Token2022, TokenAccount, TransferChecked,
+    transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked,
 };
 use earn::state::Global as EarnGlobal;
 use scaled_ui_ext::utils::{conversion::amount_to_principal_up, token::burn_tokens};
@@ -46,7 +46,7 @@ pub struct Unwrap<'info> {
         mut,
         associated_token::mint = m_mint,
         associated_token::authority = m_vault,
-        associated_token::token_program = token_2022,
+        associated_token::token_program = token_program,
     )]
     pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
 
@@ -57,7 +57,7 @@ pub struct Unwrap<'info> {
     )]
     pub from_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    pub token_2022: Program<'info, Token2022>,
+    pub token_program: Interface<'info, TokenInterface>,
 
     /// CHECK: This account is validated by address
     #[account(address = Pubkey::from_str("Sysvar1nstructions1111111111111111111111111").unwrap())]
@@ -106,7 +106,7 @@ impl Unwrap<'_> {
             principal,
             &ctx.accounts.mint,
             &ctx.accounts.signer.to_account_info(),
-            &ctx.accounts.token_2022,
+            &ctx.accounts.token_program,
         )?;
 
         // Apply unwrap tax
@@ -116,7 +116,7 @@ impl Unwrap<'_> {
 
         transfer_checked(
             CpiContext::new(
-                ctx.accounts.token_2022.to_account_info(),
+                ctx.accounts.token_program.to_account_info(),
                 TransferChecked {
                     from: ctx.accounts.m_vault.to_account_info(),
                     to: ctx.accounts.to_m_token_account.to_account_info(),
