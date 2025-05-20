@@ -11,7 +11,7 @@ use std::str::FromStr;
 
 use crate::{
     errors::ExtError,
-    state::{WrapConfig, MINT_AUTH_SEED, WRAP_CONFIG_SEED},
+    state::{WrapConfig, MINT_AUTH_SEED},
     utils::sync_rate,
     EXT_CORE_PROGRAM_ID,
 };
@@ -74,8 +74,6 @@ pub struct Wrap<'info> {
     /// Account from ExtraAccountMetas
     #[account(
         address = Pubkey::new_from_array(extra_account_metas.extra_accounts[0].address_config),
-        seeds = [WRAP_CONFIG_SEED],
-        bump = wrap_config.bump,
     )]
     pub wrap_config: Account<'info, WrapConfig>,
 }

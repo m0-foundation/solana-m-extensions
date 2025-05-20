@@ -1,7 +1,10 @@
 #![allow(unexpected_cfgs)]
 
 use anchor_lang::prelude::*;
-use m_ext_interface::instruction::{UnwrapInstruction, WrapInstruction};
+use m_ext_interface::instruction::{
+    InitializeExtraAccountMetaListInstruction, UnwrapInstruction, WrapInstruction,
+};
+use m_ext_interface::state::ExtraAccountMeta;
 use spl_discriminator::SplDiscriminate;
 
 use instructions::*;
@@ -28,5 +31,13 @@ pub mod unwrap_fee_example {
     #[instruction(discriminator = UnwrapInstruction::SPL_DISCRIMINATOR_SLICE)]
     pub fn unwrap(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
         Unwrap::handler(ctx, amount)
+    }
+
+    #[instruction(discriminator = InitializeExtraAccountMetaListInstruction::SPL_DISCRIMINATOR_SLICE)]
+    pub fn initialize_extra_account_meta_list(
+        ctx: Context<InitializeExtraAccountMetaList>,
+        extra_account_metas: Vec<ExtraAccountMeta>,
+    ) -> Result<()> {
+        InitializeExtraAccountMetaList::handler(ctx, extra_account_metas)
     }
 }

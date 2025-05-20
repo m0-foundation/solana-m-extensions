@@ -3,6 +3,7 @@ use anchor_spl::token_interface::{
     transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked,
 };
 use earn::state::Global as EarnGlobal;
+use m_ext_interface::state::ExtraAccountMetas;
 use scaled_ui_ext::utils::{conversion::amount_to_principal_up, token::burn_tokens};
 
 use solana_program::sysvar::instructions::get_instruction_relative;
@@ -10,7 +11,7 @@ use std::{cmp::max, str::FromStr};
 
 use crate::{
     errors::ExtError,
-    state::{WrapConfig, MINT_AUTH_SEED, WRAP_CONFIG_SEED},
+    state::{WrapConfig, MINT_AUTH_SEED},
     utils::sync_rate,
     EXT_CORE_PROGRAM_ID,
 };
@@ -63,13 +64,16 @@ pub struct Unwrap<'info> {
     #[account(address = Pubkey::from_str("Sysvar1nstructions1111111111111111111111111").unwrap())]
     pub sysvar_instructions_account: AccountInfo<'info>,
 
-    #[account(seeds = [b"extra-account-metas", mint.key().as_ref()], bump)]
-    pub extra_account_metas: UncheckedAccount<'info>,
+    #[account(
+        seeds = [b"extra-account-metas", mint.key().as_ref()],
+        constraint = extra_account_metas.extra_accounts.len() > 0,
+        bump
+    )]
+    pub extra_account_metas: InterfaceAccount<'info, ExtraAccountMetas>,
 
     /// Account from ExtraAccountMetas
     #[account(
-        seeds = [WRAP_CONFIG_SEED],
-        bump = wrap_config.bump,
+        address = Pubkey::new_from_array(extra_account_metas.extra_accounts[0].address_config),
     )]
     pub wrap_config: Account<'info, WrapConfig>,
 }

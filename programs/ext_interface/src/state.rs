@@ -37,10 +37,16 @@ impl Into<SplExtraAccountMeta> for &ExtraAccountMeta {
     }
 }
 
-#[derive(Clone, InitSpace, AnchorSerialize, AnchorDeserialize)]
+#[derive(Clone, InitSpace, AnchorSerialize, AnchorDeserialize, Default)]
 pub struct ExtraAccountMeta {
     pub discriminator: u8,
     pub address_config: [u8; 32],
     pub is_signer: bool,
     pub is_writable: bool,
+}
+
+impl ExtraAccountMeta {
+    pub fn empty(&self) -> bool {
+        self.address_config == [0; 32]
+    }
 }

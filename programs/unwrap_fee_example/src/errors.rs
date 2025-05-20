@@ -6,4 +6,6 @@ pub enum ExtError {
     InvalidMint,
     #[msg("Invalid instruction invocation")]
     InvalidInvocation,
+    #[msg("Only up to 10 extra accounts are supported")]
+    TooManyAccounts,
 }
