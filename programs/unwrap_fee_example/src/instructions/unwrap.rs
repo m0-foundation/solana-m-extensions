@@ -38,12 +38,6 @@ pub struct Unwrap<'info> {
 
     #[account(
         mut,
-        token::mint = m_mint,
-    )]
-    pub to_m_token_account: InterfaceAccount<'info, TokenAccount>,
-
-    #[account(
-        mut,
         associated_token::mint = m_mint,
         associated_token::authority = m_vault,
         associated_token::token_program = token_program,
@@ -56,6 +50,12 @@ pub struct Unwrap<'info> {
         token::authority = signer,
     )]
     pub from_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        token::mint = m_mint,
+    )]
+    pub to_m_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub token_program: Interface<'info, TokenInterface>,
 
