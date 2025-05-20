@@ -104,7 +104,7 @@ pub fn handler(ctx: Context<ClaimFees>) -> Result<()> {
             &ctx.accounts.m_mint,
             &ctx.accounts.m_vault,
             &[&[M_VAULT_SEED, &[ctx.accounts.global_account.m_vault_bump]]],
-            &ctx.accounts.token_2022,
+            ctx.accounts.token_2022.to_account_info(),
         )?;
 
         emit!(FeesClaimed {

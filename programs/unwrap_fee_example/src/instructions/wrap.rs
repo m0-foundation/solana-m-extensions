@@ -108,7 +108,7 @@ impl Wrap<'_> {
             amount,
             &ctx.accounts.m_mint,
             &ctx.accounts.signer.to_account_info(),
-            &ctx.accounts.token_program,
+            ctx.accounts.token_program.to_account_info(),
         )?;
 
         // Calculate the amount of ext tokens to mint based on the amount of m tokens wrapped
@@ -121,7 +121,7 @@ impl Wrap<'_> {
             &ctx.accounts.mint,
             &ctx.accounts.mint_authority,
             &[&[MINT_AUTH_SEED, &[ctx.bumps.mint_authority]]],
-            &ctx.accounts.token_program,
+            ctx.accounts.token_program.to_account_info(),
         )?;
 
         Ok(())

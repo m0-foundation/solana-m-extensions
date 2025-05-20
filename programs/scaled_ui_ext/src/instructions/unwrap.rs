@@ -103,11 +103,11 @@ pub fn handler(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
 
     // Burn the amount of ext tokens from the user
     burn_tokens(
-        &ctx.accounts.from_ext_token_account,   // from
-        principal,                              // amount
-        &ctx.accounts.ext_mint,                 // mint
-        &ctx.accounts.signer.to_account_info(), // authority
-        &ctx.accounts.token_2022,               // token program
+        &ctx.accounts.from_ext_token_account,      // from
+        principal,                                 // amount
+        &ctx.accounts.ext_mint,                    // mint
+        &ctx.accounts.signer.to_account_info(),    // authority
+        ctx.accounts.token_2022.to_account_info(), // token program
     )?;
 
     // Transfer the amount of m tokens from the m vault to the user
@@ -118,7 +118,7 @@ pub fn handler(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
         &ctx.accounts.m_mint,                // mint
         &ctx.accounts.m_vault,               // authority
         &[&[M_VAULT_SEED, &[ctx.accounts.global_account.m_vault_bump]]], // authority seeds
-        &ctx.accounts.token_2022,            // token program
+        ctx.accounts.token_2022.to_account_info(), // token program
     )?;
 
     Ok(())

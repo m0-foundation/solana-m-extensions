@@ -106,7 +106,7 @@ impl Unwrap<'_> {
             principal,
             &ctx.accounts.mint,
             &ctx.accounts.signer.to_account_info(),
-            &ctx.accounts.token_program,
+            ctx.accounts.token_program.to_account_info(),
         )?;
 
         // Apply unwrap tax

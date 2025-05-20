@@ -96,12 +96,12 @@ pub fn handler(ctx: Context<Wrap>, amount: u64) -> Result<()> {
 
     // Transfer the amount of m tokens from the user to the m vault
     transfer_tokens(
-        &ctx.accounts.from_m_token_account,     // from
-        &ctx.accounts.vault_m_token_account,    // to
-        amount,                                 // amount
-        &ctx.accounts.m_mint,                   // mint
-        &ctx.accounts.signer.to_account_info(), // authority
-        &ctx.accounts.token_2022,               // token program
+        &ctx.accounts.from_m_token_account,        // from
+        &ctx.accounts.vault_m_token_account,       // to
+        amount,                                    // amount
+        &ctx.accounts.m_mint,                      // mint
+        &ctx.accounts.signer.to_account_info(),    // authority
+        ctx.accounts.token_2022.to_account_info(), // token program
     )?;
 
     // Calculate the amount of ext tokens to mint based
@@ -110,12 +110,12 @@ pub fn handler(ctx: Context<Wrap>, amount: u64) -> Result<()> {
 
     // Mint the amount of ext tokens to the user
     mint_tokens(
-        &ctx.accounts.to_ext_token_account, // to
-        principal,                          // amount
-        &ctx.accounts.ext_mint,             // mint
-        &ctx.accounts.ext_mint_authority,   // authority
-        authority_seeds,                    // authority seeds
-        &ctx.accounts.token_2022,           // token program
+        &ctx.accounts.to_ext_token_account,        // to
+        principal,                                 // amount
+        &ctx.accounts.ext_mint,                    // mint
+        &ctx.accounts.ext_mint_authority,          // authority
+        authority_seeds,                           // authority seeds
+        ctx.accounts.token_2022.to_account_info(), // token program
     )?;
 
     Ok(())
