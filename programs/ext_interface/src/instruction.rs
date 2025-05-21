@@ -10,6 +10,9 @@ use {
 #[repr(C)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum MExtensionInstruction {
+    /// Sync and return the token multiplier
+    Sync {},
+
     /// Wrap M tokens to extension token
     Wrap { amount: u64 },
 
@@ -21,6 +24,10 @@ pub enum MExtensionInstruction {
         extra_account_metas: Vec<ExtraAccountMeta>,
     },
 }
+
+#[derive(SplDiscriminate)]
+#[discriminator_hash_input("m-extension-interface:sync")]
+pub struct SyncInstruction;
 
 #[derive(SplDiscriminate)]
 #[discriminator_hash_input("m-extension-interface:wrap")]
@@ -41,6 +48,7 @@ impl MExtensionInstruction {
         }
         let (discriminator, rest) = input.split_at(ArrayDiscriminator::LENGTH);
         Ok(match discriminator {
+            SyncInstruction::SPL_DISCRIMINATOR_SLICE => Self::Sync {},
             WrapInstruction::SPL_DISCRIMINATOR_SLICE => {
                 let amount = rest
                     .get(..8)
@@ -71,6 +79,9 @@ impl MExtensionInstruction {
     pub fn pack(&self) -> Vec<u8> {
         let mut buf = vec![];
         match self {
+            Self::Sync {} => {
+                buf.extend_from_slice(SyncInstruction::SPL_DISCRIMINATOR_SLICE);
+            }
             Self::Wrap { amount } => {
                 buf.extend_from_slice(WrapInstruction::SPL_DISCRIMINATOR_SLICE);
                 buf.extend_from_slice(&amount.to_le_bytes());

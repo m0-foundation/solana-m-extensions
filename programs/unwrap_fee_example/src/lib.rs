@@ -2,7 +2,7 @@
 
 use anchor_lang::prelude::*;
 use m_ext_interface::instruction::{
-    InitializeExtraAccountMetaListInstruction, UnwrapInstruction, WrapInstruction,
+    InitializeExtraAccountMetaListInstruction, SyncInstruction, UnwrapInstruction, WrapInstruction,
 };
 use m_ext_interface::state::ExtraAccountMeta;
 use spl_discriminator::SplDiscriminate;
@@ -22,6 +22,11 @@ const EXT_CORE_PROGRAM_ID: Pubkey = pubkey!("3C865D264L4NkAm78zfnDzQJJvXuU3fMjRU
 #[program]
 pub mod unwrap_fee_example {
     use super::*;
+
+    #[instruction(discriminator = SyncInstruction::SPL_DISCRIMINATOR_SLICE)]
+    pub fn sync(ctx: Context<Sync>) -> Result<f64> {
+        Sync::handler(ctx)
+    }
 
     #[instruction(discriminator = WrapInstruction::SPL_DISCRIMINATOR_SLICE)]
     pub fn wrap(ctx: Context<Wrap>, amount: u64) -> Result<()> {

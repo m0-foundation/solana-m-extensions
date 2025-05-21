@@ -17,6 +17,59 @@ use {
     spl_discriminator::SplDiscriminate,
 };
 
+/// Helper for sync CPI
+/// using additional account infos to create the proper instruction
+pub fn invoke_sync<'a>(
+    program_id: &Pubkey,
+    mint: AccountInfo<'a>,
+    mint_authority: AccountInfo<'a>,
+    m_global_account: AccountInfo<'a>,
+    token_program: AccountInfo<'a>,
+    sysvar_instructions_account: AccountInfo<'a>,
+    extra_account_metas: &AccountInfo<'a>,
+    additional_accounts: &[AccountInfo<'a>],
+) -> ProgramResult {
+    let mut cpi_instruction = Instruction {
+        program_id: *program_id,
+        accounts: vec![
+            AccountMeta::new(*mint.key, false),
+            AccountMeta::new_readonly(*mint_authority.key, true),
+            AccountMeta::new_readonly(*m_global_account.key, false),
+            AccountMeta::new_readonly(*token_program.key, false),
+            AccountMeta::new_readonly(*sysvar_instructions_account.key, false),
+        ],
+        data: MExtensionInstruction::Sync {}.pack(),
+    };
+
+    let data = extra_account_metas.data.borrow();
+    let extra_accounts = ExtraAccountMetas::try_from_slice(data.as_ref())?;
+
+    // Start with accounts required for the CPI and add additional account below
+    let mut cpi_account_infos = vec![
+        mint,
+        mint_authority,
+        m_global_account,
+        token_program,
+        sysvar_instructions_account,
+    ];
+
+    cpi_instruction
+        .accounts
+        .push(AccountMeta::new_readonly(*extra_account_metas.key, false));
+
+    cpi_account_infos.push(extra_account_metas.clone());
+
+    // Resolve the extra account metas for the instruction from the AccountMetas PDA
+    add_to_cpi_instruction::<instruction::WrapInstruction>(
+        &mut cpi_instruction,
+        &mut cpi_account_infos,
+        &extra_accounts.extra_accounts,
+        additional_accounts,
+    )?;
+
+    invoke(&cpi_instruction, &cpi_account_infos)
+}
+
 /// Helper for wrapping CPI
 /// using additional account infos to create the proper instruction
 pub fn invoke_wrap<'a>(
@@ -118,7 +171,7 @@ pub fn invoke_unwrap<'a>(
             AccountMeta::new_readonly(*token_program.key, false),
             AccountMeta::new_readonly(*sysvar_instructions_account.key, false),
         ],
-        data: MExtensionInstruction::Wrap { amount }.pack(),
+        data: MExtensionInstruction::Unwrap { amount }.pack(),
     };
 
     let data = extra_account_metas.data.borrow();
