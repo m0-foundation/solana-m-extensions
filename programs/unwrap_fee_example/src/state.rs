@@ -4,7 +4,7 @@ use anchor_lang::prelude::*;
 pub const WRAP_CONFIG_SEED: &[u8] = b"wrap_config";
 
 #[constant]
-pub const MINT_AUTH_SEED: &[u8] = b"wrap_config";
+pub const MINT_AUTH_SEED: &[u8] = b"mint_authority";
 
 #[account]
 #[derive(InitSpace)]

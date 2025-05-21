@@ -49,4 +49,13 @@ impl ExtraAccountMeta {
     pub fn empty(&self) -> bool {
         self.address_config == [0; 32]
     }
+
+    pub fn from_spl(extra_account_meta: &SplExtraAccountMeta) -> Self {
+        Self {
+            discriminator: extra_account_meta.discriminator,
+            address_config: extra_account_meta.address_config,
+            is_signer: extra_account_meta.is_signer.into(),
+            is_writable: extra_account_meta.is_writable.into(),
+        }
+    }
 }

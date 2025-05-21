@@ -1177,7 +1177,6 @@ dependencies = [
  "num-traits",
  "solana-program",
  "spl-discriminator",
- "spl-pod",
  "spl-tlv-account-resolution",
  "thiserror 2.0.12",
 ]
@@ -2883,6 +2882,7 @@ dependencies = [
  "scaled_ui_ext",
  "solana-program",
  "spl-discriminator",
+ "spl-tlv-account-resolution",
  "spl-token-2022 7.0.0",
 ]
 

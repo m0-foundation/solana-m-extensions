@@ -4,7 +4,6 @@ use anchor_lang::prelude::*;
 use m_ext_interface::instruction::{
     InitializeExtraAccountMetaListInstruction, SyncInstruction, UnwrapInstruction, WrapInstruction,
 };
-use m_ext_interface::state::ExtraAccountMeta;
 use spl_discriminator::SplDiscriminate;
 
 use instructions::*;
@@ -41,8 +40,7 @@ pub mod unwrap_fee_example {
     #[instruction(discriminator = InitializeExtraAccountMetaListInstruction::SPL_DISCRIMINATOR_SLICE)]
     pub fn initialize_extra_account_meta_list(
         ctx: Context<InitializeExtraAccountMetaList>,
-        extra_account_metas: Vec<ExtraAccountMeta>,
     ) -> Result<()> {
-        InitializeExtraAccountMetaList::handler(ctx, extra_account_metas)
+        InitializeExtraAccountMetaList::handler(ctx)
     }
 }

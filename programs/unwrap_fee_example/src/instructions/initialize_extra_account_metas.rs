@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::Mint;
 use m_ext_interface::state::{ExtraAccountMeta, ExtraAccountMetas};
+use spl_tlv_account_resolution::{account::ExtraAccountMeta as SplExtraAccountMeta, seeds::Seed};
 
 use crate::{
     errors::ExtError,
@@ -25,7 +26,7 @@ pub struct InitializeExtraAccountMetaList<'info> {
 
     #[account(
         init,
-        space = 0,
+        space = 8 + WrapConfig::INIT_SPACE,
         payer = admin,
         seeds = [WRAP_CONFIG_SEED],
         bump,
@@ -45,18 +46,23 @@ impl InitializeExtraAccountMetaList<'_> {
     }
 
     #[access_control(ctx.accounts.validate())]
-    pub fn handler(ctx: Context<Self>, extra_account_metas: Vec<ExtraAccountMeta>) -> Result<()> {
-        let mut fixed_extra_accounts: [ExtraAccountMeta; 10] = Default::default();
-        for (i, meta) in extra_account_metas.into_iter().enumerate() {
-            fixed_extra_accounts[i] = meta;
-        }
+    pub fn handler(ctx: Context<Self>) -> Result<()> {
+        let mut extra_accounts: [ExtraAccountMeta; 10] = Default::default();
+
+        extra_accounts[0] = ExtraAccountMeta::from_spl(&SplExtraAccountMeta::new_with_seeds(
+            &[Seed::Literal {
+                bytes: WRAP_CONFIG_SEED.to_vec(),
+            }],
+            false,
+            false,
+        )?);
 
         ctx.accounts
             .extra_account_meta_list
             .set_inner(ExtraAccountMetas {
                 mint: ctx.accounts.mint.key(),
                 bump: ctx.bumps.extra_account_meta_list,
-                extra_accounts: fixed_extra_accounts,
+                extra_accounts: extra_accounts,
             });
 
         Ok(())

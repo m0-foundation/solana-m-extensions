@@ -23,6 +23,7 @@ anchor-spl = "0.31.1"
 solana-program.workspace = true
 m_ext_interface = {path = "../ext_interface"}
 spl-discriminator.workspace = true
+spl-tlv-account-resolution.workspace = true
 spl-token-2022 = { version = "7.0.0", features = ["no-entrypoint"] }
 earn = { git = "https://github.com/m0-foundation/solana-m", branch = "solana-v2-earner-rate", features = [
     "no-entrypoint",

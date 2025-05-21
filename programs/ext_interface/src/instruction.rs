@@ -1,8 +1,6 @@
 use {
     solana_program::program_error::ProgramError,
     spl_discriminator::{ArrayDiscriminator, SplDiscriminate},
-    spl_pod::{bytemuck::pod_slice_to_bytes, slice::PodSlice},
-    spl_tlv_account_resolution::account::ExtraAccountMeta,
     std::convert::TryInto,
 };
 
@@ -20,9 +18,7 @@ pub enum MExtensionInstruction {
     Unwrap { amount: u64 },
 
     /// Initializes the extra account metas on an account
-    InitializeExtraAccountMetaList {
-        extra_account_metas: Vec<ExtraAccountMeta>,
-    },
+    InitializeExtraAccountMetaList {},
 }
 
 #[derive(SplDiscriminate)]
@@ -66,11 +62,7 @@ impl MExtensionInstruction {
                 Self::Unwrap { amount }
             }
             InitializeExtraAccountMetaListInstruction::SPL_DISCRIMINATOR_SLICE => {
-                let pod_slice = PodSlice::<ExtraAccountMeta>::unpack(rest)?;
-                let extra_account_metas = pod_slice.data().to_vec();
-                Self::InitializeExtraAccountMetaList {
-                    extra_account_metas,
-                }
+                Self::InitializeExtraAccountMetaList {}
             }
             _ => return Err(ProgramError::InvalidInstructionData),
         })
@@ -90,14 +82,10 @@ impl MExtensionInstruction {
                 buf.extend_from_slice(WrapInstruction::SPL_DISCRIMINATOR_SLICE);
                 buf.extend_from_slice(&amount.to_le_bytes());
             }
-            Self::InitializeExtraAccountMetaList {
-                extra_account_metas,
-            } => {
+            Self::InitializeExtraAccountMetaList {} => {
                 buf.extend_from_slice(
                     InitializeExtraAccountMetaListInstruction::SPL_DISCRIMINATOR_SLICE,
                 );
-                buf.extend_from_slice(&(extra_account_metas.len() as u32).to_le_bytes());
-                buf.extend_from_slice(pod_slice_to_bytes(extra_account_metas));
             }
         };
         buf
