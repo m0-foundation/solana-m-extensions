@@ -23,7 +23,7 @@ use crate::{
 
 #[derive(Accounts)]
 pub struct Swap<'info> {
-    pub user: Signer<'info>,
+    pub signer: Signer<'info>,
 
     pub m_mint: InterfaceAccount<'info, Mint>,
 
@@ -82,7 +82,8 @@ pub struct Swap<'info> {
     #[account(
         mut,
         token::mint = from_ext_mint,
-        token::authority = user,
+        // signer must be authority of the from token account or delegated by the owner
+        // this is checked in the validate function
         token::token_program = from_ext_token_program,
     )]
     pub from_user_token_account: InterfaceAccount<'info, TokenAccount>,
@@ -98,7 +99,7 @@ pub struct Swap<'info> {
     #[account(
         mut,
         token::mint = to_ext_mint,
-        // not restricted to the user to allow swap + send
+        // not restricted to the signer to allow swap + send
         token::token_program = to_ext_token_program,
     )]
     pub to_user_token_account: InterfaceAccount<'info, TokenAccount>,
@@ -118,22 +119,34 @@ pub struct Swap<'info> {
 
 impl<'info> Swap<'info> {
     fn validate(&self) -> Result<()> {
+        // Validate approval for the signer to send tokens from the from token account
+        // Can be either:
+        // 1. The signer is the owner of the from token account
+        // 2. The signer is delegated to send tokens from the from token account
+        if self.from_user_token_account.owner != signer.key() && match from_user_token_account.delegate {
+            Some(delegate) => !(delegate == signer.key() && from_user_token_account.delegated_amount > amount),
+            None => true,
+        } {
+            return err!(ExtError::Unauthorized);
+        }
+
+        // Validate extension access control for the signer on the from token
         match ctx.accounts.from_ext_global.ext_access {
             ExtAccess::Open => {},
             ExtAccess::Finite(ext_finite) => {
                 // Check if the user is allowed to swap
-                if !ext_finite.wrap_authorities.contains(&ctx.accounts.user.key()) {
+                if !ext_finite.swap_authorities.contains(&ctx.accounts.signer.key()) {
                     return err!(ExtError::Unauthorized);
                 }
             }
         }
 
-        // TODO should we check the recipient or the signer here?
+        // Validate the extension access control for the signer on the to token
         match ctx.accounts.to_ext_global.ext_access {
             ExtAccess::Open => {},
             ExtAccess::Finite(ext_finite) => {
                 // Check if the user is allowed to swap
-                if !ext_finite.wrap_authorities.contains(&ctx.accounts.user.key()) {
+                if !ext_finite.swap_authorities.contains(&ctx.accounts.signer.key()) {
                     return err!(ExtError::Unauthorized);
                 }
             }
