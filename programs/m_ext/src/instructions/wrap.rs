@@ -89,7 +89,7 @@ impl<'info> Wrap<'info> {
         match self.ext_config.access_config {
             AccessConfig::Open => Ok(()),
             AccessConfig::Finite(finite_config) => {
-                if finite_config.wrap_authorities.contains(&self.signer.key()) {
+                if finite_config.swap_authorities.contains(&self.signer.key()) {
                     Ok(())
                 } else {
                     Err(ExtError::NotAuthorized.into())

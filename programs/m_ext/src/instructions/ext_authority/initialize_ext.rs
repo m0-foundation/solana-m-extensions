@@ -99,7 +99,7 @@ pub struct RebasingParams {
 
 pub enum AccessParams {
     None,
-    Finite(Vec<Pubkey>), // wrap_authorities
+    Finite(Vec<Pubkey>), // swap_authorities
 }
 
 impl<'info> InitializeExt<'info> {
@@ -198,9 +198,9 @@ impl<'info> InitializeExt<'info> {
 
         // Validate the access params
         match access_params {
-            AccessParams::Finite(wrap_authorities) => {
+            AccessParams::Finite(swap_authorities) => {
                 // Validate and create the wrap authorities array
-                if wrap_authorities.len() > MAX_AUTHORITIES {
+                if swap_authorities.len() > MAX_AUTHORITIES {
                     return err!(ExtError::InvalidParam);
                 }
             }
@@ -239,15 +239,15 @@ impl<'info> InitializeExt<'info> {
         // Construct the AccessConfig
         let access_config = match access_params {
             AccessParams::None => AccessConfig::Open,
-            AccessParams::Finite(wrap_authorities) => {
-                let mut wrap_authorities_array = [Pubkey::default(); 10];
-                for (i, authority) in wrap_authorities.iter().enumerate() {
-                    if wrap_authorities_array.contains(authority) {
+            AccessParams::Finite(swap_authorities) => {
+                let mut swap_authorities_array = [Pubkey::default(); 10];
+                for (i, authority) in swap_authorities.iter().enumerate() {
+                    if swap_authorities_array.contains(authority) {
                         return err!(ExtError::InvalidParam);
                     }
-                    wrap_authorities_array[i] = *authority;
+                    swap_authorities_array[i] = *authority;
                 }
-                AccessConfig::Finite(FiniteConfig { wrap_authorities })
+                AccessConfig::Finite(FiniteConfig { swap_authorities })
             }
         };
 

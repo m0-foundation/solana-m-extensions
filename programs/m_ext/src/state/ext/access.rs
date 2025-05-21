@@ -12,5 +12,5 @@ pub enum AccessConfig {
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, InitSpace)]
 pub struct FiniteConfig {
-    pub wrap_authorities: [Pubkey; 10],
+    pub swap_authorities: [Pubkey; 10],
 }
