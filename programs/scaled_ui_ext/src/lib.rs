@@ -36,15 +36,15 @@ pub mod scaled_ui_ext {
         wrap_authorities: Vec<Pubkey>,
         fee_bps: u64,
     ) -> Result<()> {
-        instructions::initialize::handler(ctx, wrap_authorities, fee_bps)
+        Initialize::handler(ctx, wrap_authorities, fee_bps)
     }
 
     pub fn set_fee(ctx: Context<SetFee>, fee_bps: u64) -> Result<()> {
-        instructions::set_fee::handler(ctx, fee_bps)
+        SetFee::handler(ctx, fee_bps)
     }
 
     pub fn set_m_mint(ctx: Context<SetMMint>) -> Result<()> {
-        instructions::set_m_mint::handler(ctx)
+        SetMMint::handler(ctx)
     }
 
     pub fn update_wrap_authority(
@@ -52,26 +52,26 @@ pub mod scaled_ui_ext {
         index: u8,
         new_wrap_authority: Pubkey,
     ) -> Result<()> {
-        instructions::update_wrap_authority::handler(ctx, index, new_wrap_authority)
+        UpdateWrapAuthority::handler(ctx, index, new_wrap_authority)
     }
 
     pub fn claim_fees(ctx: Context<ClaimFees>) -> Result<()> {
-        instructions::claim_fees::handler(ctx)
+        ClaimFees::handler(ctx)
     }
 
     // Wrap authority instructions
 
     pub fn wrap(ctx: Context<Wrap>, amount: u64) -> Result<()> {
-        instructions::wrap::handler(ctx, amount)
+        Wrap::handler(ctx, amount)
     }
 
     pub fn unwrap(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
-        instructions::unwrap::handler(ctx, amount)
+        Unwrap::handler(ctx, amount)
     }
 
     // Open instructions
 
     pub fn sync(ctx: Context<Sync>) -> Result<()> {
-        instructions::sync::handler(ctx)
+        Sync::handler(ctx)
     }
 }

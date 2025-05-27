@@ -53,15 +53,26 @@ pub struct SetMMint<'info> {
     pub new_vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
 }
 
-pub fn handler(ctx: Context<SetMMint>) -> Result<()> {
-    // Validate that the vault ATA for the new mint contains as many tokens
-    // as the existing vault ATA so that the extension remains fully collateralized
-    if ctx.accounts.new_vault_m_token_account.amount < ctx.accounts.vault_m_token_account.amount {
-        return err!(ExtError::InsufficientCollateral);
+impl SetMMint<'_> {
+    // This instruction allows the admin to set a new mint for the m_mint in the global account.
+    // The new mint must be a valid mint with the same decimals as the existing m_mint.
+    // Additionally, the new vault ATA for the new mint must contain at least as many tokens
+    // as the existing vault ATA to ensure the extension remains fully collateralized.
+    pub fn validate(&self) -> Result<()> {
+        // Validate that the vault ATA for the new mint contains as many tokens
+        // as the existing vault ATA so that the extension remains fully collateralized
+        if self.new_vault_m_token_account.amount < self.vault_m_token_account.amount {
+            return err!(ExtError::InsufficientCollateral);
+        }
+
+        Ok(())
     }
 
-    // Set the new mint
-    ctx.accounts.global_account.m_mint = ctx.accounts.new_m_mint.key();
+    #[access_control(ctx.accounts.validate())]
+    pub fn handler(ctx: Context<Self>) -> Result<()> {
+        // Set the new mint
+        ctx.accounts.global_account.m_mint = ctx.accounts.new_m_mint.key();
 
-    Ok(())
+        Ok(())
+    }
 }
