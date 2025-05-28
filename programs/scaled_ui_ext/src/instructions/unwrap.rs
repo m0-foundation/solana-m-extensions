@@ -15,14 +15,12 @@ use earn::state::Global as EarnGlobal;
 
 #[derive(Accounts)]
 pub struct Unwrap<'info> {
-    #[account(
-        constraint = signer.key() != Pubkey::default() && global_account.wrap_authorities.contains(&signer.key()) @ ExtError::NotAuthorized,
-    )]
     pub signer: Signer<'info>,
 
+    #[account(mint::token_program = m_token_program)]
     pub m_mint: InterfaceAccount<'info, Mint>,
 
-    #[account(mut)]
+    #[account(mut, mint::token_program = ext_token_program)]
     pub ext_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
@@ -54,6 +52,7 @@ pub struct Unwrap<'info> {
     #[account(
         mut,
         token::mint = m_mint,
+        token::token_program = m_token_program,
         // authority of the to token account is not checked to allow unwrap + send
     )]
     pub to_m_token_account: InterfaceAccount<'info, TokenAccount>,
@@ -62,19 +61,20 @@ pub struct Unwrap<'info> {
         mut,
         associated_token::mint = m_mint,
         associated_token::authority = m_vault,
-        associated_token::token_program = token_2022,
+        associated_token::token_program = m_token_program,
     )]
     pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         mut,
         token::mint = ext_mint,
-        token::authority = signer,
+        token::token_program = ext_token_program,
+        // we check the signer is the authority or the signer is delegated in the validate function
     )]
     pub from_ext_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub m_token_program: Interface<'info, TokenInterface>,
-    pub token_2022: Program<'info, Token2022>,
+    pub ext_token_program: Program<'info, Token2022>,
 }
 
 impl Unwrap<'_> {
@@ -124,7 +124,7 @@ impl Unwrap<'_> {
             &ctx.accounts.vault_m_token_account,
             &ctx.accounts.ext_mint_authority,
             authority_seeds,
-            &ctx.accounts.token_2022,
+            &ctx.accounts.ext_token_program,
         )?;
 
         // Calculate the principal amount of ext tokens to burn
@@ -140,7 +140,7 @@ impl Unwrap<'_> {
             principal,                              // amount
             &ctx.accounts.ext_mint,                 // mint
             &ctx.accounts.signer.to_account_info(), // authority
-            &ctx.accounts.token_2022,               // token program
+            &ctx.accounts.ext_token_program,        // token program
         )?;
 
         // Transfer the amount of m tokens from the m vault to the user
