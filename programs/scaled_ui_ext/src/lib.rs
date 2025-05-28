@@ -1,4 +1,4 @@
-// scaled_ui_ext/lib.rs - top-level program file
+// top-level program file
 
 pub mod constants;
 pub mod errors;

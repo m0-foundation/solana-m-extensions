@@ -1,8 +1,6 @@
-// no_earn/instructions/admin/claim_excess.rs
-
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount, TokenInterface};
+use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use earn::state::Global as EarnGlobal;
 
 // local dependencies
@@ -69,7 +67,7 @@ pub struct ClaimFees<'info> {
     )]
     pub recipient_ext_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    pub m_token_program: Interface<'info, TokenInterface>,
+    pub m_token_program: Program<'info, Token2022>,
     pub ext_token_program: Program<'info, Token2022>,
 }
 

@@ -1,5 +1,3 @@
-// ext_earn/utils/conversion.rs
-
 use crate::{
     constants::{INDEX_SCALE_F64, INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_F64},
     errors::ExtError,

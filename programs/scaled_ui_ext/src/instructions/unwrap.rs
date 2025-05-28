@@ -1,7 +1,5 @@
-// scaled_ui_ext/instructions/unwrap.rs
-
-use anchor_lang::{prelude::*, solana_program::program_option::COption};
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount, TokenInterface};
+use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 
 use crate::{
     errors::ExtError,
@@ -69,16 +67,19 @@ pub struct Unwrap<'info> {
         mut,
         token::mint = ext_mint,
         token::token_program = ext_token_program,
-        // we check the signer is the authority or the signer is delegated in the validate function
+        // signer must be the authority of the from token account or delegated by the owner
+        // this is checked by the token program
     )]
     pub from_ext_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    pub m_token_program: Interface<'info, TokenInterface>,
+    // we have duplicate entries for the token2022 program since the interface needs to be consistent, and all extensions may not be token2022
+    // additionally, it allows us to change the m token program in the future without breaking the interface
+    pub m_token_program: Program<'info, Token2022>,
     pub ext_token_program: Program<'info, Token2022>,
 }
 
 impl Unwrap<'_> {
-    pub fn validate(&self, amount: u64) -> Result<()> {
+    pub fn validate(&self) -> Result<()> {
         // Ensure the signer is authorized to unwrap
         if self.signer.key() == Pubkey::default() || // probably don't need to check this, but it's included for completeness
             !self
@@ -89,25 +90,10 @@ impl Unwrap<'_> {
             return err!(ExtError::NotAuthorized);
         }
 
-        // Validate approval for the signer to send tokens from the from token account
-        // Can be either:
-        // 1. The signer is the owner of the from token account
-        // 2. The signer is delegated to send tokens from the from token account
-        if self.from_ext_token_account.owner != self.signer.key()
-            && match self.from_ext_token_account.delegate {
-                COption::Some(delegate) => {
-                    !(delegate == self.signer.key()
-                        && self.from_ext_token_account.delegated_amount > amount)
-                }
-                COption::None => true,
-            }
-        {
-            return err!(ExtError::NotAuthorized);
-        }
-
         Ok(())
     }
 
+    #[access_control(ctx.accounts.validate())]
     pub fn handler(ctx: Context<Self>, amount: u64) -> Result<()> {
         let authority_seeds: &[&[&[u8]]] = &[&[
             MINT_AUTHORITY_SEED,

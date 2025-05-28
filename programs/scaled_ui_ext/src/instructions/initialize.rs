@@ -1,10 +1,9 @@
-// scaled_ui_ext/instructions/initialize.rs
-
 // external dependencies
 use anchor_lang::prelude::*;
 use anchor_spl::{
+    associated_token::AssociatedToken,
     token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey,
-    token_interface::{Mint, Token2022, TokenAccount, TokenInterface},
+    token_interface::{Mint, Token2022, TokenAccount},
 };
 use spl_token_2022::extension::{
     scaled_ui_amount::ScaledUiAmountConfig, BaseStateWithExtensions, ExtensionType,
@@ -79,9 +78,11 @@ pub struct Initialize<'info> {
     )]
     pub m_earn_global_account: Account<'info, EarnGlobal>,
 
-    pub m_token_program: Interface<'info, TokenInterface>,
+    pub m_token_program: Program<'info, Token2022>, // we have duplicate entries for the token2022 program bc the M token program could change in the future
 
     pub ext_token_program: Program<'info, Token2022>,
+
+    pub associated_token_program: Program<'info, AssociatedToken>,
 
     pub system_program: Program<'info, System>,
 }

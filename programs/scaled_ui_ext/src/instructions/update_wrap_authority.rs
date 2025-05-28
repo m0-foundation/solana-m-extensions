@@ -1,5 +1,3 @@
-// scaled_ui_ext/instructions/update_wrap_authority.rs
-
 use anchor_lang::prelude::*;
 
 use crate::{

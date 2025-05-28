@@ -1,5 +1,3 @@
-// scaled_ui_ext/instructions/set_m_mint.rs
-
 // external dependencies
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};

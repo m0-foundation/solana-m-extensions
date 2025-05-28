@@ -1,10 +1,7 @@
-// ext_earn/utils/token.rs
-
 // external dependencies
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{
-    burn, mint_to, transfer_checked, Burn, Mint, MintTo, Token2022, TokenAccount, TokenInterface,
-    TransferChecked,
+    burn, mint_to, transfer_checked, Burn, Mint, MintTo, Token2022, TokenAccount, TransferChecked,
 };
 
 pub fn transfer_tokens_from_program<'info>(
@@ -14,7 +11,7 @@ pub fn transfer_tokens_from_program<'info>(
     mint: &InterfaceAccount<'info, Mint>,
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
-    token_program: &Interface<'info, TokenInterface>,
+    token_program: &Program<'info, Token2022>,
 ) -> Result<()> {
     // Build the arguments for the transfer instruction
     let transfer_options = TransferChecked {
@@ -41,7 +38,7 @@ pub fn transfer_tokens<'info>(
     amount: u64,
     mint: &InterfaceAccount<'info, Mint>,
     authority: &AccountInfo<'info>,
-    token_program: &Interface<'info, TokenInterface>,
+    token_program: &Program<'info, Token2022>,
 ) -> Result<()> {
     // Build the arguments for the transfer instruction
     let transfer_options = TransferChecked {

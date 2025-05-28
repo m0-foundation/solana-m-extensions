@@ -1,5 +1,3 @@
-// scaled_ui_ext/src/instructions/set_fee.rs
-
 // external dependencies
 use anchor_lang::prelude::*;
 

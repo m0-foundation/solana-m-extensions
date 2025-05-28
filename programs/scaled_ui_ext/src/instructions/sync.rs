@@ -1,5 +1,3 @@
-// scaled_ui_ext/instructions/sync.rs
-
 use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},

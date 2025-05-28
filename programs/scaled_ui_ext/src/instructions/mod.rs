@@ -1,5 +1,3 @@
-// scaled_ui_ext/src/instructions/mod.rs
-
 pub mod claim_fees;
 pub mod initialize;
 pub mod set_fee;
