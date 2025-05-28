@@ -1156,6 +1156,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
+name = "m_ext"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "cfg-if",
+ "earn",
+ "solana-program",
+ "solana-security-txt",
+ "spl-token-2022 7.0.0",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1502,19 +1515,6 @@ name = "ryu"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
-
-[[package]]
-name = "scaled_ui_ext"
-version = "0.1.0"
-dependencies = [
- "anchor-lang",
- "anchor-spl",
- "cfg-if",
- "earn",
- "solana-program",
- "solana-security-txt",
- "spl-token-2022 7.0.0",
-]
 
 [[package]]
 name = "scopeguard"

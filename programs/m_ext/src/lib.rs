@@ -37,7 +37,7 @@ const _: () = {
 };
 
 #[program]
-pub mod scaled_ui_ext {
+pub mod m_ext {
     use super::*;
 
     // Admin instructions

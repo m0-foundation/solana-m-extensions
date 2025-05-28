@@ -1,12 +1,12 @@
 [package]
-name = "scaled_ui_ext"
+name = "m_ext"
 version = "0.1.0"
-description = "Created with Anchor"
+description = "M extension program with various yield distribution options chosen at compile time"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "scaled_ui_ext"
+name = "m_ext"
 
 [features]
 no-entrypoint = []
