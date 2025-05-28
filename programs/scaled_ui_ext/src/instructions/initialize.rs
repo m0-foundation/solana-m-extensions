@@ -2,21 +2,29 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey,
     token_interface::{Mint, Token2022, TokenAccount},
 };
+use cfg_if::cfg_if;
+
+#[cfg(feature = "scaled-ui")]
+use anchor_spl::token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey;
+#[cfg(feature = "scaled-ui")]
 use spl_token_2022::extension::{
     scaled_ui_amount::ScaledUiAmountConfig, BaseStateWithExtensions, ExtensionType,
     StateWithExtensions,
 };
 
 // local dependencies
+#[cfg(feature = "scaled-ui")]
+use crate::constants::{INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64};
+
 use crate::{
-    constants::{ANCHOR_DISCRIMINATOR_SIZE, INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
+    constants::ANCHOR_DISCRIMINATOR_SIZE,
     errors::ExtError,
-    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
+    state::{ExtGlobal, YieldConfig, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::conversion::sync_multiplier,
 };
+
 use earn::{
     state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
     ID as EARN_PROGRAM,
@@ -95,41 +103,45 @@ impl Initialize<'_> {
     // The wrap authorities are validated and stored in the global account.
     // The fee_bps is validated to be within the allowed range.
 
-    fn validate(&self, wrap_authorities: &[Pubkey], fee_bps: u64) -> Result<()> {
+    fn validate(&self, wrap_authorities: &[Pubkey], _fee_bps: u64) -> Result<()> {
         // Validate the ext_mint_authority PDA is the mint authority for the ext mint
         let ext_mint_authority = self.ext_mint_authority.key();
         if self.ext_mint.mint_authority.unwrap_or_default() != ext_mint_authority {
             return err!(ExtError::InvalidMint);
         }
 
-        // Validate that the ext mint has the ScaledUiAmount extension and
-        // that the ext mint authority is the extension authority
-        {
-            // explicit scope to drop the borrow at the end of the code block
-            let ext_account_info = &self.ext_mint.to_account_info();
-            let ext_data = ext_account_info.try_borrow_data()?;
-            let ext_mint_data =
-                StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&ext_data)?;
-            let extensions = ext_mint_data.get_extension_types()?;
-
-            if !extensions.contains(&ExtensionType::ScaledUiAmount) {
-                return err!(ExtError::InvalidMint);
-            }
-
-            let scaled_ui_config = ext_mint_data.get_extension::<ScaledUiAmountConfig>()?;
-            if scaled_ui_config.authority != OptionalNonZeroPubkey(ext_mint_authority) {
-                return err!(ExtError::InvalidMint);
-            }
-        }
-
-        // Validate the fee_bps is within the allowed range
-        if fee_bps > ONE_HUNDRED_PERCENT_U64 {
-            return err!(ExtError::InvalidParam);
-        }
-
         // Validate and create the wrap authorities array
         if wrap_authorities.len() > 10 {
             return err!(ExtError::InvalidParam);
+        }
+
+        cfg_if! {
+            if #[cfg(feature = "scaled-ui")] {
+                // Validate that the ext mint has the ScaledUiAmount extension and
+                // that the ext mint authority is the extension authority
+                {
+                    // explicit scope to drop the borrow at the end of the code block
+                    let ext_account_info = &self.ext_mint.to_account_info();
+                    let ext_data = ext_account_info.try_borrow_data()?;
+                    let ext_mint_data =
+                        StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&ext_data)?;
+                    let extensions = ext_mint_data.get_extension_types()?;
+
+                    if !extensions.contains(&ExtensionType::ScaledUiAmount) {
+                        return err!(ExtError::InvalidMint);
+                    }
+
+                    let scaled_ui_config = ext_mint_data.get_extension::<ScaledUiAmountConfig>()?;
+                    if scaled_ui_config.authority != OptionalNonZeroPubkey(ext_mint_authority) {
+                        return err!(ExtError::InvalidMint);
+                    }
+                }
+
+                // Validate the fee_bps is within the allowed range
+                if _fee_bps > ONE_HUNDRED_PERCENT_U64 {
+                    return err!(ExtError::InvalidParam);
+                }
+            }
         }
 
         Ok(())
@@ -149,19 +161,31 @@ impl Initialize<'_> {
             wrap_authorities_array[i] = *authority;
         }
 
+        let yield_config: YieldConfig;
+
+        cfg_if! {
+            if #[cfg(feature = "scaled-ui")] {
+                yield_config = YieldConfig {
+                    fee_bps,
+                    last_m_index: ctx.accounts.m_earn_global_account.index,
+                    last_ext_index: INDEX_SCALE_U64, // we set the extension index to 1.0 initially
+                };
+            } else {
+                yield_config = YieldConfig {};
+            }
+        }
+
         // Initialize the ExtGlobal account
         ctx.accounts.global_account.set_inner(ExtGlobal {
             admin: ctx.accounts.admin.key(),
             ext_mint: ctx.accounts.ext_mint.key(),
             m_mint: ctx.accounts.m_mint.key(),
             m_earn_global_account: ctx.accounts.m_earn_global_account.key(),
-            fee_bps,
-            last_m_index: ctx.accounts.m_earn_global_account.index,
-            last_ext_index: INDEX_SCALE_U64, // we set the extension index to 1.0 initially
             bump: ctx.bumps.global_account,
             m_vault_bump: ctx.bumps.m_vault,
             ext_mint_authority_bump: ctx.bumps.ext_mint_authority,
             wrap_authorities: wrap_authorities_array,
+            yield_config,
         });
 
         // Set the ScaledUi multiplier to 1.0
