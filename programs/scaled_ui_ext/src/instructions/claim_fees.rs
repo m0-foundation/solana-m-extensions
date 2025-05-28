@@ -116,6 +116,7 @@ impl ClaimFees<'_> {
             emit!(FeesClaimed {
                 recipient_token_account: ctx.accounts.recipient_ext_token_account.key(),
                 amount: excess,
+                principal: excess_principal,
             });
         }
 
@@ -127,4 +128,5 @@ impl ClaimFees<'_> {
 pub struct FeesClaimed {
     pub recipient_token_account: Pubkey,
     pub amount: u64,
+    pub principal: u64,
 }
