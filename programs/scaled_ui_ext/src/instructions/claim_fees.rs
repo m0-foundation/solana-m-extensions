@@ -24,6 +24,7 @@ pub struct ClaimFees<'info> {
         seeds = [EXT_GLOBAL_SEED],
         has_one = admin @ ExtError::NotAuthorized,
         has_one = m_earn_global_account @ ExtError::InvalidAccount,
+        has_one = m_mint @ ExtError::InvalidMint,
         has_one = ext_mint @ ExtError::InvalidMint,
         bump = global_account.bump,
     )]
@@ -31,7 +32,10 @@ pub struct ClaimFees<'info> {
 
     pub m_earn_global_account: Account<'info, EarnGlobal>,
 
-    #[account(mut)]
+    #[account(mint::token_program = m_token_program)]
+    pub m_mint: InterfaceAccount<'info, Mint>,
+
+    #[account(mut, mint::token_program = ext_token_program)]
     pub ext_mint: InterfaceAccount<'info, Mint>,
 
     /// CHECK: This account is validated by the seed, it stores no data
@@ -50,7 +54,7 @@ pub struct ClaimFees<'info> {
 
     #[account(
         mut,
-        associated_token::mint = global_account.m_mint,
+        associated_token::mint = m_mint,
         associated_token::authority = m_vault,
         associated_token::token_program = m_token_program,
     )]
@@ -61,10 +65,11 @@ pub struct ClaimFees<'info> {
     #[account(
         mut,
         token::mint = ext_mint,
+        token::token_program = ext_token_program,
     )]
     pub recipient_ext_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    pub m_token_program: Interface<'info, TokenInterface>, // TODO does this need to be validated?
+    pub m_token_program: Interface<'info, TokenInterface>,
     pub ext_token_program: Program<'info, Token2022>,
 }
 
