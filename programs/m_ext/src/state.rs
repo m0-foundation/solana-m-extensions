@@ -1,7 +1,4 @@
-use anchor_lang::prelude::{
-    borsh::{BorshDeserialize, BorshSerialize},
-    *,
-};
+use anchor_lang::prelude::*;
 use cfg_if::cfg_if;
 
 #[constant]
@@ -29,14 +26,14 @@ pub const M_VAULT_SEED: &[u8] = b"m_vault";
 
 cfg_if! {
     if #[cfg(feature = "scaled-ui")] {
-        #[derive(BorshSerialize, BorshDeserialize, Clone, InitSpace)]
+        #[derive(AnchorSerialize, AnchorDeserialize, Clone, InitSpace)]
         pub struct YieldConfig {
             pub fee_bps: u64, // fee in basis points
             pub last_m_index: u64, // last m index
             pub last_ext_index: u64, // last ext index
         }
     } else {
-        #[derive(BorshSerialize, BorshDeserialize, Clone, InitSpace)]
+        #[derive(AnchorSerialize, AnchorDeserialize, Clone, InitSpace)]
         pub struct YieldConfig {}
     }
 }
