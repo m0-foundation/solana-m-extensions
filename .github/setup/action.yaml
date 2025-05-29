@@ -1,20 +1,20 @@
 name: setup
-description: 'Installing tooling and dependencies for running tests'
+description: "Installing tooling and dependencies for running tests"
 inputs:
   node-version:
-    description: 'Node.js version'
+    description: "Node.js version"
     required: false
-    default: '22'
+    default: "22"
   solana-version:
-    description: 'Solana version'
+    description: "Solana version"
     required: false
-    default: '2.1.0'
+    default: "2.1.0"
   anchor-version:
-    description: 'Anchor CLI version'
+    description: "Anchor CLI version"
     required: false
-    default: '0.31.1'
+    default: "0.31.1"
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Setup Node
       uses: actions/setup-node@v4
@@ -61,5 +61,5 @@ runs:
       shell: bash
 
     - name: Build programs
-      run: anchor build
+      run: make build-programs
       shell: bash

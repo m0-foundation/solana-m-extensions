@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  scaled-ui-ext-tests:
-    runs-on: macos-latest 
+  program-tests:
+    runs-on: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -25,5 +25,5 @@ jobs:
         uses: ./.github/setup
 
       - name: Run tests
-        run: yarn run jest --preset ts-jest --verbose tests/unit/scaled_ui_ext.test.ts
+        run: yarn test
         shell: bash
