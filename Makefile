@@ -7,3 +7,6 @@ build-programs:
 	@mv target/deploy/m_ext.so target/deploy/no_yield.so
 	@mv target/idl/m_ext.json target/idl/no_yield.json
 	@mv target/types/m_ext.ts target/types/no_yield.ts
+
+test-programs:
+	@yarn run jest --preset ts-jest --verbose
