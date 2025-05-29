@@ -137,7 +137,7 @@ pub fn sync_multiplier<'info>(
             return Ok(multiplier);
         } else {
             // Ext tokens are 1:1 with M tokens and we don't need to sync this
-            return Ok(INDEX_SCALE_F64);
+            return Ok(1.0);
         }
     }
 }
