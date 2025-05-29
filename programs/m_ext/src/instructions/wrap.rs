@@ -100,9 +100,8 @@ impl Wrap<'_> {
             &[ctx.accounts.global_account.ext_mint_authority_bump],
         ]];
 
-        // Update the scaled UI multiplier with the current M index
-        // before wrapping new tokens
-        // If multiplier up to date, just reads the current value
+        // If necessary, sync the multiplier between M and Ext tokens
+        // Return the current value to use for conversions
         let multiplier = sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
@@ -125,6 +124,7 @@ impl Wrap<'_> {
 
         // Calculate the amount of ext tokens to mint based
         // on the amount of m tokens wrapped
+        // If multiplier is 1.0, the amount remains the same
         let principal = amount_to_principal_down(amount, multiplier)?;
 
         // Mint the amount of ext tokens to the user
