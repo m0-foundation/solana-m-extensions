@@ -36,8 +36,8 @@ import { struct, u8, f64 } from "@solana/buffer-layout";
 import { publicKey, u64 } from "@solana/buffer-layout-utils";
 import { randomInt } from "crypto";
 
-import { ScaledUiExt } from "../../target/types/scaled_ui_ext";
-const SCALED_UI_EXT_IDL = require("../../target/idl/scaled_ui_ext.json");
+import { MExt as ScaledUiExt } from "../../target/types/scaled_ui";
+const SCALED_UI_EXT_IDL = require("../../target/idl/scaled_ui.json");
 
 import {
   Earn,
@@ -46,6 +46,10 @@ import {
   MerkleTree,
   ProofElement,
 } from "@m0-foundation/solana-m-sdk";
+
+const PROGRAM_ID = new PublicKey(
+  "3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da"
+);
 
 // Unit tests for ext earn program
 
@@ -63,7 +67,6 @@ const nonAdmin: Keypair = new Keypair();
 
 // Create random addresses for testing
 const nonWrapAuthority: Keypair = new Keypair();
-const earnerTwo: Keypair = new Keypair();
 
 let svm: LiteSVM;
 let provider: LiteSVMProvider;
@@ -596,18 +599,22 @@ const warp = (seconds: BN, increment: boolean) => {
 
 // Type definitions for accounts to make it easier to do comparisons
 
+interface YieldConfig {
+  feeBps?: BN;
+  lastMIndex?: BN;
+  lastExtIndex?: BN;
+}
+
 interface ExtGlobal {
   admin?: PublicKey;
   extMint?: PublicKey;
   mMint?: PublicKey;
   mEarnGlobalAccount?: PublicKey;
-  feeBps?: BN;
-  lastMIndex?: BN;
-  lastExtIndex?: BN;
   bump?: number;
   mVaultBump?: number;
   extMintAuthorityBump?: number;
   wrapAuthorities?: PublicKey[];
+  yieldConfig?: YieldConfig;
 }
 
 const getEarnGlobalAccount = () => {
@@ -714,14 +721,21 @@ const expectExtGlobalState = async (
   if (expected.mMint) expect(state.mMint).toEqual(expected.mMint);
   if (expected.mEarnGlobalAccount)
     expect(state.mEarnGlobalAccount).toEqual(expected.mEarnGlobalAccount);
-  if (expected.feeBps)
-    expect(state.feeBps.toString()).toEqual(expected.feeBps.toString());
-  if (expected.lastMIndex)
-    expect(state.lastMIndex.toString()).toEqual(expected.lastMIndex.toString());
-  if (expected.lastExtIndex)
-    expect(state.lastExtIndex.toString()).toEqual(
-      expected.lastExtIndex.toString()
-    );
+  if (expected.yieldConfig) {
+    if (expected.yieldConfig.feeBps)
+      expect(state.yieldConfig.feeBps.toString()).toEqual(
+        expected.yieldConfig.feeBps.toString()
+      );
+    if (expected.yieldConfig.lastMIndex)
+      expect(state.yieldConfig.lastMIndex.toString()).toEqual(
+        expected.yieldConfig.lastMIndex.toString()
+      );
+    if (expected.yieldConfig.lastExtIndex)
+      expect(state.yieldConfig.lastExtIndex.toString()).toEqual(
+        expected.yieldConfig.lastExtIndex.toString()
+      );
+  }
+
   if (expected.bump) expect(state.bump).toEqual(expected.bump);
   if (expected.mVaultBump)
     expect(state.mVaultBump).toEqual(expected.mVaultBump);
@@ -1226,7 +1240,7 @@ describe("ScaledUiExt unit tests", () => {
 
   beforeEach(async () => {
     // Initialize the SVM instance with all necessary configurations
-    svm = fromWorkspace("")
+    svm = new LiteSVM()
       .withSplPrograms() // Add SPL programs (including token programs)
       .withBuiltins() // Add builtin programs
       .withSysvars() // Setup standard sysvars
@@ -1241,6 +1255,9 @@ describe("ScaledUiExt unit tests", () => {
       TOKEN_2022_PROGRAM_ID,
       "tests/programs/spl_token_2022.so"
     );
+
+    // Add the scaled_ui_ext program to the SVM instance
+    svm.addProgramFromFile(PROGRAM_ID, "target/deploy/scaled_ui.so");
 
     // Create an anchor provider from the liteSVM instance
     provider = new LiteSVMProvider(svm);
@@ -1605,13 +1622,15 @@ describe("ScaledUiExt unit tests", () => {
           extMint: extMint.publicKey,
           mMint: mMint.publicKey,
           mEarnGlobalAccount: getEarnGlobalAccount(),
-          feeBps: fee_bps,
-          lastMIndex: initialIndex,
-          lastExtIndex: new BN(1e12),
           bump,
           mVaultBump,
           extMintAuthorityBump,
           wrapAuthorities: paddedWrapAuthorities,
+          yieldConfig: {
+            feeBps: fee_bps,
+            lastMIndex: initialIndex,
+            lastExtIndex: new BN(1e12),
+          },
         });
 
         // Check the state of the mint
@@ -2248,8 +2267,9 @@ describe("ScaledUiExt unit tests", () => {
         );
 
         const multiplier =
-          (globalState.lastExtIndex.toNumber() / 1e12) *
-          (newIndex.toNumber() / globalState.lastMIndex.toNumber()) **
+          (globalState.yieldConfig.lastExtIndex.toNumber() / 1e12) *
+          (newIndex.toNumber() /
+            globalState.yieldConfig.lastMIndex.toNumber()) **
             (1 - fee_bps.toNumber() / 1e4);
 
         const initialRecipientPrincipal = await getTokenBalance(recipientATA);
@@ -2321,7 +2341,8 @@ describe("ScaledUiExt unit tests", () => {
           getExtGlobalAccount()
         );
 
-        const multiplier = globalState.lastExtIndex.toNumber() / 1e12;
+        const multiplier =
+          globalState.yieldConfig.lastExtIndex.toNumber() / 1e12;
         const initialRecipientBalance = await getTokenUiBalance(
           recipientATA,
           multiplier
@@ -3414,7 +3435,7 @@ describe("ScaledUiExt unit tests", () => {
             getExtGlobalAccount()
           );
           newMultiplier =
-            (globalState.lastExtIndex.toNumber() / 1e12) *
+            (globalState.yieldConfig.lastExtIndex.toNumber() / 1e12) *
             (newIndex.toNumber() / startIndex.toNumber()) **
               (1 - fee_bps.toNumber() / 1e4);
         });
@@ -3752,12 +3773,13 @@ describe("ScaledUiExt unit tests", () => {
 
         // Confirm the scaled ui config on the ext mint matches the m index
         // console.log("start index", startIndex.toString());
-        // console.log("last ext index", globalState.lastExtIndex.toString());
-        // console.log("last m index", globalState.lastMIndex.toString());
+        // console.log("last ext index", globalState.yieldConfig.lastExtIndex.toString());
+        // console.log("last m index", globalState.yieldConfig.lastMIndex.toString());
         // console.log("fee bps", fee_bps.toString());
         const multiplier =
-          (globalState.lastExtIndex.toNumber() / 1e12) *
-          (startIndex.toNumber() / globalState.lastMIndex.toNumber()) **
+          (globalState.yieldConfig.lastExtIndex.toNumber() / 1e12) *
+          (startIndex.toNumber() /
+            globalState.yieldConfig.lastMIndex.toNumber()) **
             (1 - fee_bps.toNumber() / 1e4);
         // console.log("multiplier", multiplier.toString());
 
