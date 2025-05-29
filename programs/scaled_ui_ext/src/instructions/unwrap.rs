@@ -1,5 +1,3 @@
-// scaled_ui_ext/instructions/unwrap.rs
-
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 
@@ -15,14 +13,12 @@ use earn::state::Global as EarnGlobal;
 
 #[derive(Accounts)]
 pub struct Unwrap<'info> {
-    #[account(
-        constraint = signer.key() != Pubkey::default() && global_account.wrap_authorities.contains(&signer.key()) @ ExtError::NotAuthorized,
-    )]
     pub signer: Signer<'info>,
 
+    #[account(mint::token_program = m_token_program)]
     pub m_mint: InterfaceAccount<'info, Mint>,
 
-    #[account(mut)]
+    #[account(mut, mint::token_program = ext_token_program)]
     pub ext_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
@@ -54,6 +50,8 @@ pub struct Unwrap<'info> {
     #[account(
         mut,
         token::mint = m_mint,
+        token::token_program = m_token_program,
+        // authority of the to token account is not checked to allow unwrap + send
     )]
     pub to_m_token_account: InterfaceAccount<'info, TokenAccount>,
 
@@ -61,65 +59,87 @@ pub struct Unwrap<'info> {
         mut,
         associated_token::mint = m_mint,
         associated_token::authority = m_vault,
-        associated_token::token_program = token_2022,
+        associated_token::token_program = m_token_program,
     )]
     pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         mut,
         token::mint = ext_mint,
-        token::authority = signer,
+        token::token_program = ext_token_program,
+        // signer must be the authority of the from token account or delegated by the owner
+        // this is checked by the token program
     )]
     pub from_ext_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    pub token_2022: Program<'info, Token2022>,
+    // we have duplicate entries for the token2022 program since the interface needs to be consistent, and all extensions may not be token2022
+    // additionally, it allows us to change the m token program in the future without breaking the interface
+    pub m_token_program: Program<'info, Token2022>,
+    pub ext_token_program: Program<'info, Token2022>,
 }
 
-pub fn handler(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
-    let authority_seeds: &[&[&[u8]]] = &[&[
-        MINT_AUTHORITY_SEED,
-        &[ctx.accounts.global_account.ext_mint_authority_bump],
-    ]];
+impl Unwrap<'_> {
+    pub fn validate(&self) -> Result<()> {
+        // Ensure the signer is authorized to unwrap
+        if self.signer.key() == Pubkey::default() || // probably don't need to check this, but it's included for completeness
+            !self
+            .global_account
+            .wrap_authorities
+            .contains(&self.signer.key())
+        {
+            return err!(ExtError::NotAuthorized);
+        }
 
-    // Update the scaled UI multiplier with the current M index
-    // before unwrapping tokens
-    // If multiplier up to date, just reads the current value
-    let multiplier = sync_multiplier(
-        &mut ctx.accounts.ext_mint,
-        &mut ctx.accounts.global_account,
-        &ctx.accounts.m_earn_global_account,
-        &ctx.accounts.vault_m_token_account,
-        &ctx.accounts.ext_mint_authority,
-        authority_seeds,
-        &ctx.accounts.token_2022,
-    )?;
-
-    // Calculate the principal amount of ext tokens to burn
-    // from the amount of m tokens to unwrap
-    let mut principal = amount_to_principal_up(amount, multiplier)?;
-    if principal > ctx.accounts.from_ext_token_account.amount {
-        principal = ctx.accounts.from_ext_token_account.amount;
+        Ok(())
     }
 
-    // Burn the amount of ext tokens from the user
-    burn_tokens(
-        &ctx.accounts.from_ext_token_account,   // from
-        principal,                              // amount
-        &ctx.accounts.ext_mint,                 // mint
-        &ctx.accounts.signer.to_account_info(), // authority
-        &ctx.accounts.token_2022,               // token program
-    )?;
+    #[access_control(ctx.accounts.validate())]
+    pub fn handler(ctx: Context<Self>, amount: u64) -> Result<()> {
+        let authority_seeds: &[&[&[u8]]] = &[&[
+            MINT_AUTHORITY_SEED,
+            &[ctx.accounts.global_account.ext_mint_authority_bump],
+        ]];
 
-    // Transfer the amount of m tokens from the m vault to the user
-    transfer_tokens_from_program(
-        &ctx.accounts.vault_m_token_account, // from
-        &ctx.accounts.to_m_token_account,    // to
-        amount,                              // amount
-        &ctx.accounts.m_mint,                // mint
-        &ctx.accounts.m_vault,               // authority
-        &[&[M_VAULT_SEED, &[ctx.accounts.global_account.m_vault_bump]]], // authority seeds
-        &ctx.accounts.token_2022,            // token program
-    )?;
+        // Update the scaled UI multiplier with the current M index
+        // before unwrapping tokens
+        // If multiplier up to date, just reads the current value
+        let multiplier = sync_multiplier(
+            &mut ctx.accounts.ext_mint,
+            &mut ctx.accounts.global_account,
+            &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.vault_m_token_account,
+            &ctx.accounts.ext_mint_authority,
+            authority_seeds,
+            &ctx.accounts.ext_token_program,
+        )?;
 
-    Ok(())
+        // Calculate the principal amount of ext tokens to burn
+        // from the amount of m tokens to unwrap
+        let mut principal = amount_to_principal_up(amount, multiplier)?;
+        if principal > ctx.accounts.from_ext_token_account.amount {
+            principal = ctx.accounts.from_ext_token_account.amount;
+        }
+
+        // Burn the amount of ext tokens from the user
+        burn_tokens(
+            &ctx.accounts.from_ext_token_account,   // from
+            principal,                              // amount
+            &ctx.accounts.ext_mint,                 // mint
+            &ctx.accounts.signer.to_account_info(), // authority
+            &ctx.accounts.ext_token_program,        // token program
+        )?;
+
+        // Transfer the amount of m tokens from the m vault to the user
+        transfer_tokens_from_program(
+            &ctx.accounts.vault_m_token_account, // from
+            &ctx.accounts.to_m_token_account,    // to
+            amount,                              // amount
+            &ctx.accounts.m_mint,                // mint
+            &ctx.accounts.m_vault,               // authority
+            &[&[M_VAULT_SEED, &[ctx.accounts.global_account.m_vault_bump]]], // authority seeds
+            &ctx.accounts.m_token_program,       // token program
+        )?;
+
+        Ok(())
+    }
 }

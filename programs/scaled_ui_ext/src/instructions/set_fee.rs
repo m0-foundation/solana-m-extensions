@@ -1,5 +1,3 @@
-// scaled_ui_ext/src/instructions/set_fee.rs
-
 // external dependencies
 use anchor_lang::prelude::*;
 
@@ -23,14 +21,26 @@ pub struct SetFee<'info> {
     pub global_account: Account<'info, ExtGlobal>,
 }
 
-pub fn handler(ctx: Context<SetFee>, fee_bps: u64) -> Result<()> {
-    // Validate that the fee is between 0 and 100
-    if fee_bps > ONE_HUNDRED_PERCENT_U64 {
-        return err!(ExtError::InvalidParam);
+impl SetFee<'_> {
+    // This instruction allows the admin to set a new fee in basis points (bps).
+    // The fee must be between 0 and 100 bps (inclusive).
+    // If the fee is set to 0, it effectively disables the fee.
+    // If the fee is set to 100, it means the entire amount is taken as a fee.
+    // Any value above 100 bps will result in an error.
+
+    fn validate(&self, fee_bps: u64) -> Result<()> {
+        // Validate that the fee is between 0 and 100 bps
+        if fee_bps > ONE_HUNDRED_PERCENT_U64 {
+            return err!(ExtError::InvalidParam);
+        }
+        Ok(())
     }
 
-    // Set the new fee
-    ctx.accounts.global_account.fee_bps = fee_bps;
+    #[access_control(ctx.accounts.validate(fee_bps))]
+    pub fn handler(ctx: Context<Self>, fee_bps: u64) -> Result<()> {
+        // Set the new fee
+        ctx.accounts.global_account.fee_bps = fee_bps;
 
-    Ok(())
+        Ok(())
+    }
 }

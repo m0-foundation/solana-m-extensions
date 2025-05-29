@@ -14,6 +14,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
+  approveChecked,
   createInitializeMintInstruction,
   createAssociatedTokenAccountInstruction,
   createCloseAccountInstruction,
@@ -29,6 +30,7 @@ import {
   ExtensionType,
   getExtensionData,
   createInitializeImmutableOwnerInstruction,
+  createApproveCheckedInstruction,
 } from "@solana/spl-token";
 import { struct, u8, f64 } from "@solana/buffer-layout";
 import { publicKey, u64 } from "@solana/buffer-layout-utils";
@@ -558,6 +560,32 @@ const getTokenUiBalance = async (
   return new BN(uiBalance.toString());
 };
 
+const approve = async (
+  source: Keypair,
+  delegate: PublicKey,
+  mint: PublicKey,
+  amount: BN
+) => {
+  const sourceATA: PublicKey = await getATA(mint, source.publicKey);
+
+  const approveIx = createApproveCheckedInstruction(
+    sourceATA,
+    mint,
+    delegate,
+    source.publicKey,
+    BigInt(amount.toString()),
+    6, // decimals
+    [],
+    TOKEN_2022_PROGRAM_ID
+  );
+
+  let tx = new Transaction();
+  tx.add(approveIx);
+  await provider.sendAndConfirm!(tx, [source]);
+
+  return { sourceATA };
+};
+
 const warp = (seconds: BN, increment: boolean) => {
   const clock = svm.getClock();
   clock.unixTimestamp = increment
@@ -937,7 +965,8 @@ const prepExtInitialize = async (signer: Keypair) => {
   accounts.mVault = getMVault();
   accounts.vaultMTokenAccount = await getATA(mMint.publicKey, accounts.mVault);
   accounts.systemProgram = SystemProgram.programId;
-  accounts.token2022 = TOKEN_2022_PROGRAM_ID;
+  accounts.mTokenProgram = TOKEN_2022_PROGRAM_ID;
+  accounts.extTokenProgramn = TOKEN_2022_PROGRAM_ID;
 
   return { globalAccount };
 };
@@ -1047,7 +1076,8 @@ const prepWrap = async (
     (await getATA(extMint.publicKey, to ?? from.publicKey));
   accounts.vaultMTokenAccount =
     vaultMTokenAccount ?? (await getATA(mMint.publicKey, mVault));
-  accounts.token2022 = TOKEN_2022_PROGRAM_ID;
+  accounts.mTokenProgram = TOKEN_2022_PROGRAM_ID;
+  accounts.extTokenProgram = TOKEN_2022_PROGRAM_ID;
 
   return {
     vaultMTokenAccount: accounts.vaultMTokenAccount,
@@ -1096,7 +1126,8 @@ const prepUnwrap = async (
     fromExtTokenAccount ?? (await getATA(extMint.publicKey, from.publicKey));
   accounts.vaultMTokenAccount =
     vaultMTokenAccount ?? (await getATA(mMint.publicKey, mVault));
-  accounts.token2022 = TOKEN_2022_PROGRAM_ID;
+  accounts.mTokenProgram = TOKEN_2022_PROGRAM_ID;
+  accounts.extTokenProgram = TOKEN_2022_PROGRAM_ID;
 
   return {
     vaultMTokenAccount: accounts.vaultMTokenAccount,
@@ -1132,7 +1163,7 @@ const prepSync = async (signer: Keypair) => {
   accounts.vaultMTokenAccount = await getATA(mMint.publicKey, accounts.mVault);
   accounts.extMint = extMint.publicKey;
   accounts.extMintAuthority = getExtMintAuthority();
-  accounts.token2022 = TOKEN_2022_PROGRAM_ID;
+  accounts.extTokenProgram = TOKEN_2022_PROGRAM_ID;
 
   return { globalAccount };
 };
@@ -1170,7 +1201,8 @@ const prepClaimFees = async (signer: Keypair, toTokenAccount?: PublicKey) => {
   );
   accounts.recipientExtTokenAccount =
     toTokenAccount ?? (await getATA(extMint.publicKey, signer.publicKey, true));
-  accounts.token2022 = TOKEN_2022_PROGRAM_ID;
+  accounts.mTokenProgram = TOKEN_2022_PROGRAM_ID;
+  accounts.extTokenProgram = TOKEN_2022_PROGRAM_ID;
 
   return { globalAccount };
 };
@@ -2407,8 +2439,9 @@ describe("ScaledUiExt unit tests", () => {
       // Initialize the extension program
       await initializeExt(wrapAuthorities, fee_bps);
 
-      // Mint M tokens to the extension earner and a non-earner
+      // Mint M tokens to a wrap authority and a non-wrap authority
       await mintM(wrapAuthority.publicKey, mintAmount);
+      await mintM(nonWrapAuthority.publicKey, mintAmount);
 
       // Wrap some tokens from the admin to the make the m vault's balance non-zero
       await wrap(admin, initialWrappedAmount);
@@ -2441,7 +2474,7 @@ describe("ScaledUiExt unit tests", () => {
         //   [X] it reverts with an InvalidAccount error
         // [X] given the ext mint account does not match the one stored in the global account
         //   [X] it reverts with an InvalidAccount error
-        // [X] given the signer is not the authority on the from m token account
+        // [X] given the signer is not the authority on the from m token account and is not delegated by the owner
         //   [X] it reverts with a ConstraintTokenOwner error
         // [X] given the vault M token account is not the M Vaults ATA for the M token mint
         //   [X] it reverts with a ConstraintAssociated error
@@ -2455,7 +2488,10 @@ describe("ScaledUiExt unit tests", () => {
         //   [X] given the user does not have enough M tokens
         //     [X] it reverts with a ? error
         //   [X] given the user has enough M tokens
-        //     [X] it transfers the amount of M tokens from the user's M token account to the M vault token account
+        //     [ ] given the signer is not the owner of the from M token account, but is delegated
+        //       [ ] it transfers the amount of M tokens from the user's M token account to the M vault token account
+        //     [X] given the signer is the owner of the from M token account
+        //       [X] it transfers the amount of M tokens from the user's M token account to the M vault token account
         //     [X] it mints the amount of ext tokens to the user's ext token account
         //     [X] given the user wraps and then unwraps (roundtrip)
         //       [X] the starting balance and ending balance of the user's M token account are the same
@@ -2502,10 +2538,9 @@ describe("ScaledUiExt unit tests", () => {
           );
         });
 
-        // given the signer is not the authority on the user M token account
+        // given the signer is not the authority on the user M token account and is not delegated
         // it reverts with a ConstraintTokenOwner error
-        // TODO should we allow from ATAs where the token account owner is not the signer as long as the wrap authority also signs the transaction?
-        test("Signer is not the authority on the from M token account - reverts", async () => {
+        test("Signer is not the authority on the from M token account and is not delegated - reverts", async () => {
           // Get the ATA for another user
           const wrongATA = await getATA(
             mMint.publicKey,
@@ -2517,13 +2552,12 @@ describe("ScaledUiExt unit tests", () => {
 
           // Attempt to send the transaction
           // Expect revert with TokenOwner error
-          await expectAnchorError(
+          await expectSystemError(
             scaledUiExt.methods
               .wrap(mintAmount)
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
-              .rpc(),
-            "ConstraintTokenOwner"
+              .rpc()
           );
         });
 
@@ -2669,6 +2703,61 @@ describe("ScaledUiExt unit tests", () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc()
+          );
+        });
+
+        // given all accounts are correct
+        // given the from token account has enough M tokens
+        // given the signer is not the owner of the from M token account, but is delegated
+        // it transfers the amount of M tokens from the user's M token account to the M vault token account
+        // it mints the amount of ext tokens to the to ext token account
+        test("Wrap with delegated authority - success", async () => {
+          const wrapAmount = new BN(randomInt(1, mintAmount.toNumber() + 1));
+
+          // Approve (delegate) the wrap authority to spend the non-wrap authority's M tokens
+          const { sourceATA: fromATA } = await approve(
+            nonWrapAuthority,
+            wrapAuthority.publicKey,
+            mMint.publicKey,
+            wrapAmount
+          );
+
+          // Setup the instruction
+          const { vaultMTokenAccount, fromMTokenAccount, toExtTokenAccount } =
+            await prepWrap(wrapAuthority, nonWrapAuthority.publicKey, fromATA);
+
+          // Cache initial balances
+          const fromMTokenAccountBalance = await getTokenBalance(
+            fromMTokenAccount
+          );
+          const vaultMTokenAccountBalance = await getTokenBalance(
+            vaultMTokenAccount
+          );
+          const toExtTokenAccountUiBalance = await getTokenUiBalance(
+            toExtTokenAccount
+          );
+
+          // Send the instruction
+          await scaledUiExt.methods
+            .wrap(wrapAmount)
+            .accountsPartial({ ...accounts })
+            .signers([wrapAuthority])
+            .rpc();
+
+          // Confirm updated balances
+          await expectTokenBalance(
+            fromMTokenAccount,
+            fromMTokenAccountBalance.sub(wrapAmount)
+          );
+          await expectTokenBalance(
+            vaultMTokenAccount,
+            vaultMTokenAccountBalance.add(wrapAmount)
+          );
+          await expectTokenUiBalance(
+            toExtTokenAccount,
+            toExtTokenAccountUiBalance.add(wrapAmount),
+            Comparison.LessThanOrEqual,
+            new BN(2)
           );
         });
 
@@ -2926,8 +3015,8 @@ describe("ScaledUiExt unit tests", () => {
         //   [X] it reverts with an InvalidAccount error
         // [X] given the ext mint account does not match the one stored in the global account
         //   [X] it reverts with an InvalidAccount error
-        // [X] given the signer is not the authority on the from ext token account
-        //   [X] it reverts with a ConstraintTokenOwner error
+        // [X] given the signer is not the authority on the from ext token account and is not delegated by the owner
+        //   [X] it reverts with a Token program error
         // [X] given the vault M token account is not the M Vaults ATA for the M token mint
         //   [X] it reverts with a ConstraintAssociated error
         // [X] given the to m token account is for the wrong mint
@@ -2940,8 +3029,11 @@ describe("ScaledUiExt unit tests", () => {
         //   [X] given the user does not have enough ext tokens
         //     [X] it reverts
         //   [X] given the user has enough ext tokens
-        //     [X] it transfers the amount of M tokens from the M vault token account to the user's M token account
-        //     [X] it burns the amount of ext tokens from the user's ext token account
+        //     [X] given the signer is not the owner of the from ext token account, but is delegated
+        //       [X] it burns the amount of ext tokens from the from's ext token account
+        //     [X] given the signer is the owner of the from ext token account
+        //       [X] it burns the amount of ext tokens from the user's ext token account
+        //     [X] it transfers the amount of M tokens from the M vault token account to the to's M token account
 
         // given the m mint account does not match the one stored in the global account
         // it reverts with an InvalidAccount error
@@ -2985,9 +3077,9 @@ describe("ScaledUiExt unit tests", () => {
           );
         });
 
-        // given the signer is not the authority on the user ext token account
+        // given the signer is not the authority on the user ext token account and not delegated
         // it reverts with a ConstraintTokenOwner error
-        test("Signer is not the authority on the from Ext token account - reverts", async () => {
+        test("Signer is not the authority on the from Ext token account and not delegated - reverts", async () => {
           // Get the ATA for another user
           const mATA = await getATA(mMint.publicKey, wrapAuthority.publicKey);
           const wrongExtATA = await getATA(
@@ -3000,13 +3092,12 @@ describe("ScaledUiExt unit tests", () => {
 
           // Attempt to send the transaction
           // Expect revert with TokenOwner error
-          await expectAnchorError(
+          await expectSystemError(
             scaledUiExt.methods
               .unwrap(wrappedAmount)
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
-              .rpc(),
-            "ConstraintTokenOwner"
+              .rpc()
           );
         });
 
@@ -3152,6 +3243,65 @@ describe("ScaledUiExt unit tests", () => {
               .accountsPartial({ ...accounts })
               .signers([wrapAuthority])
               .rpc()
+          );
+        });
+
+        // given all accounts are correct
+        // given the from token account has enough ext tokens
+        // given the signer is not the owner of the from ext token account, but is delegated
+        // it burns the amount of ext tokens from the from's ext token account
+        // it transfers the amount of M tokens from the M vault token account to the to's M token account
+        test("Unwrap with delegated authority - success", async () => {
+          const unwrapAmount = new BN(
+            randomInt(1, wrappedAmount.toNumber() + 1)
+          );
+
+          // Approve (delegate) the wrap authority to spend the non-wrap authority's ext tokens
+          const { sourceATA: fromExtTokenAccount } = await approve(
+            nonWrapAuthority,
+            wrapAuthority.publicKey,
+            extMint.publicKey,
+            unwrapAmount
+          );
+
+          // Setup the instruction
+          const { vaultMTokenAccount, toMTokenAccount } = await prepUnwrap(
+            wrapAuthority,
+            nonWrapAuthority.publicKey,
+            undefined,
+            fromExtTokenAccount
+          );
+
+          // Cache initial balances
+          const fromExtTokenAccountUiBalance = await getTokenUiBalance(
+            fromExtTokenAccount
+          );
+          const vaultMTokenAccountBalance = await getTokenBalance(
+            vaultMTokenAccount
+          );
+          const toMTokenAccountBalance = await getTokenBalance(toMTokenAccount);
+
+          // Send the instruction
+          await scaledUiExt.methods
+            .unwrap(unwrapAmount)
+            .accountsPartial({ ...accounts })
+            .signers([wrapAuthority])
+            .rpc();
+
+          // Confirm updated balances
+          await expectTokenUiBalance(
+            fromExtTokenAccount,
+            fromExtTokenAccountUiBalance.sub(unwrapAmount),
+            Comparison.LessThanOrEqual,
+            new BN(2)
+          );
+          await expectTokenBalance(
+            vaultMTokenAccount,
+            vaultMTokenAccountBalance.sub(unwrapAmount)
+          );
+          await expectTokenBalance(
+            toMTokenAccount,
+            toMTokenAccountBalance.add(unwrapAmount)
           );
         });
 

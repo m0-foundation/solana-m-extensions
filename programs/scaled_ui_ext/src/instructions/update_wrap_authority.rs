@@ -1,5 +1,3 @@
-// scaled_ui_ext/instructions/update_wrap_authority.rs
-
 use anchor_lang::prelude::*;
 
 use crate::{
@@ -20,29 +18,36 @@ pub struct UpdateWrapAuthority<'info> {
     pub global_account: Account<'info, ExtGlobal>,
 }
 
-pub fn handler(
-    ctx: Context<UpdateWrapAuthority>,
-    index: u8,
-    new_wrap_authority: Pubkey,
-) -> Result<()> {
-    let global_account = &mut ctx.accounts.global_account;
+impl UpdateWrapAuthority<'_> {
+    // This instruction allows the admin to update the wrap authority at a specific index
+    // in the global account's wrap authorities list.
+    // The new wrap authority must not already exist in the list (unless it's the system program).
+    // The index must be within bounds of the current wrap authorities.
 
-    // Validate that the new wrap authority is not already in the list (if not the system program)
-    if new_wrap_authority != Pubkey::default()
-        && global_account
-            .wrap_authorities
-            .contains(&new_wrap_authority)
-    {
-        return err!(ExtError::InvalidParam);
+    pub fn validate(&self, index: u8, new_wrap_authority: Pubkey) -> Result<()> {
+        // Validate that the new wrap authority is not already in the list (if not the system program)
+        if new_wrap_authority != Pubkey::default()
+            && self
+                .global_account
+                .wrap_authorities
+                .contains(&new_wrap_authority)
+        {
+            return err!(ExtError::InvalidParam);
+        }
+
+        // Validate that the index is within bounds
+        if index as usize >= self.global_account.wrap_authorities.len() {
+            return err!(ExtError::InvalidParam);
+        }
+
+        Ok(())
     }
 
-    // Validate that the index is within bounds
-    if index as usize >= global_account.wrap_authorities.len() {
-        return err!(ExtError::InvalidParam);
+    #[access_control(ctx.accounts.validate(index, new_wrap_authority))]
+    pub fn handler(ctx: Context<Self>, index: u8, new_wrap_authority: Pubkey) -> Result<()> {
+        // Update the wrap authority at the specified index
+        ctx.accounts.global_account.wrap_authorities[index as usize] = new_wrap_authority;
+
+        Ok(())
     }
-
-    // Update the wrap authority at the specified index
-    global_account.wrap_authorities[index as usize] = new_wrap_authority;
-
-    Ok(())
 }

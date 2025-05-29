@@ -1,5 +1,3 @@
-// scaled_ui_ext/instructions/sync.rs
-
 use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
@@ -48,24 +46,26 @@ pub struct Sync<'info> {
     )]
     pub ext_mint_authority: AccountInfo<'info>,
 
-    pub token_2022: Program<'info, Token2022>,
+    pub ext_token_program: Program<'info, Token2022>,
 }
 
-pub fn handler(ctx: Context<Sync>) -> Result<()> {
-    // Sync the multiplier
-    // This will update the multiplier on ext_mint
-    // if it doesn't match the index on m_earn_global_account
-    // It also checks that the vault is solvent after the update
-    let signer_bump = ctx.accounts.global_account.ext_mint_authority_bump;
-    sync_multiplier(
-        &mut ctx.accounts.ext_mint,
-        &mut ctx.accounts.global_account,
-        &ctx.accounts.m_earn_global_account,
-        &ctx.accounts.vault_m_token_account,
-        &ctx.accounts.ext_mint_authority,
-        &[&[MINT_AUTHORITY_SEED, &[signer_bump]]],
-        &ctx.accounts.token_2022,
-    )?;
+impl Sync<'_> {
+    pub fn handler(ctx: Context<Self>) -> Result<()> {
+        // Sync the multiplier
+        // This will update the multiplier on ext_mint
+        // if it doesn't match the index on m_earn_global_account
+        // It also checks that the vault is solvent after the update
+        let signer_bump = ctx.accounts.global_account.ext_mint_authority_bump;
+        sync_multiplier(
+            &mut ctx.accounts.ext_mint,
+            &mut ctx.accounts.global_account,
+            &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.vault_m_token_account,
+            &ctx.accounts.ext_mint_authority,
+            &[&[MINT_AUTHORITY_SEED, &[signer_bump]]],
+            &ctx.accounts.ext_token_program,
+        )?;
 
-    Ok(())
+        Ok(())
+    }
 }
