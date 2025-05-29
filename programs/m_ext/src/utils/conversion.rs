@@ -11,7 +11,7 @@ use crate::{
 
 cfg_if! {
     if #[cfg(feature = "scaled-ui")] {
-        use solana_program::program::invoke_signed;
+        use anchor_lang::solana_program::program::invoke_signed;
         use spl_token_2022::extension::{
             scaled_ui_amount::{PodF64, ScaledUiAmountConfig, UnixTimestamp},
             BaseStateWithExtensions, StateWithExtensions,

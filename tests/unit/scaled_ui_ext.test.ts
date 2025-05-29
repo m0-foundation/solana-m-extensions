@@ -1,6 +1,6 @@
 import { Program, AnchorError, BN } from "@coral-xyz/anchor";
 import { LiteSVM } from "litesvm";
-import { fromWorkspace, LiteSVMProvider } from "anchor-litesvm";
+import { LiteSVMProvider } from "anchor-litesvm";
 import {
   PublicKey,
   Keypair,
@@ -14,7 +14,6 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
-  approveChecked,
   createInitializeMintInstruction,
   createAssociatedTokenAccountInstruction,
   createCloseAccountInstruction,

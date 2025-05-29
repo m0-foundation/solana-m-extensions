@@ -1,9 +1,6 @@
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::{
-    associated_token::AssociatedToken,
-    token_interface::{Mint, Token2022, TokenAccount},
-};
+use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use cfg_if::cfg_if;
 
 #[cfg(feature = "scaled-ui")]
@@ -16,13 +13,15 @@ use spl_token_2022::extension::{
 
 // local dependencies
 #[cfg(feature = "scaled-ui")]
-use crate::constants::{INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64};
+use crate::{
+    constants::{INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
+    utils::conversion::sync_multiplier,
+};
 
 use crate::{
     constants::ANCHOR_DISCRIMINATOR_SIZE,
     errors::ExtError,
     state::{ExtGlobal, YieldConfig, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
-    utils::conversion::sync_multiplier,
 };
 
 use earn::{
@@ -90,8 +89,6 @@ pub struct Initialize<'info> {
 
     pub ext_token_program: Program<'info, Token2022>,
 
-    pub associated_token_program: Program<'info, AssociatedToken>,
-
     pub system_program: Program<'info, System>,
 }
 
@@ -102,7 +99,6 @@ impl Initialize<'_> {
     // The ext_mint must have a supply of 0 to start.
     // The wrap authorities are validated and stored in the global account.
     // The fee_bps is validated to be within the allowed range.
-
     fn validate(&self, wrap_authorities: &[Pubkey], _fee_bps: u64) -> Result<()> {
         // Validate the ext_mint_authority PDA is the mint authority for the ext mint
         let ext_mint_authority = self.ext_mint_authority.key();
@@ -162,7 +158,6 @@ impl Initialize<'_> {
         }
 
         let yield_config: YieldConfig;
-
         cfg_if! {
             if #[cfg(feature = "scaled-ui")] {
                 yield_config = YieldConfig {
@@ -192,6 +187,7 @@ impl Initialize<'_> {
         // We can do this by calling the sync_multiplier function
         // when the last_m_index equals the index on the m_earn_global_account
         // and having last_ext_index set to 1e12
+        #[cfg(feature = "scaled-ui")]
         sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
