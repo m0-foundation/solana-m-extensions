@@ -106,6 +106,12 @@ impl Initialize<'_> {
             return err!(ExtError::InvalidMint);
         }
 
+        // Validate that the ext mint has a freeze authority
+        // TODO add test case for this
+        if self.ext_mint.freeze_authority.is_none() {
+            return err!(ExtError::InvalidMint);
+        }
+
         // Validate and create the wrap authorities array
         if wrap_authorities.len() > 10 {
             return err!(ExtError::InvalidParam);
