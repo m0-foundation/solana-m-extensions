@@ -1,11 +1,11 @@
 use anchor_lang::prelude::*;
 
 #[constant]
-pub const CONFIG_SEED: &[u8] = b"config";
+pub const GLOBAL_SEED: &[u8] = b"global";
 
 #[account]
 #[derive(InitSpace)]
-pub struct Config {
+pub struct Global {
     pub bump: u8,
     pub admin: Pubkey,
     pub m_mint: Pubkey,
