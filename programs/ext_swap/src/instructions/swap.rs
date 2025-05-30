@@ -131,8 +131,12 @@ pub struct Swap<'info> {
     pub system_program: Program<'info, System>,
 }
 
-impl Swap<'_> {
-    fn validate(&self) -> Result<()> {
+impl<'info> Swap<'info> {
+    fn validate(
+        &self,
+        remaining_accounts: &[AccountInfo<'_>],
+        remaining_accounts_split_idx: usize,
+    ) -> Result<()> {
         for ext_program in [&self.from_ext_program, &self.to_ext_program] {
             if !self
                 .swap_global
@@ -143,77 +147,91 @@ impl Swap<'_> {
             }
         }
 
+        if remaining_accounts_split_idx > remaining_accounts.len() {
+            return err!(SwapError::InvalidRemainingAccountsIndex);
+        }
+
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate())]
-    pub fn handler(ctx: Context<Self>, amount: u64) -> Result<()> {
-        let a = &ctx.accounts;
+    #[access_control(ctx.accounts.validate(ctx.remaining_accounts, remaining_accounts_split_idx))]
+    pub fn handler(
+        ctx: Context<'_, '_, '_, 'info, Self>,
+        amount: u64,
+        remaining_accounts_split_idx: usize,
+    ) -> Result<()> {
+        let m_pre_balance = ctx.accounts.intermediate_m_account.amount;
+        let to_pre_balance = ctx.accounts.to_token_account.amount;
 
-        let m_pre_balance = a.intermediate_m_account.amount;
-        let to_pre_balance = a.to_token_account.amount;
+        // Optional remainging accounts passed to the instructions
+        let remaining_accounts = ctx.remaining_accounts;
+        let (unwrap_remaining_accounts, wrap_remaining_accounts) =
+            remaining_accounts.split_at(remaining_accounts_split_idx);
 
         m_ext::cpi::unwrap(
             CpiContext::new(
                 ctx.accounts.from_ext_program.to_account_info(),
                 Unwrap {
-                    signer: a.signer.to_account_info(),
-                    m_mint: a.m_mint.to_account_info(),
-                    ext_mint: a.from_mint.to_account_info(),
-                    global_account: a.from_global.to_account_info(),
-                    m_earn_global_account: a.m_earn_global_account.to_account_info(),
-                    m_vault: a.from_m_vault_auth.to_account_info(),
-                    ext_mint_authority: a.from_mint_authority.to_account_info(),
-                    to_m_token_account: a.intermediate_m_account.to_account_info(),
-                    vault_m_token_account: a.from_m_vault.to_account_info(),
-                    from_ext_token_account: a.from_token_program.to_account_info(),
-                    m_token_program: a.m_token_program.to_account_info(),
-                    ext_token_program: a.from_ext_program.to_account_info(),
+                    signer: ctx.accounts.signer.to_account_info(),
+                    m_mint: ctx.accounts.m_mint.to_account_info(),
+                    ext_mint: ctx.accounts.from_mint.to_account_info(),
+                    global_account: ctx.accounts.from_global.to_account_info(),
+                    m_earn_global_account: ctx.accounts.m_earn_global_account.to_account_info(),
+                    m_vault: ctx.accounts.from_m_vault_auth.to_account_info(),
+                    ext_mint_authority: ctx.accounts.from_mint_authority.to_account_info(),
+                    to_m_token_account: ctx.accounts.intermediate_m_account.to_account_info(),
+                    vault_m_token_account: ctx.accounts.from_m_vault.to_account_info(),
+                    from_ext_token_account: ctx.accounts.from_token_program.to_account_info(),
+                    m_token_program: ctx.accounts.m_token_program.to_account_info(),
+                    ext_token_program: ctx.accounts.from_ext_program.to_account_info(),
                 },
-            ),
+            )
+            .with_remaining_accounts(unwrap_remaining_accounts.to_vec()),
             amount,
         )?;
 
         // Reload M balance and wrap difference
-        a.intermediate_m_account.reload()?;
-        let m_delta = a.intermediate_m_account.amount - m_pre_balance;
+        ctx.accounts.intermediate_m_account.reload()?;
+        let m_delta = ctx.accounts.intermediate_m_account.amount - m_pre_balance;
 
         m_ext::cpi::wrap(
             CpiContext::new(
                 ctx.accounts.to_ext_program.to_account_info(),
                 Wrap {
-                    signer: a.signer.to_account_info(),
-                    m_mint: a.m_mint.to_account_info(),
-                    ext_mint: a.to_mint.to_account_info(),
-                    global_account: a.to_global.to_account_info(),
-                    m_earn_global_account: a.m_earn_global_account.to_account_info(),
-                    m_vault: a.to_m_vault_auth.to_account_info(),
-                    ext_mint_authority: a.to_mint_authority.to_account_info(),
-                    from_m_token_account: a.intermediate_m_account.to_account_info(),
-                    vault_m_token_account: a.to_m_vault.to_account_info(),
-                    to_ext_token_account: a.to_token_program.to_account_info(),
-                    m_token_program: a.m_token_program.to_account_info(),
-                    ext_token_program: a.to_ext_program.to_account_info(),
+                    signer: ctx.accounts.signer.to_account_info(),
+                    m_mint: ctx.accounts.m_mint.to_account_info(),
+                    ext_mint: ctx.accounts.to_mint.to_account_info(),
+                    global_account: ctx.accounts.to_global.to_account_info(),
+                    m_earn_global_account: ctx.accounts.m_earn_global_account.to_account_info(),
+                    m_vault: ctx.accounts.to_m_vault_auth.to_account_info(),
+                    ext_mint_authority: ctx.accounts.to_mint_authority.to_account_info(),
+                    from_m_token_account: ctx.accounts.intermediate_m_account.to_account_info(),
+                    vault_m_token_account: ctx.accounts.to_m_vault.to_account_info(),
+                    to_ext_token_account: ctx.accounts.to_token_program.to_account_info(),
+                    m_token_program: ctx.accounts.m_token_program.to_account_info(),
+                    ext_token_program: ctx.accounts.to_ext_program.to_account_info(),
                 },
-            ),
+            )
+            .with_remaining_accounts(wrap_remaining_accounts.to_vec()),
             m_delta,
         )?;
 
         // Reload and log amounts
-        a.to_token_account.reload()?;
-        let received_amount = a.to_token_account.amount - to_pre_balance;
+        ctx.accounts.to_token_account.reload()?;
+        let received_amount = ctx.accounts.to_token_account.amount - to_pre_balance;
         msg!("{} -> {} M -> {}", amount, m_delta, received_amount);
 
         // Close intermediate account
-        a.intermediate_m_account.reload()?;
-        if a.intermediate_m_account.amount == 0 && a.intermediate_m_account.owner == a.signer.key()
+        ctx.accounts.intermediate_m_account.reload()?;
+        if ctx.accounts.intermediate_m_account.amount == 0
+            && ctx.accounts.intermediate_m_account.owner == ctx.accounts.signer.key()
         {
             anchor_spl::token_interface::close_account(CpiContext::new(
-                a.m_token_program.to_account_info(),
+                ctx.accounts.m_token_program.to_account_info(),
                 anchor_spl::token_interface::CloseAccount {
-                    account: a.intermediate_m_account.to_account_info(),
-                    destination: a.signer.to_account_info(),
-                    authority: a.signer.to_account_info(),
+                    account: ctx.accounts.intermediate_m_account.to_account_info(),
+                    destination: ctx.accounts.signer.to_account_info(),
+                    authority: ctx.accounts.signer.to_account_info(),
                 },
             ))?;
         }

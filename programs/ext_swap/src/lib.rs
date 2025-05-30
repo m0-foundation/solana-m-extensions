@@ -13,7 +13,11 @@ declare_id!("HwH4wB2ihdUM3XQzAcRq6zDdjkYKu6KjCazHHweJhVz6");
 pub mod ext_swap {
     use super::*;
 
-    pub fn swap(ctx: Context<Swap>, amount: u64) -> Result<()> {
-        Swap::handler(ctx, amount)
+    pub fn swap<'info>(
+        ctx: Context<'_, '_, '_, 'info, Swap<'info>>,
+        amount: u64,
+        remaining_accounts_split_idx: u8,
+    ) -> Result<()> {
+        Swap::handler(ctx, amount, remaining_accounts_split_idx as usize)
     }
 }
