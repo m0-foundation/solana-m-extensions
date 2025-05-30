@@ -2,32 +2,32 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use cfg_if::cfg_if;
-
-#[cfg(feature = "scaled-ui")]
-use anchor_spl::token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey;
-#[cfg(feature = "scaled-ui")]
-use spl_token_2022::extension::{
-    scaled_ui_amount::ScaledUiAmountConfig, BaseStateWithExtensions, ExtensionType,
-    StateWithExtensions,
+use earn::{
+    state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
+    ID as EARN_PROGRAM,
 };
 
 // local dependencies
-#[cfg(feature = "scaled-ui")]
-use crate::{
-    constants::{INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
-    utils::conversion::sync_multiplier,
-};
-
 use crate::{
     constants::ANCHOR_DISCRIMINATOR_SIZE,
     errors::ExtError,
     state::{ExtGlobal, YieldConfig, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
 };
 
-use earn::{
-    state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
-    ID as EARN_PROGRAM,
-};
+// conditional dependencies
+cfg_if! {
+    if #[cfg(feature = "scaled-ui")] {
+        use anchor_spl::token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey;
+        use spl_token_2022::extension::{
+            scaled_ui_amount::ScaledUiAmountConfig, BaseStateWithExtensions, ExtensionType,
+            StateWithExtensions,
+        };
+        use crate::{
+            constants::{INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
+            utils::conversion::sync_multiplier,
+        };
+    }
+}
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
