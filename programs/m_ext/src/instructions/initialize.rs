@@ -1,6 +1,9 @@
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
+use anchor_spl::{
+    associated_token::AssociatedToken,
+    token_interface::{Mint, Token2022, TokenAccount},
+};
 use cfg_if::cfg_if;
 
 #[cfg(feature = "scaled-ui")]
@@ -72,6 +75,8 @@ pub struct Initialize<'info> {
     pub m_vault: AccountInfo<'info>,
 
     #[account(
+        init_if_needed,
+        payer = admin,
         associated_token::mint = m_mint,
         associated_token::authority = m_vault,
         associated_token::token_program = m_token_program,
@@ -88,6 +93,8 @@ pub struct Initialize<'info> {
     pub m_token_program: Program<'info, Token2022>, // we have duplicate entries for the token2022 program bc the M token program could change in the future
 
     pub ext_token_program: Program<'info, Token2022>,
+
+    pub associated_token_program: Program<'info, AssociatedToken>,
 
     pub system_program: Program<'info, System>,
 }
