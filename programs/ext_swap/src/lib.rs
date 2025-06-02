@@ -43,4 +43,8 @@ pub mod ext_swap {
     ) -> Result<()> {
         Swap::handler(ctx, amount, remaining_accounts_split_idx as usize)
     }
+
+    pub fn wrap<'info>(ctx: Context<'_, '_, '_, 'info, WrapM<'info>>, amount: u64) -> Result<()> {
+        WrapM::handler(ctx, amount)
+    }
 }

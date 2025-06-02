@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 
 use crate::{
     errors::SwapError,
-    state::{Global, GLOBAL_SEED},
+    state::{SwapGlobal, GLOBAL_SEED},
 };
 
 #[derive(Accounts)]
@@ -15,7 +15,7 @@ pub struct WhitelistExt<'info> {
         seeds = [GLOBAL_SEED],
         bump = swap_global.bump,
     )]
-    pub swap_global: Account<'info, Global>,
+    pub swap_global: Account<'info, SwapGlobal>,
 }
 
 impl WhitelistExt<'_> {

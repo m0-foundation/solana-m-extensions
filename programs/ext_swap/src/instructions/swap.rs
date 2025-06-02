@@ -1,13 +1,13 @@
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
-use earn::state::GLOBAL_SEED as EARN_GLOBAL_SEED;
+use earn::state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED};
 use m_ext::cpi::accounts::{Unwrap, Wrap};
 use m_ext::state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
 
 use crate::{
     errors::SwapError,
-    state::{Global, GLOBAL_SEED},
+    state::{SwapGlobal, GLOBAL_SEED},
 };
 
 #[derive(Accounts)]
@@ -19,18 +19,20 @@ pub struct Swap<'info> {
      * Program globals
      */
     #[account(
+        has_one = m_mint,
         seeds = [GLOBAL_SEED],
         bump = swap_global.bump,
-        has_one = m_mint,
     )]
-    pub swap_global: Account<'info, Global>,
+    pub swap_global: Account<'info, SwapGlobal>,
     #[account(
+        has_one = m_mint,
         seeds = [EXT_GLOBAL_SEED],
         seeds::program = from_ext_program,
         bump = from_global.bump,
     )]
     pub from_global: Account<'info, ExtGlobal>,
     #[account(
+        has_one = m_mint,
         seeds = [EXT_GLOBAL_SEED],
         seeds::program = to_ext_program,
         bump = to_global.bump,
@@ -39,10 +41,9 @@ pub struct Swap<'info> {
     #[account(
         seeds = [EARN_GLOBAL_SEED],
         seeds::program = earn::ID,
-        bump,
+        bump = m_earn_global_account.bump,
     )]
-    /// CHECK: TODO: fix conflicting account names for IDL generation
-    pub m_earn_global_account: AccountInfo<'info>,
+    pub m_earn_global_account: Account<'info, EarnGlobal>,
 
     /*
      * Mints

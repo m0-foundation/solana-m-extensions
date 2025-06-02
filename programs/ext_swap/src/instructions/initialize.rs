@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::state::{Global, GLOBAL_SEED, MAX_WHITELISTED_EXTENSIONS};
+use crate::state::{SwapGlobal, GLOBAL_SEED, MAX_WHITELISTED_EXTENSIONS};
 
 #[derive(Accounts)]
 pub struct InitializeGlobal<'info> {
@@ -10,18 +10,18 @@ pub struct InitializeGlobal<'info> {
     #[account(
         init,
         payer = admin,
-        space = 8 + Global::INIT_SPACE,
+        space = 8 + SwapGlobal::INIT_SPACE,
         seeds = [GLOBAL_SEED],
         bump,
     )]
-    pub swap_global: Account<'info, Global>,
+    pub swap_global: Account<'info, SwapGlobal>,
 
     pub system_program: Program<'info, System>,
 }
 
 impl InitializeGlobal<'_> {
     pub fn handler(ctx: Context<Self>, m_mint: Pubkey) -> Result<()> {
-        ctx.accounts.swap_global.set_inner(Global {
+        ctx.accounts.swap_global.set_inner(SwapGlobal {
             bump: ctx.bumps.swap_global,
             admin: ctx.accounts.admin.key(),
             m_mint: m_mint,

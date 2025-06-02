@@ -112,7 +112,7 @@ describe("extension swap tests", () => {
         program.programId
       );
 
-      const globalAccount = await program.account.global.fetch(global);
+      const globalAccount = await program.account.swapGlobal.fetch(global);
       const firstWhitelisted = globalAccount.whitelistedExtensions[0];
 
       const result = await sendTransaction(
