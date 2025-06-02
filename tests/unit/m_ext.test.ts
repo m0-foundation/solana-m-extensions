@@ -14,6 +14,7 @@ import { randomInt } from "crypto";
 
 import { Comparison, ExtensionTest, Variant } from "./ext_test_harness";
 import { padKeyArray } from "../test-utils";
+import { wrap } from "module";
 
 // Unit tests for ext earn program
 
@@ -24,7 +25,8 @@ const claimCooldown = new BN(0); // None
 
 const VARIANTS: Variant[] = [Variant.ScaledUiAmount, Variant.NoYield];
 
-// Standard test cases across all variants
+// Implement test cases for all variants
+// Most are the same, but allows conditional tests when required for different variants
 for (const variant of VARIANTS) {
   let $: ExtensionTest<Variant>;
 
@@ -2670,278 +2672,253 @@ for (const variant of VARIANTS) {
         });
       });
     });
+
+    if (variant !== Variant.NoYield) {
+      describe("open instruction tests", () => {
+        describe("sync unit tests", () => {
+          const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
+
+          let wrapAuthorities: PublicKey[];
+          let vaultMTokenAccount: PublicKey;
+          const feeBps = new BN(randomInt(10000));
+
+          const startIndex = new BN(
+            randomInt(initialIndex.toNumber() + 1, 2e12)
+          );
+
+          // Setup accounts with M tokens so we can test wrapping and unwrapping
+          beforeEach(async () => {
+            wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
+            vaultMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.getMVault()
+            );
+
+            // Initialize the extension program
+            await $.initializeExt(wrapAuthorities, feeBps);
+
+            // Wrap some tokens from the admin to the make the m vault's balance non-zero
+            await $.wrap($.admin, initialWrappedAmount);
+
+            // Warp ahead slightly to change the timestamp of the new index
+            $.warp(new BN(60), true);
+
+            // Propagate the start index
+            await $.propagateIndex(startIndex);
+
+            // Claim yield for the m vault and complete the claim cycle
+            // so that the m vault is collateralized to start
+            await $.mClaimFor(
+              $.getMVault(),
+              await $.getTokenBalance(vaultMTokenAccount)
+            );
+            await $.mCompleteClaims();
+
+            // Reset the blockhash to avoid issues with duplicate transactions from multiple claim cycles
+            $.svm.expireBlockhash();
+          });
+
+          // test cases
+          // [X] given m earn global account does not match the one stored in the global account
+          //   [X] it reverts with an InvalidAccount error
+          // [X] given the m vault account does not match the derived PDA
+          //   [X] it reverts with a ConstraintSeeds error
+          // [X] given the vault m token account is not the M vault PDA's ATA
+          //   [X] it reverts with a ConstraintAssociated error
+          // [X] given the ext mint account does not match the one stored in the global account
+          //   [X] it reverts with an InvalidMint error
+          // [X] given the ext mint authority account does match the derived PDA
+          //   [X] it reverts with a ConstraintSeeds error
+          // [X] given the multiplier is already up to date
+          //   [X] it remains the same
+          // [X] given the multiplier is not up to date
+          //   [X] given the m vault has not received yield to match the latest M index
+          //     [X] it reverts with an InsufficientCollateral error
+          //   [X] given the m vault has received yield to match the latest M index
+          //     [X] it updates the scaled ui config on the ext mint to match the m index
+
+          // given m earn global account does not match the one stored in the global account
+          // it reverts with an InvalidAccount error
+          test("M earn global account does not match global account - reverts", async () => {
+            // Change the m earn global account
+            const mEarnGlobalAccount = PublicKey.unique();
+            if (mEarnGlobalAccount.equals($.getEarnGlobalAccount())) {
+              return;
+            }
+
+            // Attempt to send the transaction
+            // Expect an invalid account error (though could be others like not initialized)
+            await $.expectSystemError(
+              $.ext.methods
+                .sync()
+                .accountsPartial({
+                  mEarnGlobalAccount,
+                })
+                .signers([])
+                .rpc()
+            );
+          });
+
+          // given the m vault account does not match the derived PDA
+          // it reverts with a ConstraintSeeds error
+          test("M vault account does not match derived PDA - reverts", async () => {
+            // Change the m vault account
+            const mVault = PublicKey.unique();
+            if (mVault.equals($.getMVault())) {
+              return;
+            }
+
+            // Attempt to send the transaction
+            // Expect an invalid account error
+            await $.expectSystemError(
+              $.ext.methods
+                .sync()
+                .accountsPartial({
+                  mVault,
+                })
+                .signers([])
+                .rpc()
+            );
+          });
+
+          // given the vault m token account is not the M vault PDA's ATA
+          // it reverts with a ConstraintAssociated error
+          test("M vault token account is not the M Vault PDA's ATA - reverts", async () => {
+            // Create a valid token account that is not the ATA
+            const { tokenAccount: vaultMTokenAccount } =
+              await $.createTokenAccount($.mMint.publicKey, $.getMVault());
+
+            // Attempt to send the transaction
+            // Expect revert with a ConstraintAssociated error
+            await $.expectAnchorError(
+              $.ext.methods
+                .sync()
+                .accountsPartial({
+                  vaultMTokenAccount,
+                })
+                .signers([])
+                .rpc(),
+              "ConstraintAssociated"
+            );
+          });
+
+          // given the ext mint account does not match the one stored in the global account
+          // it reverts with an InvalidMint error
+          test("Ext mint account does not match global account - reverts", async () => {
+            // Create a new mint
+            const newMint = Keypair.generate();
+            await $.createMint(newMint, $.nonAdmin.publicKey, true, 6);
+
+            // Attempt to send the transaction
+            // Expect an invalid account error
+            await $.expectAnchorError(
+              $.ext.methods
+                .sync()
+                .accountsPartial({
+                  extMint: newMint.publicKey,
+                })
+                .signers([])
+                .rpc(),
+              "InvalidMint"
+            );
+          });
+
+          // given the ext mint authority account does match the derived PDA
+          // it reverts with a ConstraintSeeds error
+          test("Ext mint authority account does not match derived PDA - reverts", async () => {
+            // Change the ext mint authority account
+            const extMintAuthority = PublicKey.unique();
+            if (extMintAuthority.equals($.getExtMintAuthority())) {
+              return;
+            }
+
+            // Attempt to send the transaction
+            // Expect an invalid account error
+            await $.expectAnchorError(
+              $.ext.methods
+                .sync()
+                .accountsPartial({
+                  extMintAuthority,
+                })
+                .signers([])
+                .rpc(),
+              "ConstraintSeeds"
+            );
+          });
+
+          // given the multiplier is already up to date
+          // it remains the same
+          test("Multiplier is already up to date - success", async () => {
+            // Sync the multiplier to the start index
+            await $.sync();
+
+            // Load the scaled ui config
+            const scaledUiAmountConfig = await $.getScaledUiAmountConfig(
+              $.extMint.publicKey
+            );
+
+            $.svm.expireBlockhash();
+
+            // Sync again
+            await $.sync();
+
+            // Confirm the scaled ui config on the ext mint is the same
+            $.expectScaledUiAmountConfig(
+              $.extMint.publicKey,
+              scaledUiAmountConfig
+            );
+          });
+
+          // given the multiplier is not up to date
+          // given the m vault has not received yield to match the latest M index
+          // it reverts with an InsufficientCollateral error
+          test("M vault has not received yield to match latest M index - reverts", async () => {
+            // Claim excess tokens to make it easier to test collateral checks
+            try {
+              await $.claimFees();
+            } catch (e) {
+              // Ignore the error if there are no excess tokens
+            }
+
+            // Propagate a new index but do not distribute yield yet
+            const newIndex = new BN(
+              randomInt(startIndex.toNumber() + 1, 2e12 + 1)
+            );
+            await $.propagateIndex(newIndex);
+
+            // Attempt to send the transaction
+            // Expect an invalid account error
+            await $.expectAnchorError(
+              $.ext.methods.sync().accounts({}).signers([]).rpc(),
+              "InsufficientCollateral"
+            );
+          });
+
+          // given the m vault has received yield to match the latest M index
+          // it updates the scaled ui config on the ext mint to match the m index
+          test("M vault has received yield to match latest M index - success", async () => {
+            // Cache the scaled ui amount config
+            const scaledUiAmountConfig = await $.getScaledUiAmountConfig(
+              $.extMint.publicKey
+            );
+
+            // Send the instruction
+            await $.ext.methods.sync().accounts({}).signers([]).rpc();
+
+            // Confirm the scaled ui config on the ext mint matches the m index
+            const multiplier = await $.getCurrentMultiplier();
+
+            await $.expectScaledUiAmountConfig($.extMint.publicKey, {
+              authority: scaledUiAmountConfig.authority,
+              multiplier,
+              newMultiplier: multiplier,
+              newMultiplierEffectiveTimestamp: BigInt(
+                $.currentTime().toString()
+              ),
+            });
+          });
+        });
+      });
+    }
   });
 }
-
-//   describe("open instruction tests", () => {
-//     describe("sync unit tests", () => {
-//       const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
-
-//       const wrapAuthorities = [admin.publicKey, wrapAuthority.publicKey];
-//       const feeBps = new BN(randomInt(10000));
-
-//       const startIndex = new BN(randomInt(initialIndex.toNumber() + 1, 2e12));
-
-//       // Setup accounts with M tokens so we can test wrapping and unwrapping
-//       beforeEach(async () => {
-//         // Initialize the extension program
-//         await initializeExt(wrapAuthorities, feeBps);
-
-//         // Wrap some tokens from the admin to the make the m vault's balance non-zero
-//         await wrap(admin, initialWrappedAmount);
-
-//         // Warp ahead slightly to change the timestamp of the new index
-//         warp(new BN(60), true);
-
-//         // Propagate the start index
-//         await propagateIndex(startIndex);
-
-//         // Claim yield for the m vault and complete the claim cycle
-//         // so that the m vault is collateralized to start
-//         const mVault = getMVault();
-//         const mVaultATA = await getATA(mMint.publicKey, mVault);
-//         await mClaimFor(mVault, await getTokenBalance(mVaultATA));
-//         await completeClaims();
-
-//         // Reset the blockhash to avoid issues with duplicate transactions from multiple claim cycles
-//         svm.expireBlockhash();
-//       });
-
-//       // test cases
-//       // [X] given m earn global account does not match the one stored in the global account
-//       //   [X] it reverts with an InvalidAccount error
-//       // [X] given the m vault account does not match the derived PDA
-//       //   [X] it reverts with a ConstraintSeeds error
-//       // [X] given the vault m token account is not the M vault PDA's ATA
-//       //   [X] it reverts with a ConstraintAssociated error
-//       // [X] given the ext mint account does not match the one stored in the global account
-//       //   [X] it reverts with an InvalidMint error
-//       // [X] given the ext mint authority account does match the derived PDA
-//       //   [X] it reverts with a ConstraintSeeds error
-//       // [X] given the multiplier is already up to date
-//       //   [X] it remains the same
-//       // [X] given the multiplier is not up to date
-//       //   [X] given the m vault has not received yield to match the latest M index
-//       //     [X] it reverts with an InsufficientCollateral error
-//       //   [X] given the m vault has received yield to match the latest M index
-//       //     [X] it updates the scaled ui config on the ext mint to match the m index
-
-//       // given m earn global account does not match the one stored in the global account
-//       // it reverts with an InvalidAccount error
-//       test("M earn global account does not match global account - reverts", async () => {
-//         // Setup the instruction
-//         await prepSync(nonAdmin);
-
-//         // Change the m earn global account
-//         accounts.mEarnGlobalAccount = PublicKey.unique();
-//         if (accounts.mEarnGlobalAccount.equals(getEarnGlobalAccount())) {
-//           return;
-//         }
-
-//         // Attempt to send the transaction
-//         // Expect an invalid account error (though could be others like not initialized)
-//         await expectSystemError(
-//           $.ext.methods
-//             .sync()
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc()
-//         );
-//       });
-
-//       // given the m vault account does not match the derived PDA
-//       // it reverts with a ConstraintSeeds error
-//       test("M vault account does not match derived PDA - reverts", async () => {
-//         // Setup the instruction
-//         await prepSync(nonAdmin);
-
-//         // Change the m vault account
-//         accounts.mVault = PublicKey.unique();
-//         if (accounts.mVault.equals(getMVault())) {
-//           return;
-//         }
-
-//         // Attempt to send the transaction
-//         // Expect an invalid account error
-//         await expectAnchorError(
-//           $.ext.methods
-//             .sync()
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc(),
-//           "ConstraintSeeds"
-//         );
-//       });
-
-//       // given the vault m token account is not the M vault PDA's ATA
-//       // it reverts with a ConstraintAssociated error
-//       test("M vault token account is not the M Vault PDA's ATA - reverts", async () => {
-//         // Create a valid token account that is not the ATA
-//         const { tokenAccount: nonATA } = await createTokenAccount(
-//           mMint.publicKey,
-//           getMVault()
-//         );
-
-//         // Setup the instruction with the non-ATA vault m token account
-//         await prepSync(nonAdmin);
-//         accounts.vaultMTokenAccount = nonATA;
-
-//         // Attempt to send the transaction
-//         // Expect revert with a ConstraintAssociated error
-//         await expectAnchorError(
-//           $.ext.methods
-//             .sync()
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc(),
-//           "ConstraintAssociated"
-//         );
-//       });
-
-//       // given the ext mint account does not match the one stored in the global account
-//       // it reverts with an InvalidMint error
-//       test("Ext mint account does not match global account - reverts", async () => {
-//         // Create a new mint
-//         const newMint = Keypair.generate();
-//         await createMint(newMint, nonAdmin.publicKey, true, 6);
-
-//         // Setup the instruction
-//         await prepSync(nonAdmin);
-
-//         // Change the ext mint account
-//         accounts.extMint = newMint.publicKey;
-
-//         // Attempt to send the transaction
-//         // Expect an invalid account error
-//         await expectAnchorError(
-//           $.ext.methods
-//             .sync()
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc(),
-//           "InvalidMint"
-//         );
-//       });
-
-//       // given the ext mint authority account does match the derived PDA
-//       // it reverts with a ConstraintSeeds error
-//       test("Ext mint authority account does not match derived PDA - reverts", async () => {
-//         // Setup the instruction
-//         await prepSync(nonAdmin);
-
-//         // Change the ext mint authority account
-//         accounts.extMintAuthority = PublicKey.unique();
-//         if (accounts.extMintAuthority.equals(getExtMintAuthority())) {
-//           return;
-//         }
-
-//         // Attempt to send the transaction
-//         // Expect an invalid account error
-//         await expectAnchorError(
-//           $.ext.methods
-//             .sync()
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc(),
-//           "ConstraintSeeds"
-//         );
-//       });
-
-//       // given the multiplier is already up to date
-//       // it remains the same
-//       test("Multiplier is already up to date - success", async () => {
-//         // Sync the multiplier to the start index
-//         await sync();
-
-//         // Load the scaled ui config
-//         const scaledUiAmountConfig = await getScaledUiAmountConfig(
-//           extMint.publicKey
-//         );
-
-//         svm.expireBlockhash();
-
-//         // Sync again
-//         await sync();
-
-//         // Confirm the scaled ui config on the ext mint is the same
-//         expectScaledUiAmountConfig(extMint.publicKey, scaledUiAmountConfig);
-//       });
-
-//       // given the multiplier is not up to date
-//       // given the m vault has not received yield to match the latest M index
-//       // it reverts with an InsufficientCollateral error
-//       test("M vault has not received yield to match latest M index - reverts", async () => {
-//         // Claim excess tokens to make it easier to test collateral checks
-//         try {
-//           await claimFees();
-//         } catch (e) {
-//           // Ignore the error if there are no excess tokens
-//         }
-
-//         // Propagate a new index but do not distribute yield yet
-//         const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12 + 1));
-//         // console.log("new index", newIndex.toString());
-//         // console.log("start index", startIndex.toString());
-
-//         await propagateIndex(newIndex);
-
-//         // Setup the instruction
-//         await prepSync(nonAdmin);
-
-//         // Attempt to send the transaction
-//         // Expect an invalid account error
-//         await expectAnchorError(
-//           $.ext.methods
-//             .sync()
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc(),
-//           "InsufficientCollateral"
-//         );
-//       });
-
-//       // given the m vault has received yield to match the latest M index
-//       // it updates the scaled ui config on the ext mint to match the m index
-//       test("M vault has received yield to match latest M index - success", async () => {
-//         // Cache the scaled ui amount config
-//         const scaledUiAmountConfig = await getScaledUiAmountConfig(
-//           extMint.publicKey
-//         );
-
-//         // Setup the instruction
-//         const { globalAccount } = await prepSync(nonAdmin);
-
-//         // Get the global state before the update
-//         const globalState = await $.ext.account.extGlobal.fetch(
-//           globalAccount
-//         );
-
-//         // Send the instruction
-//         await $.ext.methods
-//           .sync()
-//           .accountsPartial({ ...accounts })
-//           .signers([nonAdmin])
-//           .rpc();
-
-//         // Confirm the scaled ui config on the ext mint matches the m index
-//         // console.log("start index", startIndex.toString());
-//         // console.log("last ext index", globalState.yieldConfig.lastExtIndex.toString());
-//         // console.log("last m index", globalState.yieldConfig.lastMIndex.toString());
-//         // console.log("fee bps", feeBps.toString());
-//         const multiplier =
-//           (globalState.yieldConfig.lastExtIndex.toNumber() / 1e12) *
-//           (startIndex.toNumber() /
-//             globalState.yieldConfig.lastMIndex.toNumber()) **
-//             (1 - feeBps.toNumber() / 1e4);
-//         // console.log("multiplier", multiplier.toString());
-
-//         await expectScaledUiAmountConfig(extMint.publicKey, {
-//           authority: scaledUiAmountConfig.authority,
-//           multiplier,
-//           newMultiplier: multiplier,
-//           newMultiplierEffectiveTimestamp: BigInt(currentTime().toString()),
-//         });
-//       });
-//     });
-//   });
-// });
