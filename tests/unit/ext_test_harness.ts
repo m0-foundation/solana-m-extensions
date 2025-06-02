@@ -393,7 +393,8 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     mint: Keypair,
     mintAuthority: PublicKey,
     use2022: boolean = true,
-    decimals = 6
+    decimals = 6,
+    freezeAuthority: boolean = true
   ) {
     // Create and initialize mint account
 
@@ -414,7 +415,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       mint.publicKey,
       decimals, // decimals
       mintAuthority, // mint authority
-      mintAuthority, // freeze authority
+      freezeAuthority ? mintAuthority : null, // freeze authority
       tokenProgram
     );
 

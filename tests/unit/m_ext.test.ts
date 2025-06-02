@@ -50,6 +50,8 @@ for (const variant of VARIANTS) {
         //   [X] it reverts with a SeedsConstraint error
         // [X] given the ext_mint_authority is not the required PDA
         //   [X] it reverts with a SeedsConstraint error
+        // [ ] given the ext_mint does not have a freeze authority
+        //   [ ] it reverts with a InvalidMint error
         // [X] given more than 10 wrap authorities are provided
         //   [X] it reverts with an InvalidParam error
         // [X] given wrap authorities includes the system program id (default public key)
@@ -184,6 +186,30 @@ for (const variant of VARIANTS) {
               })
               .signers([$.nonAdmin])
               .rpc()
+          );
+        });
+
+        // given the ext_mint does not have a freeze authority
+        // it reverts with a InvalidMint error
+        test("ext_mint does not have a freeze authority - reverts", async () => {
+          // Create a mint without a freeze authority
+          const wrongMint = new Keypair();
+          await $.createMint(wrongMint, $.nonAdmin.publicKey, true, 6, false);
+
+          // Attempt to send the transaction
+          await $.expectAnchorError(
+            (variant === Variant.NoYield
+              ? $.ext.methods.initialize([])
+              : $.ext.methods.initialize([], new BN(0))
+            )
+              .accounts({
+                admin: $.nonAdmin.publicKey,
+                mMint: $.mMint.publicKey,
+                extMint: wrongMint.publicKey,
+              })
+              .signers([$.nonAdmin])
+              .rpc(),
+            "InvalidMint"
           );
         });
 
