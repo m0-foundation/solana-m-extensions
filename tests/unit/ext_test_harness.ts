@@ -1149,6 +1149,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     await this.ext.methods
       .unwrap(amount)
       .accounts({
+        signer: from.publicKey,
         toMTokenAccount,
         fromExtTokenAccount,
       })
