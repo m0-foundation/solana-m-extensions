@@ -47,19 +47,33 @@ describe("extension swap tests", () => {
     builder: {
       transaction(): Promise<Transaction>;
     },
-    ...signers: Keypair[]
-  ): Promise<TransactionMetadata> => {
+    signers: Keypair[],
+    expectedErrorMessage?: RegExp
+  ): Promise<TransactionMetadata | null> => {
     const txn = await builder.transaction();
 
-    txn.feePayer = admin.publicKey;
+    txn.feePayer = signers[0].publicKey;
     txn.recentBlockhash = svm.latestBlockhash();
     txn.sign(...signers);
 
     const result = svm.sendTransaction(txn);
 
     if ("err" in result) {
+      if (expectedErrorMessage) {
+        for (const log of result.meta().logs()) {
+          if (log.match(expectedErrorMessage)) return null;
+        }
+
+        console.error(result.toString());
+        throw new Error("Did not find expected error message in logs");
+      }
+
       console.error(result.toString());
       throw new Error("Transaction failed");
+    }
+    if (expectedErrorMessage) {
+      console.error(result.toString());
+      throw new Error("Expected transaction to fail, but it succeeded");
     }
 
     return result;
@@ -68,12 +82,54 @@ describe("extension swap tests", () => {
   // Tests
   describe("configure", () => {
     it("initialize config", async () => {
-      const result = await sendTransaction(
+      await sendTransaction(
         program.methods.initializeGlobal(mint.publicKey).accounts({}),
-        admin
+        [admin]
+      );
+    });
+
+    it("re-initialize config revert", async () => {
+      await sendTransaction(
+        program.methods
+          .initializeGlobal(mint.publicKey)
+          .accounts({ admin: swaper.publicKey })
+          .signers([swaper]),
+        [swaper],
+        /Allocate: account Address .* already in use/
+      );
+    });
+
+    it("add to whitelist", async () => {
+      await sendTransaction(
+        program.methods.whitelistExt(new Keypair().publicKey, 0).accounts({}),
+        [admin]
+      );
+    });
+
+    it("remove from whitelist", async () => {
+      const [global] = PublicKey.findProgramAddressSync(
+        [Buffer.from("global")],
+        program.programId
       );
 
-      console.log(result);
+      const globalAccount = await program.account.global.fetch(global);
+      const firstWhitelisted = globalAccount.whitelistedExtensions[0];
+
+      const result = await sendTransaction(
+        program.methods.whitelistExt(PublicKey.default, 0).accounts({}),
+        [admin]
+      );
+      expect(result!.logs()[2]).toMatch(
+        `Program log: ${firstWhitelisted.toBase58()} -> 11111111111111111111111111111111`
+      );
+    });
+
+    it("invalid whitelist index", async () => {
+      await sendTransaction(
+        program.methods.whitelistExt(new Keypair().publicKey, 99).accounts({}),
+        [admin],
+        /Error Message: Index invalid for length of the array/
+      );
     });
   });
 });

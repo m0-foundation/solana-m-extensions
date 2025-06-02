@@ -895,6 +895,7 @@ dependencies = [
  "anchor-spl",
  "earn",
  "m_ext",
+ "solana-security-txt",
 ]
 
 [[package]]
