@@ -1,12 +1,19 @@
 import { BN } from "@coral-xyz/anchor";
-import { PublicKey, Keypair, Transaction } from "@solana/web3.js";
+import {
+  PublicKey,
+  Keypair,
+  Transaction,
+  SystemProgram,
+} from "@solana/web3.js";
 import {
   TOKEN_2022_PROGRAM_ID,
   createMintToCheckedInstruction,
+  getMint,
 } from "@solana/spl-token";
 import { randomInt } from "crypto";
 
-import { ExtensionTest, Variant } from "./ext_test_harness";
+import { Comparison, ExtensionTest, Variant } from "./ext_test_harness";
+import { padKeyArray } from "../test-utils";
 
 // Unit tests for ext earn program
 
@@ -29,14 +36,444 @@ for (const variant of VARIANTS) {
     });
 
     describe("admin instruction tests", () => {
+      describe("initialize unit tests", () => {
+        // general test cases
+        // [X] given the m_mint is not owned by the token2022 program
+        //   [X] it reverts with a ConstraintAddress error
+        // [X] given the ext_mint is not owned by the token2022 program
+        //   [X] it reverts with a ConstraintMintTokenProgram error
+        // [X] given the ext_mint decimals do not match the m_mint decimals
+        //   [X] it reverts with a ConstraintMintDecimals error
+        // [X] given the M earn global account does not match the PDA on the earn program
+        //   [X] it reverts with a SeedsConstraint error
+        // [X] given the ext_mint_authority is not the required PDA
+        //   [X] it reverts with a SeedsConstraint error
+        // [X] given more than 10 wrap authorities are provided
+        //   [X] it reverts with an InvalidParam error
+        // [X] given wrap authorities includes the system program id (default public key)
+        //   [X] it reverts with an InvalidParam error
+        // [X] given the wrap authorities are not unique
+        //   [X] it reverts with an InvalidParam error
+
+        // given the m_mint is not owned by the token2022 program
+        // it reverts with a ConstraintAddress error
+        test("m_mint not owned by token2022 - reverts", async () => {
+          // Create a mint owned by a different program
+          const wrongMint = new Keypair();
+          await $.createMint(wrongMint, $.nonAdmin.publicKey, false);
+
+          // Create/get the m vault ATA for the wrong mint to avoid account not initialized error
+          const vaultMTokenAccount = await $.getATA(
+            wrongMint.publicKey,
+            $.getMVault(),
+            false
+          );
+
+          // Attempt to send the transaction
+          await $.expectAnchorError(
+            (variant === Variant.NoYield
+              ? $.ext.methods.initialize([])
+              : $.ext.methods.initialize([], new BN(0))
+            )
+              .accountsPartial({
+                admin: $.nonAdmin.publicKey,
+                mMint: wrongMint.publicKey,
+                extMint: $.extMint.publicKey,
+                vaultMTokenAccount,
+              })
+              .signers([$.nonAdmin])
+              .rpc(),
+            "ConstraintAddress"
+          );
+        });
+
+        // given the ext_mint is not owned by the token2022 program
+        // it reverts with a ConstraintMintTokenProgram error
+        test("ext_mint not owned by token2022 - reverts", async () => {
+          // Create a mint owned by a different program
+          const wrongMint = new Keypair();
+          await $.createMint(wrongMint, $.nonAdmin.publicKey, false);
+
+          // Attempt to send the transaction
+          await $.expectAnchorError(
+            (variant === Variant.NoYield
+              ? $.ext.methods.initialize([])
+              : $.ext.methods.initialize([], new BN(0))
+            )
+              .accounts({
+                admin: $.nonAdmin.publicKey,
+                mMint: $.mMint.publicKey,
+                extMint: wrongMint.publicKey,
+              })
+              .signers([$.nonAdmin])
+              .rpc(),
+            "ConstraintMintTokenProgram"
+          );
+        });
+
+        // given the decimals on ext_mint do not match M
+        // it reverts with a MintDecimals error
+        test("ext_mint incorrect decimals - reverts", async () => {
+          // Create a mint owned by a different program
+          const badMint = new Keypair();
+          await $.createMint(badMint, $.nonAdmin.publicKey, true, 9);
+
+          // Attempt to send the transaction
+          await $.expectAnchorError(
+            (variant === Variant.NoYield
+              ? $.ext.methods.initialize([])
+              : $.ext.methods.initialize([], new BN(0))
+            )
+              .accounts({
+                admin: $.nonAdmin.publicKey,
+                mMint: $.mMint.publicKey,
+                extMint: badMint.publicKey,
+              })
+              .signers([$.nonAdmin])
+              .rpc(),
+            "ConstraintMintDecimals"
+          );
+        });
+
+        // given the M earn global account is invalid
+        // it reverts with a seeds constraint
+        test("m_earn_global_account is incorrect - reverts", async () => {
+          // Change the m earn global account
+          const mEarnGlobalAccount = PublicKey.unique();
+          if (mEarnGlobalAccount == $.getEarnGlobalAccount()) return;
+
+          // Attempt to send transaction
+          // Expect error (could be one of several "SeedsConstraint", "AccountOwnedByWrongProgram", "AccountNotInitialized")
+          await $.expectSystemError(
+            (variant === Variant.NoYield
+              ? $.ext.methods.initialize([])
+              : $.ext.methods.initialize([], new BN(0))
+            )
+              .accountsPartial({
+                admin: $.nonAdmin.publicKey,
+                mMint: $.mMint.publicKey,
+                extMint: $.extMint.publicKey,
+                mEarnGlobalAccount: mEarnGlobalAccount,
+              })
+              .signers([$.nonAdmin])
+              .rpc()
+          );
+        });
+
+        // given ext_mint_authority is not required PDA
+        // it reverts with a seeds constraint
+        test("ext_mint_authority is incorrect - reverts", async () => {
+          // Change the ext mint authority
+          const extMintAuthority = PublicKey.unique();
+          if (extMintAuthority == $.getExtMintAuthority()) return;
+
+          // Attempt to send transaction
+          // Expect error (could be one of several "SeedsConstraint", "AccountOwnedByWrongProgram", "AccountNotInitialized")
+          await $.expectSystemError(
+            (variant === Variant.NoYield
+              ? $.ext.methods.initialize([])
+              : $.ext.methods.initialize([], new BN(0))
+            )
+              .accountsPartial({
+                admin: $.nonAdmin.publicKey,
+                mMint: $.mMint.publicKey,
+                extMint: $.extMint.publicKey,
+                extMintAuthority: extMintAuthority,
+              })
+              .signers([$.nonAdmin])
+              .rpc()
+          );
+        });
+
+        // given more than 10 wrap authorities are provided
+        // it reverts with an InvalidParam error
+        test("more than 10 wrap authorities provided - reverts", async () => {
+          // Change the wrap authorities
+          const wrapAuthorities: PublicKey[] = $.createUniqueKeyArray(11);
+
+          // Attempt to send transaction
+          await $.expectAnchorError(
+            (variant === Variant.NoYield
+              ? $.ext.methods.initialize(wrapAuthorities)
+              : $.ext.methods.initialize(wrapAuthorities, new BN(0))
+            )
+              .accounts({
+                admin: $.nonAdmin.publicKey,
+                mMint: $.mMint.publicKey,
+                extMint: $.extMint.publicKey,
+              })
+              .signers([$.nonAdmin])
+              .rpc(),
+            "InvalidParam"
+          );
+        });
+
+        // given wrap authorities includes the system program id (default public key)
+        // it reverts with an InvalidParam error
+        test("wrap authorities includes the system program id - reverts", async () => {
+          // Change the wrap authorities
+          const wrapAuthorities: PublicKey[] = $.createUniqueKeyArray(10);
+          wrapAuthorities[0] = SystemProgram.programId;
+
+          // Attempt to send transaction
+          await $.expectAnchorError(
+            (variant === Variant.NoYield
+              ? $.ext.methods.initialize(wrapAuthorities)
+              : $.ext.methods.initialize(wrapAuthorities, new BN(0))
+            )
+              .accounts({
+                admin: $.nonAdmin.publicKey,
+                mMint: $.mMint.publicKey,
+                extMint: $.extMint.publicKey,
+              })
+              .signers([$.nonAdmin])
+              .rpc(),
+            "InvalidParam"
+          );
+        });
+
+        // given wrap authorities includes a duplicate, non-default public key
+        // it reverts with an InvalidParam error
+        test("wrap authorities includes a duplicate, non-default public key - reverts", async () => {
+          // Change the wrap authorities
+          const wrapAuthorities: PublicKey[] = $.createUniqueKeyArray(10);
+          wrapAuthorities[0] = wrapAuthorities[1];
+
+          // Attempt to send transaction
+          await $.expectAnchorError(
+            (variant === Variant.NoYield
+              ? $.ext.methods.initialize(wrapAuthorities)
+              : $.ext.methods.initialize(wrapAuthorities, new BN(0))
+            )
+              .accounts({
+                admin: $.nonAdmin.publicKey,
+                mMint: $.mMint.publicKey,
+                extMint: $.extMint.publicKey,
+              })
+              .signers([$.nonAdmin])
+              .rpc(),
+            "InvalidParam"
+          );
+        });
+
+        // no yield test cases
+        // [X] given all accounts and params are correct
+        //   [X] the global account is created
+        //   [X] the admin is set to the signer
+        //   [X] the m_mint is set correctly
+        //   [X] the ext_mint is set correctly
+        //   [X] the m_earn_global_account is set correctly
+        //   [X] the bumps are set correctly
+        //   [X] the wrap authorities are set correctly
+
+        if (variant === Variant.NoYield) {
+          // given accounts and params are correct
+          // it creates the global account
+          // it sets the admin to the signer
+          // it sets the m_mint to the provided mint
+          // it sets the ext_mint to the provided mint
+          // it sets the m_earn_global_account to the provided account
+          // it sets the scalued ui amount multiplier and timestamp to the values on the m earn global account
+          // it sets the bumps to the correct values
+          test("initialize - success", async () => {
+            // Get a random number of wrap authorities
+            // We use the padded array to check the stored state after the call
+            const numWrapAuthorities = randomInt(10);
+            const wrapAuthorities: PublicKey[] =
+              $.createUniqueKeyArray(numWrapAuthorities);
+            const paddedWrapAuthorities = padKeyArray(wrapAuthorities, 10);
+
+            // Derive PDA bumps
+            const [, bump] = PublicKey.findProgramAddressSync(
+              [Buffer.from("global")],
+              $.ext.programId
+            );
+            const [, mVaultBump] = PublicKey.findProgramAddressSync(
+              [Buffer.from("m_vault")],
+              $.ext.programId
+            );
+            const [, extMintAuthorityBump] = PublicKey.findProgramAddressSync(
+              [Buffer.from("mint_authority")],
+              $.ext.programId
+            );
+
+            // Ensure the global account has not been created yet
+            const globalAccount = $.getExtGlobalAccount();
+            $.expectAccountEmpty(globalAccount);
+
+            // Send the transaction
+            await $.ext.methods
+              .initialize(wrapAuthorities)
+              .accounts({
+                admin: $.admin.publicKey,
+                mMint: $.mMint.publicKey,
+                extMint: $.extMint.publicKey,
+              })
+              .signers([$.admin])
+              .rpc();
+
+            // Check the state of the global account
+            await $.expectExtGlobalState({
+              admin: $.admin.publicKey,
+              extMint: $.extMint.publicKey,
+              mMint: $.mMint.publicKey,
+              mEarnGlobalAccount: $.getEarnGlobalAccount(),
+              bump,
+              mVaultBump,
+              extMintAuthorityBump,
+              wrapAuthorities: paddedWrapAuthorities,
+              yieldConfig: {},
+            });
+          });
+        }
+
+        // scaled ui test cases
+        // [X] given the ext_mint does not have the scaled ui amount extension
+        //   [X] it reverts with a InvalidMint error
+        // [X] given the ext_mint has the scaled ui amount extension, but the authority is not the mint authority PDA
+        //   [X] it reverts with an InvalidMint error
+        // [X] given all accounts and params are correct
+        //   [X] the global account is created
+        //   [X] the admin is set to the signer
+        //   [X] the m_mint is set correctly
+        //   [X] the ext_mint is set correctly
+        //   [X] the m_earn_global_account is set correctly
+        //   [X] the bumps are set correctly
+        //   [X] the wrap authorities are set correctly
+        //   [X] the multiplier on the ext mint is initialized to m index
+        //   [X] the timestamp on the ext mint is set to the m timestamp
+
+        if (variant === Variant.ScaledUiAmount) {
+          // given the ext_mint does not have the scaled ui amount extension
+          // it reverts with a InvalidMint error
+          test("ext_mint does not have the scaled ui amount extension - reverts", async () => {
+            // Create a mint without the scaled ui amount extension
+            const wrongMint = new Keypair();
+            await $.createMint(wrongMint, $.getExtMintAuthority(), true, 6); // valid otherwise
+
+            // Attempt to send the transaction
+            await $.expectAnchorError(
+              $.ext.methods
+                .initialize([], new BN(0))
+                .accounts({
+                  admin: $.nonAdmin.publicKey,
+                  mMint: $.mMint.publicKey,
+                  extMint: wrongMint.publicKey,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "InvalidMint"
+            );
+          });
+
+          // given the ext_mint has the scaled ui amount extension, but the authority is not the mint authority PDA
+          // it reverts with an InvalidMint error
+          test("ext_mint has the scaled ui amount extension, but the authority is not the mint authority PDA - reverts", async () => {
+            // Create a mint with the scaled ui amount extension
+            const wrongMint = new Keypair();
+            await $.createScaledUiMint(wrongMint, $.nonAdmin.publicKey, 6);
+
+            // Attempt to send the transaction
+            await $.expectAnchorError(
+              $.ext.methods
+                .initialize([], new BN(0))
+                .accounts({
+                  admin: $.nonAdmin.publicKey,
+                  mMint: $.mMint.publicKey,
+                  extMint: wrongMint.publicKey,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "InvalidMint"
+            );
+          });
+
+          // given accounts and params are correct
+          // it creates the global account
+          // it sets the admin to the signer
+          // it sets the m_mint to the provided mint
+          // it sets the ext_mint to the provided mint
+          // it sets the m_earn_global_account to the provided account
+          // it sets the scalued ui amount multiplier and timestamp to the values on the m earn global account
+          // it sets the bumps to the correct values
+          test("initialize - success", async () => {
+            // Get a random number of wrap authorities
+            // We use the padded array to check the stored state after the call
+            const numWrapAuthorities = randomInt(10);
+            const wrapAuthorities: PublicKey[] =
+              $.createUniqueKeyArray(numWrapAuthorities);
+            const paddedWrapAuthorities = padKeyArray(wrapAuthorities, 10);
+
+            // Derive PDA bumps
+            const [, bump] = PublicKey.findProgramAddressSync(
+              [Buffer.from("global")],
+              $.ext.programId
+            );
+            const [, mVaultBump] = PublicKey.findProgramAddressSync(
+              [Buffer.from("m_vault")],
+              $.ext.programId
+            );
+            const [, extMintAuthorityBump] = PublicKey.findProgramAddressSync(
+              [Buffer.from("mint_authority")],
+              $.ext.programId
+            );
+
+            // Ensure the global account has not been created yet
+            const globalAccount = $.getExtGlobalAccount();
+            $.expectAccountEmpty(globalAccount);
+
+            // Get a random fee bps
+            const feeBps = new BN(randomInt(10000));
+
+            // Send the transaction
+            await $.ext.methods
+              .initialize(wrapAuthorities, feeBps)
+              .accounts({
+                admin: $.admin.publicKey,
+                mMint: $.mMint.publicKey,
+                extMint: $.extMint.publicKey,
+              })
+              .signers([$.admin])
+              .rpc();
+
+            // Check the state of the global account
+            await $.expectExtGlobalState({
+              admin: $.admin.publicKey,
+              extMint: $.extMint.publicKey,
+              mMint: $.mMint.publicKey,
+              mEarnGlobalAccount: $.getEarnGlobalAccount(),
+              bump,
+              mVaultBump,
+              extMintAuthorityBump,
+              wrapAuthorities: paddedWrapAuthorities,
+              yieldConfig: {
+                feeBps,
+                lastMIndex: initialIndex,
+                lastExtIndex: new BN(1e12),
+              },
+            });
+
+            // Check the state of the mint
+            await $.expectScaledUiAmountConfig($.extMint.publicKey, {
+              authority: $.getExtMintAuthority(),
+              multiplier: 1.0,
+              newMultiplierEffectiveTimestamp: BigInt(
+                $.currentTime().toString()
+              ),
+              newMultiplier: 1.0,
+            });
+          });
+        }
+      });
+
       describe("set_m_mint unit tests", () => {
         beforeEach(async () => {
-          const fee_bps =
+          const feeBps =
             variant === Variant.NoYield ? undefined : new BN(randomInt(10000));
           // Initialize the extension program
           await $.initializeExt(
             [$.admin.publicKey, $.wrapAuthority.publicKey],
-            fee_bps
+            feeBps
           );
 
           // wrap some tokens to the make the m vault's balance non-zero
@@ -322,932 +759,602 @@ for (const variant of VARIANTS) {
         });
       });
 
-      // describe("update_wrap_authority unit tests", () => {
-      //   const wrapAuthorities = [admin.publicKey, wrapAuthority.publicKey];
-      //   const paddedWrapAuthorities = padKeyArray(wrapAuthorities, 10);
+      describe("update_wrap_authority unit tests", () => {
+        let wrapAuthorities: PublicKey[];
+        let paddedWrapAuthorities: PublicKey[];
 
-      //   beforeEach(async () => {
-      //     const fee_bps = new BN(randomInt(10000));
-      //     // Initialize the extension program
-      //     await initializeExt(wrapAuthorities, fee_bps);
-      //   });
+        beforeEach(async () => {
+          wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
+          paddedWrapAuthorities = padKeyArray(wrapAuthorities, 10);
 
-      //   // test cases
-      //   // [X] given the admin does not sign the transaction
-      //   //   [X] it reverts with a NotAuthorized error
-      //   // [X] given the admin signs the transaction
-      //   //   [X] given the index is out of bounds
-      //   //     [X] it reverts with a InvalidParam error
-      //   //   [X] given the new wrap authority is already in the list (and not the default public key)
-      //   //     [X] it reverts with a InvalidParam error
-      //   //   [X] given the new wrap authority is the default public key
-      //   //     [X] it removes the wrap authority at the given index
-      //   //   [X] given the new wrap authority is not the default public key and not in the list
-      //   //     [X] it adds the new wrap authority to the list at the provided index
+          const feeBps =
+            variant === Variant.NoYield ? new BN(0) : new BN(randomInt(10000));
+          // Initialize the extension program
+          await $.initializeExt(wrapAuthorities, feeBps);
+        });
 
-      //   // given the admin does not sign the transaction
-      //   // it reverts with a NotAuthorized error
-      //   test("admin does not sign - reverts", async () => {
-      //     // Setup the instruction
-      //     await prepUpdateWrapAuthority(nonAdmin);
+        // test cases
+        // [X] given the admin does not sign the transaction
+        //   [X] it reverts with a NotAuthorized error
+        // [X] given the admin signs the transaction
+        //   [X] given the index is out of bounds
+        //     [X] it reverts with a InvalidParam error
+        //   [X] given the new wrap authority is already in the list (and not the default public key)
+        //     [X] it reverts with a InvalidParam error
+        //   [X] given the new wrap authority is the default public key
+        //     [X] it removes the wrap authority at the given index
+        //   [X] given the new wrap authority is not the default public key and not in the list
+        //     [X] it adds the new wrap authority to the list at the provided index
 
-      //     // Attempt to send the transaction
-      //     await expectAnchorError(
-      //       scaledUiExt.methods
-      //         .updateWrapAuthority(0, nonWrapAuthority.publicKey)
-      //         .accountsPartial({ ...accounts })
-      //         .signers([nonAdmin])
-      //         .rpc(),
-      //       "NotAuthorized"
-      //     );
-      //   });
+        // given the admin does not sign the transaction
+        // it reverts with a NotAuthorized error
+        test("admin does not sign - reverts", async () => {
+          // Attempt to send the transaction
+          await $.expectAnchorError(
+            $.ext.methods
+              .updateWrapAuthority(0, $.nonWrapAuthority.publicKey)
+              .accounts({
+                admin: $.nonAdmin.publicKey,
+              })
+              .signers([$.nonAdmin])
+              .rpc(),
+            "NotAuthorized"
+          );
+        });
 
-      //   // given the admin signs the transaction
-      //   // given the index is out of bounds
-      //   // it reverts with a InvalidParam error
-      //   test("index out of bounds - reverts", async () => {
-      //     // Setup the instruction
-      //     await prepUpdateWrapAuthority(admin);
+        // given the admin signs the transaction
+        // given the index is out of bounds
+        // it reverts with a InvalidParam error
+        test("index out of bounds - reverts", async () => {
+          const index = randomInt(11, 256);
 
-      //     const index = randomInt(11, 256);
+          // Attempt to send the transaction
+          await $.expectAnchorError(
+            $.ext.methods
+              .updateWrapAuthority(index, $.nonWrapAuthority.publicKey)
+              .accounts({ admin: $.admin.publicKey })
+              .signers([$.admin])
+              .rpc(),
+            "InvalidParam"
+          );
+        });
 
-      //     // Attempt to send the transaction
-      //     await expectAnchorError(
-      //       scaledUiExt.methods
-      //         .updateWrapAuthority(index, nonWrapAuthority.publicKey)
-      //         .accountsPartial({ ...accounts })
-      //         .signers([admin])
-      //         .rpc(),
-      //       "InvalidParam"
-      //     );
-      //   });
+        // given the admin signs the transaction
+        // given the new wrap authority is already in the list (and not the default public key)
+        // it reverts with a InvalidParam error
+        test("new wrap authority already in the list - reverts", async () => {
+          // Attempt to send the transaction
+          await $.expectAnchorError(
+            $.ext.methods
+              .updateWrapAuthority(0, $.wrapAuthority.publicKey)
+              .accounts({ admin: $.admin.publicKey })
+              .signers([$.admin])
+              .rpc(),
+            "InvalidParam"
+          );
+        });
 
-      //   // given the admin signs the transaction
-      //   // given the new wrap authority is already in the list (and not the default public key)
-      //   // it reverts with a InvalidParam error
-      //   test("new wrap authority already in the list - reverts", async () => {
-      //     // Setup the instruction
-      //     await prepUpdateWrapAuthority(admin);
+        // given the admin signs the transaction
+        // given the new wrap authority is the default public key
+        // it removes the wrap authority at the given index
+        test("new wrap authority is the default public key - success", async () => {
+          // Send the transaction
+          await $.ext.methods
+            .updateWrapAuthority(0, SystemProgram.programId)
+            .accounts({
+              admin: $.admin.publicKey,
+            })
+            .signers([$.admin])
+            .rpc();
 
-      //     // Attempt to send the transaction
-      //     await expectAnchorError(
-      //       scaledUiExt.methods
-      //         .updateWrapAuthority(0, wrapAuthority.publicKey)
-      //         .accountsPartial({ ...accounts })
-      //         .signers([admin])
-      //         .rpc(),
-      //       "InvalidParam"
-      //     );
-      //   });
+          // Check that the wrap authority was removed
+          const updatedWrapAuthorities = paddedWrapAuthorities.slice(0);
+          updatedWrapAuthorities[0] = SystemProgram.programId;
 
-      //   // given the admin signs the transaction
-      //   // given the new wrap authority is the default public key
-      //   // it removes the wrap authority at the given index
-      //   test("new wrap authority is the default public key - success", async () => {
-      //     // Setup the instruction
-      //     const { globalAccount } = await prepUpdateWrapAuthority(admin);
+          await $.expectExtGlobalState({
+            wrapAuthorities: updatedWrapAuthorities,
+          });
+        });
 
-      //     // Send the transaction
-      //     await scaledUiExt.methods
-      //       .updateWrapAuthority(0, SystemProgram.programId)
-      //       .accountsPartial({ ...accounts })
-      //       .signers([admin])
-      //       .rpc();
+        // given the admin signs the transaction
+        // given the new wrap authority is not the default public key and not in the list
+        // it adds the new wrap authority to the list at the provided index
+        test("new wrap authority is not the default public key and not in the list - success", async () => {
+          // Send the transaction
+          await $.ext.methods
+            .updateWrapAuthority(2, $.nonWrapAuthority.publicKey)
+            .accounts({
+              admin: $.admin.publicKey,
+            })
+            .signers([$.admin])
+            .rpc();
 
-      //     // Check that the wrap authority was removed
-      //     const updatedWrapAuthorities = paddedWrapAuthorities.slice(0);
-      //     updatedWrapAuthorities[0] = SystemProgram.programId;
+          // Check that the wrap authority was added
+          const updatedWrapAuthorities = paddedWrapAuthorities.slice(0);
+          updatedWrapAuthorities[2] = $.nonWrapAuthority.publicKey;
 
-      //     await expectExtGlobalState(globalAccount, {
-      //       wrapAuthorities: updatedWrapAuthorities,
-      //     });
-      //   });
+          await $.expectExtGlobalState({
+            wrapAuthorities: updatedWrapAuthorities,
+          });
+        });
+      });
 
-      //   // given the admin signs the transaction
-      //   // given the new wrap authority is not the default public key and not in the list
-      //   // it adds the new wrap authority to the list at the provided index
-      //   test("new wrap authority is not the default public key and not in the list - success", async () => {
-      //     // Setup the instruction
-      //     const { globalAccount } = await prepUpdateWrapAuthority(admin);
+      describe("claim_fees unit tests", () => {
+        // general test cases
+        // [X] given the admin does not sign the transaction
+        //   [X] it reverts with a NotAuthorized error
+        // [X] given the admin signs the transaction
+        //   [X] given the m vault is not the m vault PDA
+        //     [X] it reverts with a ConstraintSeeds error
+        //   [X] given the m vault token account is not the m vault PDA's ATA
+        //     [X] it reverts with a ConstraintAssociated error
+        //   [X] given the ext mint does not match the one on the global account
+        //     [X] it reverts with an InvalidMint error
+        //   [X] given the ext mint authority is not the ext mint authority PDA
+        //     [X] it reverts with a ConstraintSeeds error
+        //   [X] given the m earn global account does not match the one on the global account
+        //     [X] it reverts with a InvalidAccount error
+        //   [X] given the recipient token account is not a token account for the m mint
+        //     [X] it reverts with a ConstraintTokenMint error
 
-      //     // Send the transaction
-      //     await scaledUiExt.methods
-      //       .updateWrapAuthority(2, nonWrapAuthority.publicKey)
-      //       .accountsPartial({ ...accounts })
-      //       .signers([admin])
-      //       .rpc();
+        // no yield test cases
+        //   [X] given all the accounts are correct
+        //     [X] given the m vault has excess collateral
+        //       [X] it transfers the excess collateral to the recipient token account
+        //     [X] given the m vault does not have excess collateral
+        //       [X] it completes but doesn't transfer any tokens
 
-      //     // Check that the wrap authority was added
-      //     const updatedWrapAuthorities = paddedWrapAuthorities.slice(0);
-      //     updatedWrapAuthorities[2] = nonWrapAuthority.publicKey;
+        const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
+        let wrapAuthorities: PublicKey[];
+        const feeBps = new BN(randomInt(1, 10000)); // non-zero
+        const startIndex = new BN(randomInt(initialIndex.toNumber() + 1, 2e12));
 
-      //     await expectExtGlobalState(globalAccount, {
-      //       wrapAuthorities: updatedWrapAuthorities,
-      //     });
-      //   });
+        beforeEach(async () => {
+          wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
+          // Initialize the extension program
+          await $.initializeExt(wrapAuthorities, feeBps);
+
+          // Wrap some tokens from the admin to make the m vault's balance non-zero
+          await $.wrap($.admin, initialWrappedAmount);
+
+          // Propagate the start index
+          await $.propagateIndex(startIndex);
+
+          // Claim yield for the m vault and complete the claim cycle
+          const mVault = $.getMVault();
+          const mVaultATA = await $.getATA($.mMint.publicKey, mVault);
+          await $.mClaimFor(mVault, await $.getTokenBalance(mVaultATA));
+          await $.mCompleteClaims();
+
+          if (variant !== Variant.NoYield) {
+            // Sync the multiplier
+            await $.sync();
+          }
+          // Reset the blockhash to avoid issues with duplicate transactions
+          $.svm.expireBlockhash();
+        });
+
+        // given the admin does not sign the transaction
+        // it reverts with a NotAuthorized error
+        test("admin does not sign - reverts", async () => {
+          const recipientExtTokenAccount = await $.getATA(
+            $.extMint.publicKey,
+            $.nonAdmin.publicKey
+          );
+
+          // Attempt to send the transaction
+          await $.expectAnchorError(
+            $.ext.methods
+              .claimFees()
+              .accountsPartial({
+                admin: $.nonAdmin.publicKey,
+                recipientExtTokenAccount,
+              })
+              .signers([$.nonAdmin])
+              .rpc(),
+            "NotAuthorized"
+          );
+        });
+
+        // given the m vault is not the m vault PDA
+        // it reverts with a ConstraintSeeds error
+        test("m vault is not the m vault PDA - reverts", async () => {
+          // Change the m vault
+          const mVault = PublicKey.unique();
+          if (mVault === $.getMVault()) return;
+
+          // Create the ATA for the fake m vault so we avoid account not initialized errors
+          const mVaultATA = await $.getATA($.mMint.publicKey, mVault);
+
+          const recipientExtTokenAccount = await $.getATA(
+            $.extMint.publicKey,
+            $.admin.publicKey
+          );
+
+          // Attempt to send the transaction
+          await $.expectAnchorError(
+            $.ext.methods
+              .claimFees()
+              .accountsPartial({
+                admin: $.admin.publicKey,
+                mVault,
+                vaultMTokenAccount: mVaultATA,
+                recipientExtTokenAccount,
+              })
+              .signers([$.admin])
+              .rpc(),
+            "ConstraintSeeds"
+          );
+        });
+
+        // given the m vault token account is not the m vault PDA's ATA
+        // it reverts with a ConstraintAssociated error
+        test("m vault token account is not the m vault PDA's ATA - reverts", async () => {
+          // Create a token account for the M vault that is not the ATA
+          const { tokenAccount: nonAtaAccount } = await $.createTokenAccount(
+            $.mMint.publicKey,
+            $.getMVault()
+          );
+
+          const recipientExtTokenAccount = await $.getATA(
+            $.extMint.publicKey,
+            $.admin.publicKey
+          );
+
+          // Attempt to send the transaction
+          await $.expectAnchorError(
+            $.ext.methods
+              .claimFees()
+              .accountsPartial({
+                admin: $.admin.publicKey,
+                vaultMTokenAccount: nonAtaAccount,
+                recipientExtTokenAccount,
+              })
+              .signers([$.admin])
+              .rpc(),
+            "ConstraintAssociated"
+          );
+        });
+
+        // given the ext mint does not match the one on the global account
+        // it reverts with an InvalidMint error
+        test("ext mint does not match global account - reverts", async () => {
+          // Create a new mint
+          const wrongMint = new Keypair();
+          await $.createMint(wrongMint, $.nonAdmin.publicKey, true, 6);
+
+          const recipientExtTokenAccount = await $.getATA(
+            wrongMint.publicKey,
+            $.admin.publicKey
+          );
+
+          // Attempt to send the transaction
+          await $.expectAnchorError(
+            $.ext.methods
+              .claimFees()
+              .accountsPartial({
+                admin: $.admin.publicKey,
+                extMint: wrongMint.publicKey,
+                recipientExtTokenAccount,
+              })
+              .signers([$.admin])
+              .rpc(),
+            "InvalidMint"
+          );
+        });
+
+        // given the ext mint authority is not the ext mint authority PDA
+        // it reverts with a ConstraintSeeds error
+        test("ext mint authority is not the ext mint authority PDA - reverts", async () => {
+          // Change the ext mint authority
+          const extMintAuthority = PublicKey.unique();
+          if (extMintAuthority === $.getExtMintAuthority()) return;
+
+          const recipientExtTokenAccount = await $.getATA(
+            $.extMint.publicKey,
+            $.admin.publicKey
+          );
+          // Attempt to send the transaction
+          await $.expectAnchorError(
+            $.ext.methods
+              .claimFees()
+              .accountsPartial({
+                admin: $.admin.publicKey,
+                extMintAuthority,
+                recipientExtTokenAccount,
+              })
+              .signers([$.admin])
+              .rpc(),
+            "ConstraintSeeds"
+          );
+        });
+
+        // given the m earn global account does not match the one on the global account
+        // it reverts with a InvalidAccount error
+        test("m earn global account does not match global account - reverts", async () => {
+          // Change the m earn global account
+          const mEarnGlobalAccount = PublicKey.unique();
+          if (mEarnGlobalAccount === $.getEarnGlobalAccount()) return;
+
+          const recipientExtTokenAccount = await $.getATA(
+            $.extMint.publicKey,
+            $.admin.publicKey
+          );
+
+          // Attempt to send the transaction
+          await $.expectSystemError(
+            $.ext.methods
+              .claimFees()
+              .accountsPartial({
+                admin: $.admin.publicKey,
+                mEarnGlobalAccount,
+                recipientExtTokenAccount,
+              })
+              .signers([$.admin])
+              .rpc()
+          );
+        });
+
+        // given the recipient token account is not a token account for the ext mint
+        // it reverts with a ConstraintTokenMint error
+        test("recipient token account is not for ext mint - reverts", async () => {
+          // Create a token account for the m mint
+          const wrongTokenAccount = await $.getATA(
+            $.mMint.publicKey,
+            $.admin.publicKey
+          );
+
+          // Attempt to send the transaction
+          await $.expectAnchorError(
+            $.ext.methods
+              .claimFees()
+              .accountsPartial({
+                admin: $.admin.publicKey,
+                recipientExtTokenAccount: wrongTokenAccount,
+              })
+              .signers([$.admin])
+              .rpc(),
+            "ConstraintTokenMint"
+          );
+        });
+
+        // yield variant test cases
+        //   [X] given all the accounts are correct
+        //     [X] given the multiplier is not synced
+        //       [X] it syncs the multiplier to the current
+        //       [X] given the m vault has excess collateral
+        //         [X] it transfers the excess collateral to the recipient token account
+        //       [X] given the m vault does not have excess collateral
+        //         [X] it reverts with an InsufficientCollateral error
+        //     [X] given the multiplier is already synced
+        //       [X] given the m vault has excess collateral
+        //         [X] it transfers the excess collateral to the recipient token account
+        //       [X] given the m vault does not have excess collateral
+        //         [X] it completes but doesn't transfer any tokens
+
+        if (variant === Variant.ScaledUiAmount) {
+          // given all accounts are correct
+          // given the multiplier is not synced
+          // it syncs the multiplier to the current
+          // given the m vault has excess collateral
+          // it transfers the excess collateral to the recipient token account
+          test("multiplier not synced, excess collateral exists - success", async () => {
+            // warp forward in time slightly
+            $.warp(new BN(60), true);
+
+            // Propagate a new index to create a situation where multiplier needs sync
+            const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12));
+            await $.propagateIndex(newIndex);
+
+            // Claim yield to ensure vault has enough collateral
+            const mVault = $.getMVault();
+            const mVaultATA = await $.getATA($.mMint.publicKey, mVault);
+            await $.mClaimFor(mVault, await $.getTokenBalance(mVaultATA));
+            await $.mCompleteClaims();
+
+            // Cache balances before claim excess
+            const initialVaultBalance = await $.getTokenBalance(mVaultATA);
+            const recipientATA = await $.getATA(
+              $.extMint.publicKey,
+              $.admin.publicKey
+            );
+
+            // Get the new multiplier calculate the expected excess
+            const multiplier = await $.getNewMultiplier(newIndex);
+
+            const initialRecipientPrincipal = await $.getTokenBalance(
+              recipientATA
+            );
+            const initialRecipientBalance = await $.getTokenUiBalance(
+              recipientATA,
+              multiplier
+            );
+
+            const extSupply = await getMint(
+              $.provider.connection,
+              $.extMint.publicKey,
+              undefined,
+              TOKEN_2022_PROGRAM_ID
+            ).then((mint) => mint.supply);
+
+            const requiredCollateral = new BN(
+              Math.ceil(Number(extSupply) * multiplier)
+            );
+
+            const expectedExcess = initialVaultBalance.sub(requiredCollateral);
+            const expectedExcessPrincipal = new BN(
+              Math.floor(Number(expectedExcess) / multiplier)
+            );
+
+            // Setup and execute the instruction
+            await $.ext.methods
+              .claimFees()
+              .accountsPartial({
+                admin: $.admin.publicKey,
+                recipientExtTokenAccount: recipientATA,
+              })
+              .signers([$.admin])
+              .rpc();
+
+            // Verify multiplier was updated
+
+            $.expectScaledUiAmountConfig($.extMint.publicKey, {
+              authority: $.getExtMintAuthority(),
+              multiplier,
+              newMultiplier: multiplier,
+              newMultiplierEffectiveTimestamp: BigInt(
+                $.currentTime().toString()
+              ),
+            });
+
+            // Verify excess tokens were transferred
+
+            $.expectTokenBalance(mVaultATA, initialVaultBalance);
+            $.expectTokenUiBalance(
+              recipientATA,
+              initialRecipientBalance.add(expectedExcess),
+              Comparison.LessThanOrEqual,
+              new BN(1)
+            );
+            $.expectTokenBalance(
+              recipientATA,
+              initialRecipientPrincipal.add(expectedExcessPrincipal)
+            );
+          });
+
+          // given all accounts are correct
+          // given the multiplier is already synced
+          // given the m vault has excess collateral
+          // it transfers the excess collateral to the recipient token account
+          test("multiplier already synced, excess collateral exists - success", async () => {
+            // Cache balances before claim excess
+            const mVaultATA = await $.getATA($.mMint.publicKey, $.getMVault());
+            const initialVaultBalance = await $.getTokenBalance(mVaultATA);
+            const recipientATA = await $.getATA(
+              $.extMint.publicKey,
+              $.admin.publicKey
+            );
+
+            // Get the current multiplier and calculate the $.expected excess
+            const multiplier = await $.getCurrentMultiplier();
+            const initialRecipientBalance = await $.getTokenUiBalance(
+              recipientATA,
+              multiplier
+            );
+            const initialRecipientPrincipal = await $.getTokenBalance(
+              recipientATA
+            );
+
+            const extSupply = await getMint(
+              $.provider.connection,
+              $.extMint.publicKey,
+              undefined,
+              TOKEN_2022_PROGRAM_ID
+            ).then((mint) => mint.supply);
+
+            const requiredCollateral = new BN(
+              Math.ceil(Number(extSupply) * multiplier)
+            );
+
+            const expectedExcess = initialVaultBalance.sub(requiredCollateral);
+            const expectedExcessPrincipal = new BN(
+              Math.floor(Number(expectedExcess) / multiplier)
+            );
+
+            await $.ext.methods
+              .claimFees()
+              .accountsPartial({
+                admin: $.admin.publicKey,
+                recipientExtTokenAccount: recipientATA,
+              })
+              .signers([$.admin])
+              .rpc();
+
+            // Verify excess tokens were transferred
+            $.expectTokenBalance(mVaultATA, initialVaultBalance);
+            $.expectTokenUiBalance(
+              recipientATA,
+              initialRecipientBalance.add(expectedExcess),
+              Comparison.LessThanOrEqual,
+              new BN(1)
+            );
+            $.expectTokenBalance(
+              recipientATA,
+              initialRecipientPrincipal.add(expectedExcessPrincipal)
+            );
+          });
+
+          // given all accounts are correct
+          // given the multiplier is not synced
+          // given the m vault does not have excess collateral
+          // it reverts with an InsufficientCollateral error
+          test("multiplier not synced, no excess collateral - reverts", async () => {
+            // claim the existing excess so there isn't extra
+            await $.claimFees();
+            $.svm.expireBlockhash();
+
+            // Propagate a new index to create a situation where multiplier needs sync
+            const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12));
+            await $.propagateIndex(newIndex);
+
+            const recipientExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.admin.publicKey
+            );
+
+            // Attempt to send the transaction
+            await $.expectAnchorError(
+              $.ext.methods
+                .claimFees()
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  recipientExtTokenAccount,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "InsufficientCollateral"
+            );
+          });
+
+          // given all accounts are correct
+          // given the multiplier is already synced
+          // given the m vault does not have excess collateral
+          // it completes successfully and does not transfer any tokens
+          test("multiplier already synced, no excess collateral - success", async () => {
+            // claim the existing excess so there isn't extra
+            await $.claimFees();
+            $.svm.expireBlockhash();
+
+            // Cache balances before claim excess
+            const mVaultATA = await $.getATA($.mMint.publicKey, $.getMVault());
+            const initialVaultBalance = await $.getTokenBalance(mVaultATA);
+            const recipientATA = await $.getATA(
+              $.extMint.publicKey,
+              $.admin.publicKey
+            );
+            const initialRecipientBalance = await $.getTokenBalance(
+              recipientATA
+            );
+
+            // Attempt to send the transaction
+            await $.ext.methods
+              .claimFees()
+              .accountsPartial({
+                admin: $.admin.publicKey,
+                recipientExtTokenAccount: recipientATA,
+              })
+              .signers([$.admin])
+              .rpc();
+
+            // Verify no tokens were transferred
+            $.expectTokenBalance(mVaultATA, initialVaultBalance);
+            $.expectTokenBalance(recipientATA, initialRecipientBalance);
+          });
+        }
+      });
     });
   });
 }
-
-// describe("ScaledUiExt unit tests", () => {
-//   let currentTime: () => BN;
-
-//   beforeEach(async () => {
-//     // Initialize the SVM instance with all necessary configurations
-//     svm = new LiteSVM()
-//       .withSplPrograms() // Add SPL programs (including token programs)
-//       .withBuiltins() // Add builtin programs
-//       .withSysvars() // Setup standard sysvars
-//       .withPrecompiles() // Add standard precompiles
-//       .withBlockhashCheck(true); // Optional: disable blockhash checking for tests
-
-//     // Add the earn program to the SVM instance
-//     svm.addProgramFromFile(EARN_PROGRAM_ID, "tests/programs/earn.so");
-
-//     // Replace the default token2022 program with the (newer) one from the workspace
-//     svm.addProgramFromFile(
-//       TOKEN_2022_PROGRAM_ID,
-//       "tests/programs/spl_token_2022.so"
-//     );
-
-//     // Add the scaled_ui_ext program to the SVM instance
-//     svm.addProgramFromFile(PROGRAM_ID, "target/deploy/scaled_ui.so");
-
-//     // Create an anchor provider from the liteSVM instance
-//     provider = new LiteSVMProvider(svm);
-
-//     // Create program instances
-//     earn = new Program<Earn>(EARN_IDL, provider);
-//     scaledUiExt = new Program<ScaledUiExt>(SCALED_UI_EXT_IDL, provider);
-
-//     // Fund the wallets
-//     svm.airdrop(admin.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
-//     svm.airdrop(earnAuthority.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
-//     svm.airdrop(nonAdmin.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
-//     svm.airdrop(wrapAuthority.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
-//     svm.airdrop(nonWrapAuthority.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
-
-//     currentTime = () => {
-//       return new BN(svm.getClock().unixTimestamp.toString());
-//     };
-
-//     // Create the M token mint
-//     await createMintWithMultisig(mMint, mMintAuthority);
-
-//     // Create the Ext token mint
-//     await createScaledUiMint(extMint, getExtMintAuthority());
-
-//     // Mint some m tokens to have a non-zero supply
-//     await mintM(admin.publicKey, initialSupply);
-
-//     // Initialize the earn program
-//     await initializeEarn(
-//       mMint.publicKey,
-//       earnAuthority.publicKey,
-//       initialIndex,
-//       claimCooldown
-//     );
-
-//     // Add the m vault as an M earner
-//     const mVault = getMVault();
-//     const earnerMerkleTree = new MerkleTree([admin.publicKey, mVault]);
-
-//     // Propagate the merkle root
-//     await propagateIndex(initialIndex, earnerMerkleTree.getRoot());
-
-//     // Add the earner account for the vault
-//     const { proof } = earnerMerkleTree.getInclusionProof(mVault);
-//     await addRegistrarEarner(mVault, proof);
-//   });
-
-//   describe("admin instruction tests", () => {
-//     describe("initialize unit tests", () => {
-//       // test cases
-//       // [X] given the m_mint is not owned by the token2022 program
-//       //   [X] it reverts with a ConstraintAddress error
-//       // [X] given the ext_mint is not owned by the token2022 program
-//       //   [X] it reverts with a ConstraintMintTokenProgram error
-//       // [X] given the ext_mint does not have the scaled ui amount extension
-//       //   [X] it reverts with a InvalidMint error
-//       // [X] given the ext_mint has the scaled ui amount extension, but the authority is not the mint authority PDA
-//       //   [X] it reverts with an InvalidMint error
-//       // [X] given the ext_mint decimals do not match the m_mint decimals
-//       //   [X] it reverts with a ConstraintMintDecimals error
-//       // [X] given the M earn global account does not match the PDA on the earn program
-//       //   [X] it reverts with a SeedsConstraint error
-//       // [X] given the ext_mint_authority is not the required PDA
-//       //   [X] it reverts with a SeedsConstraint error
-//       // [X] given more than 10 wrap authorities are provided
-//       //   [X] it reverts with an InvalidParam error
-//       // [X] given wrap authorities includes the system program id (default public key)
-//       //   [X] it reverts with an InvalidParam error
-//       // [X] given the wrap authorities are not unique
-//       //   [X] it reverts with an InvalidParam error
-//       // [X] given all accounts and params are correct
-//       //   [X] the global account is created
-//       //   [X] the admin is set to the signer
-//       //   [X] the m_mint is set correctly
-//       //   [X] the ext_mint is set correctly
-//       //   [X] the m_earn_global_account is set correctly
-//       //   [X] the bumps are set correctly
-//       //   [X] the wrap authorities are set correctly
-//       //   [X] the multiplier on the ext mint is initialized to m index
-//       //   [X] the timestamp on the ext mint is set to the m timestamp
-
-//       // given the m_mint is not owned by the token2022 program
-//       // it reverts with a ConstraintAddress error
-//       test("m_mint not owned by token2022 - reverts", async () => {
-//         // Create a mint owned by a different program
-//         const wrongMint = new Keypair();
-//         await createMint(wrongMint, nonAdmin.publicKey, false);
-
-//         // Setup the instruction call
-//         prepExtInitialize(nonAdmin);
-
-//         // Change the M mint and vault token account
-//         accounts.mMint = wrongMint.publicKey;
-//         accounts.vaultMTokenAccount = await getATA(
-//           wrongMint.publicKey,
-//           getMVault(),
-//           false
-//         );
-
-//         // Attempt to send the transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .initialize([], new BN(0))
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc(),
-//           "ConstraintAddress"
-//         );
-//       });
-
-//       // given the ext_mint is not owned by the token2022 program
-//       // it reverts with a ConstraintMintTokenProgram error
-//       test("ext_mint not owned by token2022 - reverts", async () => {
-//         // Create a mint owned by a different program
-//         const wrongMint = new Keypair();
-//         await createMint(wrongMint, nonAdmin.publicKey, false);
-
-//         // Setup the instruction call
-//         prepExtInitialize(nonAdmin);
-
-//         // Change the Ext Mint
-//         accounts.extMint = wrongMint.publicKey;
-
-//         // Attempt to send the transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .initialize([], new BN(0))
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc(),
-//           "ConstraintMintTokenProgram"
-//         );
-//       });
-
-//       // given the ext_mint does not have the scaled ui amount extension
-//       // it reverts with a InvalidMint error
-//       test("ext_mint does not have the scaled ui amount extension - reverts", async () => {
-//         // Create a mint without the scaled ui amount extension
-//         const wrongMint = new Keypair();
-//         await createMint(wrongMint, getExtMintAuthority(), true, 6); // valid otherwise
-
-//         // Setup the instruction call
-//         prepExtInitialize(nonAdmin);
-
-//         // Change the Ext Mint
-//         accounts.extMint = wrongMint.publicKey;
-
-//         // Attempt to send the transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .initialize([], new BN(0))
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc(),
-//           "InvalidMint"
-//         );
-//       });
-
-//       // given the ext_mint has the scaled ui amount extension, but the authority is not the mint authority PDA
-//       // it reverts with an InvalidMint error
-//       test("ext_mint has the scaled ui amount extension, but the authority is not the mint authority PDA - reverts", async () => {
-//         // Create a mint with the scaled ui amount extension
-//         const wrongMint = new Keypair();
-//         await createScaledUiMint(wrongMint, nonAdmin.publicKey, 6);
-
-//         // Setup the instruction call
-//         prepExtInitialize(nonAdmin);
-
-//         // Change the Ext Mint
-//         accounts.extMint = wrongMint.publicKey;
-
-//         // Attempt to send the transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .initialize([], new BN(0))
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc(),
-//           "InvalidMint"
-//         );
-//       });
-
-//       // given the decimals on ext_mint do not match M
-//       // it reverts with a MintDecimals error
-//       test("ext_mint incorrect decimals - reverts", async () => {
-//         // Create a mint owned by a different program
-//         const badMint = new Keypair();
-//         await createMint(badMint, nonAdmin.publicKey, true, 9);
-
-//         // Setup the instruction call
-//         prepExtInitialize(nonAdmin);
-
-//         // Change the Ext Mint
-//         accounts.extMint = badMint.publicKey;
-
-//         // Attempt to send the transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .initialize([], new BN(0))
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc(),
-//           "ConstraintMintDecimals"
-//         );
-//       });
-
-//       // given the M earn global account is invalid
-//       // it reverts with a seeds constraint
-//       test("m_earn_global_account is incorrect - reverts", async () => {
-//         // Setup the instruction call
-//         prepExtInitialize(nonAdmin);
-
-//         // Change the m earn global account
-//         accounts.mEarnGlobalAccount = PublicKey.unique();
-//         if (accounts.mEarnGlobalAccount == getEarnGlobalAccount()) return;
-
-//         // Attempt to send transaction
-//         // Expect error (could be one of several "SeedsConstraint", "AccountOwnedByWrongProgram", "AccountNotInitialized")
-//         await expectSystemError(
-//           scaledUiExt.methods
-//             .initialize([], new BN(0))
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc()
-//         );
-//       });
-
-//       // given ext_mint_authority is not required PDA
-//       // it reverts with a seeds constraint
-//       test("ext_mint_authority is incorrect - reverts", async () => {
-//         // Setup the instruction call
-//         prepExtInitialize(nonAdmin);
-
-//         // Change the ext mint authority
-//         accounts.extMintAuthority = PublicKey.unique();
-//         if (accounts.extMintAuthority == getExtMintAuthority()) return;
-
-//         // Attempt to send transaction
-//         // Expect error (could be one of several "SeedsConstraint", "AccountOwnedByWrongProgram", "AccountNotInitialized")
-//         await expectSystemError(
-//           scaledUiExt.methods
-//             .initialize([], new BN(0))
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc()
-//         );
-//       });
-
-//       // given more than 10 wrap authorities are provided
-//       // it reverts with an InvalidParam error
-//       test("more than 10 wrap authorities provided - reverts", async () => {
-//         // Setup the instruction call
-//         prepExtInitialize(nonAdmin);
-
-//         // Change the wrap authorities
-//         const wrapAuthorities: PublicKey[] = createUniqueKeyArray(11);
-
-//         // Attempt to send transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .initialize(wrapAuthorities, new BN(0))
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc(),
-//           "InvalidParam"
-//         );
-//       });
-
-//       // given wrap authorities includes the system program id (default public key)
-//       // it reverts with an InvalidParam error
-//       test("wrap authorities includes the system program id - reverts", async () => {
-//         // Setup the instruction call
-//         prepExtInitialize(nonAdmin);
-
-//         // Change the wrap authorities
-//         const wrapAuthorities: PublicKey[] = createUniqueKeyArray(10);
-//         wrapAuthorities[0] = SystemProgram.programId;
-
-//         // Attempt to send transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .initialize(wrapAuthorities, new BN(0))
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc(),
-//           "InvalidParam"
-//         );
-//       });
-
-//       // given wrap authorities includes a duplicate, non-default public key
-//       // it reverts with an InvalidParam error
-//       test("wrap authorities includes a duplicate, non-default public key - reverts", async () => {
-//         // Setup the instruction call
-//         prepExtInitialize(nonAdmin);
-
-//         // Change the wrap authorities
-//         const wrapAuthorities: PublicKey[] = createUniqueKeyArray(10);
-//         wrapAuthorities[0] = wrapAuthorities[1];
-
-//         // Attempt to send transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .initialize(wrapAuthorities, new BN(0))
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc(),
-//           "InvalidParam"
-//         );
-//       });
-
-//       // given accounts and params are correct
-//       // it creates the global account
-//       // it sets the admin to the signer
-//       // it sets the m_mint to the provided mint
-//       // it sets the ext_mint to the provided mint
-//       // it sets the m_earn_global_account to the provided account
-//       // it sets the scalued ui amount multiplier and timestamp to the values on the m earn global account
-//       // it sets the bumps to the correct values
-//       test("initialize - success", async () => {
-//         // Setup the instruction call
-//         prepExtInitialize(admin);
-
-//         // Get a random number of wrap authorities
-//         // We use the padded array to check the stored state after the call
-//         const numWrapAuthorities = randomInt(10);
-//         const wrapAuthorities: PublicKey[] =
-//           createUniqueKeyArray(numWrapAuthorities);
-//         const paddedWrapAuthorities = padKeyArray(wrapAuthorities, 10);
-
-//         // Derive PDA bumps
-//         const [, bump] = PublicKey.findProgramAddressSync(
-//           [Buffer.from("global")],
-//           scaledUiExt.programId
-//         );
-//         const [, mVaultBump] = PublicKey.findProgramAddressSync(
-//           [Buffer.from("m_vault")],
-//           scaledUiExt.programId
-//         );
-//         const [, extMintAuthorityBump] = PublicKey.findProgramAddressSync(
-//           [Buffer.from("mint_authority")],
-//           scaledUiExt.programId
-//         );
-
-//         // Ensure the global account has not been created yet
-//         const globalAccount = getExtGlobalAccount();
-//         expectAccountEmpty(globalAccount);
-
-//         // Get a random fee bps
-//         const fee_bps = new BN(randomInt(10000));
-
-//         // Send the transaction
-//         await scaledUiExt.methods
-//           .initialize(wrapAuthorities, fee_bps)
-//           .accountsPartial({ ...accounts })
-//           .signers([admin])
-//           .rpc();
-
-//         // Check the state of the global account
-//         await expectExtGlobalState(globalAccount, {
-//           admin: admin.publicKey,
-//           extMint: extMint.publicKey,
-//           mMint: mMint.publicKey,
-//           mEarnGlobalAccount: getEarnGlobalAccount(),
-//           bump,
-//           mVaultBump,
-//           extMintAuthorityBump,
-//           wrapAuthorities: paddedWrapAuthorities,
-//           yieldConfig: {
-//             feeBps: fee_bps,
-//             lastMIndex: initialIndex,
-//             lastExtIndex: new BN(1e12),
-//           },
-//         });
-
-//         // Check the state of the mint
-//         await expectScaledUiAmountConfig(extMint.publicKey, {
-//           authority: getExtMintAuthority(),
-//           multiplier: 1.0,
-//           newMultiplierEffectiveTimestamp: BigInt(currentTime().toString()),
-//           newMultiplier: 1.0,
-//         });
-//       });
-//     });
-
-//     describe("set_m_mint unit tests", () => {
-//       beforeEach(async () => {
-//         const fee_bps = new BN(randomInt(10000));
-//         // Initialize the extension program
-//         await initializeExt(
-//           [admin.publicKey, wrapAuthority.publicKey],
-//           fee_bps
-//         );
-
-//         // wrap some tokens to the make the m vault's balance non-zero
-//         await wrap(admin, initialSupply);
-//       });
-
-//       // test cases
-//       // [X] given the admin does not sign the transaction
-//       //   [X] it reverts with a NotAuthorized error
-//       // [X] given the admin signs the transaction
-//       //   [X] given the new m mint is not owned by the token2022 program
-//       //     [X] it reverts with a ConstraintMintTokenProgram error
-//       //   [X] given the new m mint has a different number of decimals than the existing m mint
-//       //     [X] it reverts with a ConstraintMintDecimals error
-//       //   [X] given the m vault is not the m vault PDA
-//       //     [X] it reverts with a ConstraintSeeds error
-//       //   [X] given the m vault token account for the current m mint is not the m vault PDA's ATA
-//       //     [X] it reverts with a ConstraintAssociated error
-//       //   [X] given the m vault token account for the new m mint is not the m vault PDA's ATA
-//       //     [X] it reverts with a ConstraintAssociated error
-//       //   [X] given the m vault token account for the new m mint has fewer tokens than the m vault token account for the current m mint
-//       //     [X] it reverts with an InsufficientCollateral error
-//       //   [X] given all the accounts are correct
-//       //     [X] it sets the m mint to the new mint
-
-//       // given the admin does not sign the transaction
-//       // it reverts with a NotAuthorized error
-//       test("admin does not sign - reverts", async () => {
-//         // Create a new m mint that is valid
-//         const newMint = new Keypair();
-//         await createMint(newMint, nonAdmin.publicKey, true, 6);
-
-//         // Setup the instruction
-//         await prepSetMMint(nonAdmin, newMint.publicKey);
-
-//         // Attempt to send the transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .setMMint()
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc(),
-//           "NotAuthorized"
-//         );
-//       });
-
-//       // given the admin signs the transaction
-//       // given the new m mint is not owned by the token2022 program
-//       // it reverts with a ConstraintAddress error
-//       test("new m mint not owned by token2022 - reverts", async () => {
-//         // Create a new m mint that is valid
-//         const newMint = new Keypair();
-//         await createMint(newMint, nonAdmin.publicKey, false);
-
-//         // Setup the instruction
-//         const newVaultATA = await getATA(newMint.publicKey, getMVault(), false);
-//         await prepSetMMint(admin, newMint.publicKey, newVaultATA);
-
-//         // Attempt to send the transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .setMMint()
-//             .accountsPartial({ ...accounts })
-//             .signers([admin])
-//             .rpc(),
-//           "ConstraintMintTokenProgram"
-//         );
-//       });
-
-//       // given the new m mint has a different number of decimals than the existing m mint
-//       // it reverts with a ConstraintMintDecimals error
-//       test("new m mint incorrect decimals - reverts", async () => {
-//         // Create a new m mint that is valid
-//         const newMint = new Keypair();
-//         await createMint(newMint, nonAdmin.publicKey, true, 9);
-
-//         // Setup the instruction
-//         await prepSetMMint(admin, newMint.publicKey);
-
-//         // Attempt to send the transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .setMMint()
-//             .accountsPartial({ ...accounts })
-//             .signers([admin])
-//             .rpc(),
-//           "ConstraintMintDecimals"
-//         );
-//       });
-
-//       // given the m vault is not the m vault PDA
-//       // it reverts with a SeedsConstraint error
-//       test("m vault is not the m vault PDA - reverts", async () => {
-//         // Create a new m mint that is valid
-//         const newMint = new Keypair();
-//         await createMint(newMint, nonAdmin.publicKey, true, 6);
-
-//         // Setup the instruction
-//         await prepSetMMint(admin, newMint.publicKey);
-
-//         // Change the m vault
-//         accounts.mVault = PublicKey.unique();
-
-//         // Attempt to send the transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .setMMint()
-//             .accountsPartial({ ...accounts })
-//             .signers([admin])
-//             .rpc(),
-//           "ConstraintSeeds"
-//         );
-//       });
-
-//       // given the m vault token account for the current m mint is not the m vault PDA's ATA
-//       // it reverts with a ConstraintAssociated error
-//       test("m vault token account for current m mint is not the m vault PDA's ATA - reverts", async () => {
-//         // Create a new m mint that is valid
-//         const newMint = new Keypair();
-//         await createMint(newMint, nonAdmin.publicKey, true, 6);
-
-//         // Setup the instruction
-//         await prepSetMMint(admin, newMint.publicKey);
-
-//         // Change the m vault token account
-//         const { tokenAccount: nonAtaAccount } = await createTokenAccount(
-//           mMint.publicKey,
-//           getMVault()
-//         );
-//         accounts.vaultMTokenAccount = nonAtaAccount;
-
-//         // Attempt to send the transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .setMMint()
-//             .accountsPartial({ ...accounts })
-//             .signers([admin])
-//             .rpc(),
-//           "ConstraintAssociated"
-//         );
-//       });
-
-//       // given the m vault token account for the new m mint is not the m vault PDA's ATA
-//       // it reverts with a ConstraintAssociated error
-//       test("m vault token account for new m mint is not the m vault PDA's ATA - reverts", async () => {
-//         // Create a new m mint that is valid
-//         const newMint = new Keypair();
-//         await createMint(newMint, nonAdmin.publicKey, true, 6);
-
-//         // Setup the instruction
-//         await prepSetMMint(admin, newMint.publicKey);
-
-//         // Change the m vault token account
-//         const { tokenAccount: nonAtaAccount } = await createTokenAccount(
-//           newMint.publicKey,
-//           getMVault()
-//         );
-//         accounts.newVaultMTokenAccount = nonAtaAccount;
-
-//         // Attempt to send the transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .setMMint()
-//             .accountsPartial({ ...accounts })
-//             .signers([admin])
-//             .rpc(),
-//           "ConstraintAssociated"
-//         );
-//       });
-
-//       // given the m vault token account for the new m mint has fewer tokens than the m vault token account for the current m mint
-//       // it reverts with an InsufficientCollateral error
-//       test("new m mint vault token account has fewer tokens than current m mint vault token account - reverts", async () => {
-//         // Create a new m mint that is valid
-//         const newMint = new Keypair();
-//         await createMint(newMint, nonAdmin.publicKey, true, 6);
-
-//         // Create the ATA for the m vault for the new mint and mint some tokens to it
-//         const mVaultATA: PublicKey = await getATA(
-//           newMint.publicKey,
-//           getMVault()
-//         );
-
-//         const amount = BigInt(randomInt(initialSupply.toNumber()));
-
-//         const mintToInstruction = createMintToCheckedInstruction(
-//           newMint.publicKey,
-//           mVaultATA,
-//           nonAdmin.publicKey,
-//           amount,
-//           6,
-//           [],
-//           TOKEN_2022_PROGRAM_ID
-//         );
-
-//         let tx = new Transaction();
-//         tx.add(mintToInstruction);
-//         await provider.sendAndConfirm!(tx, [nonAdmin]);
-
-//         // Setup the instruction
-//         await prepSetMMint(admin, newMint.publicKey);
-
-//         // Send the transaction
-//         // Expect an insufficient collateral error
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .setMMint()
-//             .accountsPartial({ ...accounts })
-//             .signers([admin])
-//             .rpc(),
-//           "InsufficientCollateral"
-//         );
-//       });
-
-//       // given all the accounts are correct
-//       // it sets the m mint to the new mint
-//       // Create a new m mint that is valid
-//       test("set m mint - success", async () => {
-//         const newMint = new Keypair();
-//         await createMint(newMint, nonAdmin.publicKey, true, 6);
-
-//         // Create the ATA for the m vault for the new mint and mint some tokens to it
-//         const mVaultATA: PublicKey = await getATA(
-//           newMint.publicKey,
-//           getMVault()
-//         );
-
-//         const amount = BigInt(initialSupply.toString());
-
-//         const mintToInstruction = createMintToCheckedInstruction(
-//           newMint.publicKey,
-//           mVaultATA,
-//           nonAdmin.publicKey,
-//           amount,
-//           6,
-//           [],
-//           TOKEN_2022_PROGRAM_ID
-//         );
-
-//         let tx = new Transaction();
-//         tx.add(mintToInstruction);
-//         await provider.sendAndConfirm!(tx, [nonAdmin]);
-
-//         // Setup the instruction
-//         const { globalAccount } = await prepSetMMint(admin, newMint.publicKey);
-
-//         // Send the transaction
-//         await scaledUiExt.methods
-//           .setMMint()
-//           .accountsPartial({ ...accounts })
-//           .signers([admin])
-//           .rpc();
-
-//         // Check that the m mint was updated
-//         expectExtGlobalState(globalAccount, {
-//           mMint: newMint.publicKey,
-//         });
-//       });
-//     });
-
-//     describe("update_wrap_authority unit tests", () => {
-//       const wrapAuthorities = [admin.publicKey, wrapAuthority.publicKey];
-//       const paddedWrapAuthorities = padKeyArray(wrapAuthorities, 10);
-
-//       beforeEach(async () => {
-//         const fee_bps = new BN(randomInt(10000));
-//         // Initialize the extension program
-//         await initializeExt(wrapAuthorities, fee_bps);
-//       });
-
-//       // test cases
-//       // [X] given the admin does not sign the transaction
-//       //   [X] it reverts with a NotAuthorized error
-//       // [X] given the admin signs the transaction
-//       //   [X] given the index is out of bounds
-//       //     [X] it reverts with a InvalidParam error
-//       //   [X] given the new wrap authority is already in the list (and not the default public key)
-//       //     [X] it reverts with a InvalidParam error
-//       //   [X] given the new wrap authority is the default public key
-//       //     [X] it removes the wrap authority at the given index
-//       //   [X] given the new wrap authority is not the default public key and not in the list
-//       //     [X] it adds the new wrap authority to the list at the provided index
-
-//       // given the admin does not sign the transaction
-//       // it reverts with a NotAuthorized error
-//       test("admin does not sign - reverts", async () => {
-//         // Setup the instruction
-//         await prepUpdateWrapAuthority(nonAdmin);
-
-//         // Attempt to send the transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .updateWrapAuthority(0, nonWrapAuthority.publicKey)
-//             .accountsPartial({ ...accounts })
-//             .signers([nonAdmin])
-//             .rpc(),
-//           "NotAuthorized"
-//         );
-//       });
-
-//       // given the admin signs the transaction
-//       // given the index is out of bounds
-//       // it reverts with a InvalidParam error
-//       test("index out of bounds - reverts", async () => {
-//         // Setup the instruction
-//         await prepUpdateWrapAuthority(admin);
-
-//         const index = randomInt(11, 256);
-
-//         // Attempt to send the transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .updateWrapAuthority(index, nonWrapAuthority.publicKey)
-//             .accountsPartial({ ...accounts })
-//             .signers([admin])
-//             .rpc(),
-//           "InvalidParam"
-//         );
-//       });
-
-//       // given the admin signs the transaction
-//       // given the new wrap authority is already in the list (and not the default public key)
-//       // it reverts with a InvalidParam error
-//       test("new wrap authority already in the list - reverts", async () => {
-//         // Setup the instruction
-//         await prepUpdateWrapAuthority(admin);
-
-//         // Attempt to send the transaction
-//         await expectAnchorError(
-//           scaledUiExt.methods
-//             .updateWrapAuthority(0, wrapAuthority.publicKey)
-//             .accountsPartial({ ...accounts })
-//             .signers([admin])
-//             .rpc(),
-//           "InvalidParam"
-//         );
-//       });
-
-//       // given the admin signs the transaction
-//       // given the new wrap authority is the default public key
-//       // it removes the wrap authority at the given index
-//       test("new wrap authority is the default public key - success", async () => {
-//         // Setup the instruction
-//         const { globalAccount } = await prepUpdateWrapAuthority(admin);
-
-//         // Send the transaction
-//         await scaledUiExt.methods
-//           .updateWrapAuthority(0, SystemProgram.programId)
-//           .accountsPartial({ ...accounts })
-//           .signers([admin])
-//           .rpc();
-
-//         // Check that the wrap authority was removed
-//         const updatedWrapAuthorities = paddedWrapAuthorities.slice(0);
-//         updatedWrapAuthorities[0] = SystemProgram.programId;
-
-//         await expectExtGlobalState(globalAccount, {
-//           wrapAuthorities: updatedWrapAuthorities,
-//         });
-//       });
-
-//       // given the admin signs the transaction
-//       // given the new wrap authority is not the default public key and not in the list
-//       // it adds the new wrap authority to the list at the provided index
-//       test("new wrap authority is not the default public key and not in the list - success", async () => {
-//         // Setup the instruction
-//         const { globalAccount } = await prepUpdateWrapAuthority(admin);
-
-//         // Send the transaction
-//         await scaledUiExt.methods
-//           .updateWrapAuthority(2, nonWrapAuthority.publicKey)
-//           .accountsPartial({ ...accounts })
-//           .signers([admin])
-//           .rpc();
-
-//         // Check that the wrap authority was added
-//         const updatedWrapAuthorities = paddedWrapAuthorities.slice(0);
-//         updatedWrapAuthorities[2] = nonWrapAuthority.publicKey;
-
-//         await expectExtGlobalState(globalAccount, {
-//           wrapAuthorities: updatedWrapAuthorities,
-//         });
-//       });
-//     });
 
 //     describe("claim_fees unit tests", () => {
 //       // test cases
@@ -1281,12 +1388,12 @@ for (const variant of VARIANTS) {
 
 //       const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
 //       const wrapAuthorities = [admin.publicKey, wrapAuthority.publicKey];
-//       const fee_bps = new BN(randomInt(1, 10000)); // non-zero
+//       const feeBps = new BN(randomInt(1, 10000)); // non-zero
 //       const startIndex = new BN(randomInt(initialIndex.toNumber() + 1, 2e12));
 
 //       beforeEach(async () => {
 //         // Initialize the extension program
-//         await initializeExt(wrapAuthorities, fee_bps);
+//         await initializeExt(wrapAuthorities, feeBps);
 
 //         // Wrap some tokens from the admin to make the m vault's balance non-zero
 //         await wrap(admin, initialWrappedAmount);
@@ -1484,7 +1591,7 @@ for (const variant of VARIANTS) {
 //           (globalState.yieldConfig.lastExtIndex.toNumber() / 1e12) *
 //           (newIndex.toNumber() /
 //             globalState.yieldConfig.lastMIndex.toNumber()) **
-//             (1 - fee_bps.toNumber() / 1e4);
+//             (1 - feeBps.toNumber() / 1e4);
 
 //         const initialRecipientPrincipal = await getTokenBalance(recipientATA);
 //         const initialRecipientBalance = await getTokenUiBalance(
@@ -1665,14 +1772,14 @@ for (const variant of VARIANTS) {
 //     const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
 
 //     const wrapAuthorities = [admin.publicKey, wrapAuthority.publicKey];
-//     const fee_bps = new BN(randomInt(10000));
+//     const feeBps = new BN(randomInt(10000));
 
 //     const startIndex = new BN(randomInt(initialIndex.toNumber() + 1, 2e12));
 
 //     // Setup accounts with M tokens so we can test wrapping and unwrapping
 //     beforeEach(async () => {
 //       // Initialize the extension program
-//       await initializeExt(wrapAuthorities, fee_bps);
+//       await initializeExt(wrapAuthorities, feeBps);
 
 //       // Mint M tokens to a wrap authority and a non-wrap authority
 //       await mintM(wrapAuthority.publicKey, mintAmount);
@@ -2157,7 +2264,7 @@ for (const variant of VARIANTS) {
 
 //           // const multiplierIncrease =
 //           //   (newIndex.toNumber() / startIndex.toNumber()) **
-//           //   (1 - fee_bps.toNumber() / 1e4);
+//           //   (1 - feeBps.toNumber() / 1e4);
 
 //           // const lastMultiplier =
 //           //   (
@@ -2651,7 +2758,7 @@ for (const variant of VARIANTS) {
 //           newMultiplier =
 //             (globalState.yieldConfig.lastExtIndex.toNumber() / 1e12) *
 //             (newIndex.toNumber() / startIndex.toNumber()) **
-//               (1 - fee_bps.toNumber() / 1e4);
+//               (1 - feeBps.toNumber() / 1e4);
 //         });
 
 //         // test cases
@@ -2740,14 +2847,14 @@ for (const variant of VARIANTS) {
 //       const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
 
 //       const wrapAuthorities = [admin.publicKey, wrapAuthority.publicKey];
-//       const fee_bps = new BN(randomInt(10000));
+//       const feeBps = new BN(randomInt(10000));
 
 //       const startIndex = new BN(randomInt(initialIndex.toNumber() + 1, 2e12));
 
 //       // Setup accounts with M tokens so we can test wrapping and unwrapping
 //       beforeEach(async () => {
 //         // Initialize the extension program
-//         await initializeExt(wrapAuthorities, fee_bps);
+//         await initializeExt(wrapAuthorities, feeBps);
 
 //         // Wrap some tokens from the admin to the make the m vault's balance non-zero
 //         await wrap(admin, initialWrappedAmount);
@@ -2989,12 +3096,12 @@ for (const variant of VARIANTS) {
 //         // console.log("start index", startIndex.toString());
 //         // console.log("last ext index", globalState.yieldConfig.lastExtIndex.toString());
 //         // console.log("last m index", globalState.yieldConfig.lastMIndex.toString());
-//         // console.log("fee bps", fee_bps.toString());
+//         // console.log("fee bps", feeBps.toString());
 //         const multiplier =
 //           (globalState.yieldConfig.lastExtIndex.toNumber() / 1e12) *
 //           (startIndex.toNumber() /
 //             globalState.yieldConfig.lastMIndex.toNumber()) **
-//             (1 - fee_bps.toNumber() / 1e4);
+//             (1 - feeBps.toNumber() / 1e4);
 //         // console.log("multiplier", multiplier.toString());
 
 //         await expectScaledUiAmountConfig(extMint.publicKey, {

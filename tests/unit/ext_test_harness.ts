@@ -45,8 +45,9 @@ import {
 
 import { MExt as ScaledUIExt } from "../../target/types/scaled_ui";
 import { MExt as NoYieldExt } from "../../target/types/no_yield";
+import { token } from "@coral-xyz/anchor/dist/cjs/utils";
 
-enum Comparison {
+export enum Comparison {
   Equal,
   GreaterThan,
   GreaterThanOrEqual,
@@ -747,6 +748,34 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     return earnerAccount;
   }
 
+  public async getNewMultiplier(newIndex: BN): Promise<number> {
+    if (this.variant === Variant.NoYield) {
+      return 1.0;
+    }
+
+    const yieldConfig: YieldConfig<Variant.ScaledUiAmount> = (
+      await this.ext.account.extGlobal.fetch(this.getExtGlobalAccount())
+    ).yieldConfig;
+
+    return (
+      (yieldConfig.lastExtIndex!.toNumber() / 1e12) *
+      (newIndex.toNumber() / yieldConfig.lastMIndex!.toNumber()) **
+        (1 - yieldConfig.feeBps!.toNumber() / 1e4)
+    );
+  }
+
+  public async getCurrentMultiplier(): Promise<number> {
+    if (this.variant === Variant.NoYield) {
+      return 1.0;
+    }
+
+    const yieldConfig: YieldConfig<Variant.ScaledUiAmount> = (
+      await this.ext.account.extGlobal.fetch(this.getExtGlobalAccount())
+    ).yieldConfig;
+
+    return yieldConfig.lastExtIndex!.toNumber() / 1e12;
+  }
+
   // Utility functions for the tests
   public expectAccountEmpty(account: PublicKey) {
     const accountInfo = this.svm.getAccount(account);
@@ -915,6 +944,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
 
   public async mClaimFor(earner: PublicKey, balance?: BN) {
     const earnerATA = await this.getATA(this.mMint.publicKey, earner);
+    const earnerAccount = this.getMEarnerAccount(earnerATA);
     const snapshotBalance = balance ?? (await this.getTokenBalance(earnerATA));
 
     // Send the instruction
@@ -925,6 +955,8 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
         mint: this.mMint.publicKey,
         mintMultisig: this.mMintAuthority.publicKey,
         userTokenAccount: earnerATA,
+        earnerAccount,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .signers([this.earnAuthority])
       .rpc();
@@ -1132,7 +1164,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     }
 
     // Send the instruction
-    await this.ext.methods.sync().accounts({}).signers([this.admin]).rpc();
+    await this.ext.methods.sync().accounts({}).signers([]).rpc();
 
     return this.getExtGlobalAccount();
   }
@@ -1147,7 +1179,10 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     // Send the instruction
     await this.ext.methods
       .claimFees()
-      .accounts({ recipientExtTokenAccount })
+      .accountsPartial({
+        admin: this.admin.publicKey,
+        recipientExtTokenAccount,
+      })
       .signers([this.admin])
       .rpc();
 

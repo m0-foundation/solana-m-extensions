@@ -15,6 +15,27 @@ export function toFixedSizedArray(buffer: Buffer, size: number): number[] {
 
 export const ZERO_WORD = new Array(32).fill(0);
 
+export const padKeyArray = (array: PublicKey[], desiredLen: number) => {
+  const currentLen = array.length;
+
+  if (currentLen > desiredLen) {
+    throw new Error("Array is too long");
+  }
+
+  const padding = new Array(desiredLen - currentLen).fill(PublicKey.default);
+  return array.concat(padding);
+};
+
+export const createUniqueKeyArray = (size: number) => {
+  return new Array(size).fill(PublicKey.default).map((_, i, arr) => {
+    let key = PublicKey.unique();
+    while (key.equals(PublicKey.default) || arr.includes(key)) {
+      key = PublicKey.unique();
+    }
+    return key;
+  });
+};
+
 // Scaled UI Amount Config Extension Types and Functions since not supported in spl-token library yet
 interface InitializeScaledUiAmountConfigData {
   instruction: 43;
