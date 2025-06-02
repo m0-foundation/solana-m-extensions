@@ -46,19 +46,34 @@ pub struct Swap<'info> {
     /*
      * Mints
      */
-    #[account(mut)]
+    #[account(
+        mut,
+        address = from_global.ext_mint,
+    )]
     pub from_mint: InterfaceAccount<'info, Mint>,
-    #[account(mut)]
+    #[account(
+        mut,
+        address = to_global.ext_mint,
+    )]
     pub to_mint: InterfaceAccount<'info, Mint>,
-    #[account(mut)]
     pub m_mint: InterfaceAccount<'info, Mint>,
 
     /*
      * Token Accounts
      */
-    #[account(mut)]
+    #[account(
+        mut,
+        token::mint = from_mint,
+        token::token_program = to_token_program,
+    )]
     pub from_token_account: InterfaceAccount<'info, TokenAccount>,
-    #[account(mut)]
+    #[account(
+        init_if_needed,
+        payer = signer,
+        associated_token::mint = to_mint,
+        associated_token::authority = signer,
+        associated_token::token_program = to_token_program,
+    )]
     pub to_token_account: InterfaceAccount<'info, TokenAccount>,
     #[account(
         init_if_needed,
@@ -148,7 +163,7 @@ impl<'info> Swap<'info> {
         }
 
         if remaining_accounts_split_idx > remaining_accounts.len() {
-            return err!(SwapError::InvalidRemainingAccountsIndex);
+            return err!(SwapError::InvalidIndex);
         }
 
         Ok(())
@@ -163,7 +178,7 @@ impl<'info> Swap<'info> {
         let m_pre_balance = ctx.accounts.intermediate_m_account.amount;
         let to_pre_balance = ctx.accounts.to_token_account.amount;
 
-        // Optional remainging accounts passed to the instructions
+        // Optional remaining accounts passed to the instructions
         let remaining_accounts = ctx.remaining_accounts;
         let (unwrap_remaining_accounts, wrap_remaining_accounts) =
             remaining_accounts.split_at(remaining_accounts_split_idx);

@@ -21,4 +21,5 @@ idl-build = ["anchor-lang/idl-build"]
 anchor-lang.workspace = true
 anchor-spl.workspace = true
 earn.workspace = true
+solana-security-txt.workspace = true
 m_ext = {path = "../m_ext", features = ["cpi"]}

@@ -4,6 +4,6 @@ use anchor_lang::prelude::*;
 pub enum SwapError {
     #[msg("Extension is not whitelisted")]
     InvalidExtension,
-    #[msg("Remaining accounts index is larger than the number of remaining accounts")]
-    InvalidRemainingAccountsIndex,
+    #[msg("Index invalid for length of the array")]
+    InvalidIndex,
 }
