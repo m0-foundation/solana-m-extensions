@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
-use earn::state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED};
+use earn::state::GLOBAL_SEED as EARN_GLOBAL_SEED;
 use m_ext::cpi::accounts::{Unwrap, Wrap};
 use m_ext::state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
 
@@ -39,9 +39,10 @@ pub struct Swap<'info> {
     #[account(
         seeds = [EARN_GLOBAL_SEED],
         seeds::program = earn::ID,
-        bump = to_global.bump,
+        bump,
     )]
-    pub m_earn_global_account: Account<'info, EarnGlobal>,
+    /// CHECK: TODO: fix conflicting account names for IDL generation
+    pub m_earn_global_account: AccountInfo<'info>,
 
     /*
      * Mints
@@ -92,24 +93,28 @@ pub struct Swap<'info> {
         seeds::program = from_ext_program,
         bump = from_global.m_vault_bump,
     )]
+    /// CHECK: account does not hold data
     pub from_m_vault_auth: AccountInfo<'info>,
     #[account(
         seeds = [M_VAULT_SEED],
         seeds::program = to_ext_program,
         bump = to_global.m_vault_bump,
     )]
+    /// CHECK: account does not hold data
     pub to_m_vault_auth: AccountInfo<'info>,
     #[account(
         seeds = [MINT_AUTHORITY_SEED],
         seeds::program = from_ext_program,
         bump = from_global.ext_mint_authority_bump,
     )]
+    /// CHECK: account does not hold data
     pub from_mint_authority: AccountInfo<'info>,
     #[account(
         seeds = [MINT_AUTHORITY_SEED],
         seeds::program = to_ext_program,
         bump = to_global.ext_mint_authority_bump,
     )]
+    /// CHECK: account does not hold data
     pub to_mint_authority: AccountInfo<'info>,
 
     /*
@@ -140,7 +145,9 @@ pub struct Swap<'info> {
     /*
      * Programs
      */
+    /// CHECK: checked against whitelisted extensions
     pub from_ext_program: UncheckedAccount<'info>,
+    /// CHECK: checked against whitelisted extensions
     pub to_ext_program: UncheckedAccount<'info>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,

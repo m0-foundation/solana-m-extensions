@@ -18,7 +18,7 @@ solana_security_txt::security_txt! {
     auditors: ""
 }
 
-declare_id!("HwH4wB2ihdUM3XQzAcRq6zDdjkYKu6KjCazHHweJhVz6");
+declare_id!("MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH");
 
 #[program]
 pub mod ext_swap {
