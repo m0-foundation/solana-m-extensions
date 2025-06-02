@@ -9,8 +9,6 @@ use earn::state::Global as EarnGlobal;
 
 #[derive(Accounts)]
 pub struct Sync<'info> {
-    pub signer: Signer<'info>,
-
     pub m_earn_global_account: Account<'info, EarnGlobal>,
 
     #[account(

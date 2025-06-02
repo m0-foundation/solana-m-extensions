@@ -1164,13 +1164,12 @@ const unwrap = async (from: Keypair, amount: BN, to?: PublicKey) => {
   return { vaultMTokenAccount, toMTokenAccount, fromExtTokenAccount };
 };
 
-const prepSync = async (signer: Keypair) => {
+const prepSync = async () => {
   // Get the global PDA
   const globalAccount = getExtGlobalAccount();
 
   // Populate accounts for the instruction
   accounts = {};
-  accounts.signer = signer.publicKey;
   accounts.globalAccount = globalAccount;
   accounts.mVault = getMVault();
   accounts.vaultMTokenAccount = await getATA(mMint.publicKey, accounts.mVault);
@@ -1183,13 +1182,13 @@ const prepSync = async (signer: Keypair) => {
 
 const sync = async () => {
   // Setup the instruction
-  const { globalAccount } = await prepSync(admin);
+  const { globalAccount } = await prepSync();
 
   // Send the instruction
   await scaledUiExt.methods
     .sync()
     .accountsPartial({ ...accounts })
-    .signers([admin])
+    .signers([])
     .rpc();
 
   return globalAccount;
@@ -3577,7 +3576,7 @@ describe("ScaledUiExt unit tests", () => {
       // it reverts with an InvalidAccount error
       test("M earn global account does not match global account - reverts", async () => {
         // Setup the instruction
-        await prepSync(nonAdmin);
+        await prepSync();
 
         // Change the m earn global account
         accounts.mEarnGlobalAccount = PublicKey.unique();
@@ -3591,7 +3590,7 @@ describe("ScaledUiExt unit tests", () => {
           scaledUiExt.methods
             .sync()
             .accountsPartial({ ...accounts })
-            .signers([nonAdmin])
+            .signers([])
             .rpc()
         );
       });
@@ -3600,7 +3599,7 @@ describe("ScaledUiExt unit tests", () => {
       // it reverts with a ConstraintSeeds error
       test("M vault account does not match derived PDA - reverts", async () => {
         // Setup the instruction
-        await prepSync(nonAdmin);
+        await prepSync();
 
         // Change the m vault account
         accounts.mVault = PublicKey.unique();
@@ -3614,7 +3613,7 @@ describe("ScaledUiExt unit tests", () => {
           scaledUiExt.methods
             .sync()
             .accountsPartial({ ...accounts })
-            .signers([nonAdmin])
+            .signers([])
             .rpc(),
           "ConstraintSeeds"
         );
@@ -3630,7 +3629,7 @@ describe("ScaledUiExt unit tests", () => {
         );
 
         // Setup the instruction with the non-ATA vault m token account
-        await prepSync(nonAdmin);
+        await prepSync();
         accounts.vaultMTokenAccount = nonATA;
 
         // Attempt to send the transaction
@@ -3639,7 +3638,7 @@ describe("ScaledUiExt unit tests", () => {
           scaledUiExt.methods
             .sync()
             .accountsPartial({ ...accounts })
-            .signers([nonAdmin])
+            .signers([])
             .rpc(),
           "ConstraintAssociated"
         );
@@ -3653,7 +3652,7 @@ describe("ScaledUiExt unit tests", () => {
         await createMint(newMint, nonAdmin.publicKey, true, 6);
 
         // Setup the instruction
-        await prepSync(nonAdmin);
+        await prepSync();
 
         // Change the ext mint account
         accounts.extMint = newMint.publicKey;
@@ -3664,7 +3663,7 @@ describe("ScaledUiExt unit tests", () => {
           scaledUiExt.methods
             .sync()
             .accountsPartial({ ...accounts })
-            .signers([nonAdmin])
+            .signers([])
             .rpc(),
           "InvalidMint"
         );
@@ -3674,7 +3673,7 @@ describe("ScaledUiExt unit tests", () => {
       // it reverts with a ConstraintSeeds error
       test("Ext mint authority account does not match derived PDA - reverts", async () => {
         // Setup the instruction
-        await prepSync(nonAdmin);
+        await prepSync();
 
         // Change the ext mint authority account
         accounts.extMintAuthority = PublicKey.unique();
@@ -3688,7 +3687,7 @@ describe("ScaledUiExt unit tests", () => {
           scaledUiExt.methods
             .sync()
             .accountsPartial({ ...accounts })
-            .signers([nonAdmin])
+            .signers([])
             .rpc(),
           "ConstraintSeeds"
         );
@@ -3733,7 +3732,7 @@ describe("ScaledUiExt unit tests", () => {
         await propagateIndex(newIndex);
 
         // Setup the instruction
-        await prepSync(nonAdmin);
+        await prepSync();
 
         // Attempt to send the transaction
         // Expect an invalid account error
@@ -3741,7 +3740,7 @@ describe("ScaledUiExt unit tests", () => {
           scaledUiExt.methods
             .sync()
             .accountsPartial({ ...accounts })
-            .signers([nonAdmin])
+            .signers([])
             .rpc(),
           "InsufficientCollateral"
         );
@@ -3756,7 +3755,7 @@ describe("ScaledUiExt unit tests", () => {
         );
 
         // Setup the instruction
-        const { globalAccount } = await prepSync(nonAdmin);
+        const { globalAccount } = await prepSync();
 
         // Get the global state before the update
         const globalState = await scaledUiExt.account.extGlobal.fetch(
@@ -3767,7 +3766,7 @@ describe("ScaledUiExt unit tests", () => {
         await scaledUiExt.methods
           .sync()
           .accountsPartial({ ...accounts })
-          .signers([nonAdmin])
+          .signers([])
           .rpc();
 
         // Confirm the scaled ui config on the ext mint matches the m index
