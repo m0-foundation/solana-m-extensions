@@ -25,6 +25,7 @@ pub struct Swap<'info> {
     )]
     pub swap_global: Account<'info, SwapGlobal>,
     #[account(
+        mut,
         has_one = m_mint,
         seeds = [EXT_GLOBAL_SEED],
         seeds::program = from_ext_program,
@@ -32,6 +33,7 @@ pub struct Swap<'info> {
     )]
     pub from_global: Account<'info, ExtGlobal>,
     #[account(
+        mut,
         has_one = m_mint,
         seeds = [EXT_GLOBAL_SEED],
         seeds::program = to_ext_program,
@@ -204,9 +206,9 @@ impl<'info> Swap<'info> {
                     ext_mint_authority: ctx.accounts.from_mint_authority.to_account_info(),
                     to_m_token_account: ctx.accounts.intermediate_m_account.to_account_info(),
                     vault_m_token_account: ctx.accounts.from_m_vault.to_account_info(),
-                    from_ext_token_account: ctx.accounts.from_token_program.to_account_info(),
+                    from_ext_token_account: ctx.accounts.from_token_account.to_account_info(),
                     m_token_program: ctx.accounts.m_token_program.to_account_info(),
-                    ext_token_program: ctx.accounts.from_ext_program.to_account_info(),
+                    ext_token_program: ctx.accounts.from_token_program.to_account_info(),
                 },
             )
             .with_remaining_accounts(unwrap_remaining_accounts.to_vec()),
@@ -230,9 +232,9 @@ impl<'info> Swap<'info> {
                     ext_mint_authority: ctx.accounts.to_mint_authority.to_account_info(),
                     from_m_token_account: ctx.accounts.intermediate_m_account.to_account_info(),
                     vault_m_token_account: ctx.accounts.to_m_vault.to_account_info(),
-                    to_ext_token_account: ctx.accounts.to_token_program.to_account_info(),
+                    to_ext_token_account: ctx.accounts.to_token_account.to_account_info(),
                     m_token_program: ctx.accounts.m_token_program.to_account_info(),
-                    ext_token_program: ctx.accounts.to_ext_program.to_account_info(),
+                    ext_token_program: ctx.accounts.to_token_program.to_account_info(),
                 },
             )
             .with_remaining_accounts(wrap_remaining_accounts.to_vec()),

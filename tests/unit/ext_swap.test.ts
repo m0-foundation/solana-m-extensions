@@ -1,10 +1,11 @@
 import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
 import {
+  createAssociatedTokenAccountInstruction,
   createInitializeMintInstruction,
-  createInitializeMultisigInstruction,
   createInitializeScaledUiAmountConfigInstruction,
+  createMintToInstruction,
   ExtensionType,
-  getMinimumBalanceForRentExemptMultisig,
+  getAssociatedTokenAddressSync,
   getMintLen,
   TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
@@ -30,7 +31,7 @@ import { MExt } from "../../target/types/m_ext";
 describe("extension swap tests", () => {
   const [
     admin,
-    swaper,
+    swapper,
     mMint,
     extProgramA,
     extProgramB,
@@ -52,7 +53,7 @@ describe("extension swap tests", () => {
 
   const svm = fromWorkspace("").withSplPrograms();
   svm.airdrop(admin.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
-  svm.airdrop(swaper.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
+  svm.airdrop(swapper.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
 
   // M Earn program
   svm.addProgramFromFile(EARN_PROGRAM_ID, "tests/programs/earn.so");
@@ -71,11 +72,11 @@ describe("extension swap tests", () => {
   const provider = new LiteSVMProvider(svm, new NodeWallet(admin));
   const program = new Program<ExtSwap>(EXT_SWAP, provider);
   const earn = new Program<Earn>(EARN, provider);
-  const swapProgramA = new Program<MExt>(
+  const extensionA = new Program<MExt>(
     { ...M_EXT, address: extProgramA.publicKey },
     provider
   );
-  const swapProgramB = new Program<MExt>(
+  const extensionB = new Program<MExt>(
     { ...M_EXT, address: extProgramB.publicKey },
     provider
   );
@@ -120,27 +121,14 @@ describe("extension swap tests", () => {
   describe("initialize swap programs", () => {
     it("create mints", async () => {
       // Mint auth for each program
-      const [mMintAuth] = PublicKey.findProgramAddressSync(
-        [Buffer.from("token_authority")],
-        EARN_PROGRAM_ID
-      );
       const [mintAuthA] = PublicKey.findProgramAddressSync(
         [Buffer.from("mint_authority")],
-        swapProgramA.programId
+        extensionA.programId
       );
       const [mintAuthB] = PublicKey.findProgramAddressSync(
         [Buffer.from("mint_authority")],
-        swapProgramB.programId
+        extensionB.programId
       );
-
-      // Create mint multisig
-      const initializeMultisig = buildMutisigTxn(
-        provider.connection,
-        multisig,
-        admin.publicKey,
-        [admin.publicKey, mintAuthA, mintAuthB, mMintAuth]
-      );
-      await sendTransaction(initializeMultisig, [admin, multisig]);
 
       // Create all mints
       for (const [mint, mintAuth] of [
@@ -158,6 +146,32 @@ describe("extension swap tests", () => {
           [admin, mint]
         );
       }
+
+      // Mint M to swapper
+      const associatedToken = getAssociatedTokenAddressSync(
+        mMint.publicKey,
+        swapper.publicKey,
+        true,
+        TOKEN_2022_PROGRAM_ID
+      );
+      const transaction = new Transaction().add(
+        createAssociatedTokenAccountInstruction(
+          admin.publicKey,
+          associatedToken,
+          swapper.publicKey,
+          mMint.publicKey,
+          TOKEN_2022_PROGRAM_ID
+        ),
+        createMintToInstruction(
+          mMint.publicKey,
+          associatedToken,
+          admin.publicKey,
+          1e6,
+          [],
+          TOKEN_2022_PROGRAM_ID
+        )
+      );
+      await sendTransaction(transaction, [admin]);
     });
     it("initialize earn program", async () => {
       await sendTransaction(
@@ -172,8 +186,8 @@ describe("extension swap tests", () => {
     });
     it("initialize extension program A", async () => {
       await sendTransaction(
-        swapProgramA.methods
-          .initialize([program.programId], new BN(0))
+        extensionA.methods
+          .initialize([], new BN(0))
           .accountsPartial({
             mMint: mMint.publicKey,
             extMint: mintA.publicKey,
@@ -184,8 +198,8 @@ describe("extension swap tests", () => {
     });
     it("initialize extension program B", async () => {
       await sendTransaction(
-        swapProgramB.methods
-          .initialize([program.programId], new BN(0))
+        extensionB.methods
+          .initialize([], new BN(0))
           .accounts({
             mMint: mMint.publicKey,
             extMint: mintB.publicKey,
@@ -212,10 +226,9 @@ describe("extension swap tests", () => {
       await sendTransaction(
         program.methods
           .initializeGlobal(mMint.publicKey)
-          .accounts({ admin: swaper.publicKey })
-          .signers([swaper])
+          .accounts({ admin: swapper.publicKey })
           .transaction(),
-        [swaper],
+        [swapper],
         /Allocate: account Address .* already in use/
       );
     });
@@ -263,42 +276,112 @@ describe("extension swap tests", () => {
     });
   });
 
-  describe("swap", () => {});
+  describe("swapping", () => {
+    it("extension not whitelisted", async () => {
+      await sendTransaction(
+        program.methods
+          .wrap(new BN(1e2))
+          .accounts({
+            signer: swapper.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            toExtProgram: extProgramA.publicKey,
+            toMint: mintA.publicKey,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper],
+        /Error Message: Extension is not whitelisted/
+      );
+
+      // Whitelist both extensions
+      for (const [i, pid] of [extProgramA, extProgramB].entries()) {
+        await sendTransaction(
+          program.methods
+            .whitelistExt(pid.publicKey, i)
+            .accounts({})
+            .transaction(),
+          [admin]
+        );
+      }
+    });
+
+    it("swap program not whitelisted for wrapping", async () => {
+      await sendTransaction(
+        program.methods
+          .wrap(new BN(1e3))
+          .accounts({
+            signer: swapper.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            toExtProgram: extProgramA.publicKey,
+            toMint: mintA.publicKey,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper],
+        /Error Message: Invalid signer/
+      );
+
+      // Whitelist swap program signer
+      for (const p of [extensionA, extensionB]) {
+        const [global] = PublicKey.findProgramAddressSync(
+          [Buffer.from("global")],
+          program.programId
+        );
+
+        await sendTransaction(
+          p.methods.updateWrapAuthority(0, global).accounts({}).transaction(),
+          [admin]
+        );
+      }
+    });
+
+    it("wrap M", async () => {
+      await sendTransaction(
+        program.methods
+          .wrap(new BN(1e4))
+          .accounts({
+            signer: swapper.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            toExtProgram: extProgramA.publicKey,
+            toMint: mintA.publicKey,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper]
+      );
+    });
+
+    it("swap extension tokens", async () => {
+      const associatedToken = getAssociatedTokenAddressSync(
+        mintA.publicKey,
+        swapper.publicKey,
+        true,
+        TOKEN_2022_PROGRAM_ID
+      );
+
+      await sendTransaction(
+        program.methods
+          .swap(new BN(1e4), 0)
+          .accounts({
+            signer: swapper.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromExtProgram: extProgramA.publicKey,
+            toExtProgram: extProgramB.publicKey,
+            fromMint: mintA.publicKey,
+            toMint: mintB.publicKey,
+            fromTokenAccount: associatedToken,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper]
+      );
+    });
+  });
 });
 
 function loadKeypairs(...keys: string[]): Keypair[] {
   return keys.map((k) => Keypair.fromSecretKey(Buffer.from(k, "base64")));
-}
-
-async function buildMutisigTxn(
-  connection: Connection,
-  ms: Keypair,
-  creator: PublicKey,
-  authorities: PublicKey[]
-) {
-  const multisigLamports = await getMinimumBalanceForRentExemptMultisig(
-    connection
-  );
-
-  const createMultisigAccount = SystemProgram.createAccount({
-    fromPubkey: creator,
-    newAccountPubkey: ms.publicKey,
-    space: 355,
-    lamports: multisigLamports,
-    programId: TOKEN_2022_PROGRAM_ID,
-  });
-
-  const initializeMultisig = createInitializeMultisigInstruction(
-    ms.publicKey,
-    authorities,
-    1,
-    TOKEN_2022_PROGRAM_ID
-  );
-
-  let tx = new Transaction();
-  tx.add(createMultisigAccount, initializeMultisig);
-
-  return tx;
 }
 
 async function buildMintTxn(
