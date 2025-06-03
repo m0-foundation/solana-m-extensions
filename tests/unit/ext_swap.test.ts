@@ -5,6 +5,7 @@ import {
   createInitializeScaledUiAmountConfigInstruction,
   createMintToInstruction,
   ExtensionType,
+  getAccount,
   getAssociatedTokenAddressSync,
   getMintLen,
   TOKEN_2022_PROGRAM_ID,
@@ -81,6 +82,28 @@ describe("extension swap tests", () => {
     provider
   );
 
+  // Common accounts
+  const accounts = {
+    ataA: getAssociatedTokenAddressSync(
+      mintA.publicKey,
+      swapper.publicKey,
+      true,
+      TOKEN_2022_PROGRAM_ID
+    ),
+    ataB: getAssociatedTokenAddressSync(
+      mintB.publicKey,
+      swapper.publicKey,
+      true,
+      TOKEN_2022_PROGRAM_ID
+    ),
+    ataM: getAssociatedTokenAddressSync(
+      mMint.publicKey,
+      swapper.publicKey,
+      true,
+      TOKEN_2022_PROGRAM_ID
+    ),
+  };
+
   // Helper for sending transactions and checking errors
   const sendTransaction = async (
     txn: Transaction | Promise<Transaction>,
@@ -118,6 +141,16 @@ describe("extension swap tests", () => {
     return result;
   };
 
+  const getTokenBalance = async (ata: PublicKey) => {
+    const act = await getAccount(
+      provider.connection,
+      ata,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
+    return Number(act.amount);
+  };
+
   describe("initialize swap programs", () => {
     it("create mints", async () => {
       // Mint auth for each program
@@ -148,23 +181,17 @@ describe("extension swap tests", () => {
       }
 
       // Mint M to swapper
-      const associatedToken = getAssociatedTokenAddressSync(
-        mMint.publicKey,
-        swapper.publicKey,
-        true,
-        TOKEN_2022_PROGRAM_ID
-      );
       const transaction = new Transaction().add(
         createAssociatedTokenAccountInstruction(
           admin.publicKey,
-          associatedToken,
+          accounts.ataM,
           swapper.publicKey,
           mMint.publicKey,
           TOKEN_2022_PROGRAM_ID
         ),
         createMintToInstruction(
           mMint.publicKey,
-          associatedToken,
+          accounts.ataM,
           admin.publicKey,
           1e6,
           [],
@@ -349,19 +376,16 @@ describe("extension swap tests", () => {
           .transaction(),
         [swapper]
       );
+
+      // Validate amounts
+      expect(await getTokenBalance(accounts.ataM)).toBe(0.99e6);
+      expect(await getTokenBalance(accounts.ataA)).toBe(0.01e6);
     });
 
     it("swap extension tokens", async () => {
-      const associatedToken = getAssociatedTokenAddressSync(
-        mintA.publicKey,
-        swapper.publicKey,
-        true,
-        TOKEN_2022_PROGRAM_ID
-      );
-
       await sendTransaction(
         program.methods
-          .swap(new BN(1e4), 0)
+          .swap(new BN(1e3), 0)
           .accounts({
             signer: swapper.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
@@ -369,13 +393,78 @@ describe("extension swap tests", () => {
             toExtProgram: extProgramB.publicKey,
             fromMint: mintA.publicKey,
             toMint: mintB.publicKey,
-            fromTokenAccount: associatedToken,
+            fromTokenAccount: accounts.ataA,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
           .transaction(),
         [swapper]
       );
+
+      // Validate amounts
+      expect(await getTokenBalance(accounts.ataM)).toBe(0.99e6);
+      expect(await getTokenBalance(accounts.ataA)).toBe(0.009e6);
+      expect(await getTokenBalance(accounts.ataB)).toBe(0.001e6);
+    });
+  });
+
+  describe("remaining accounts", () => {
+    it("invalid index", async () => {
+      await sendTransaction(
+        program.methods
+          .swap(new BN(1e2), 1)
+          .accounts({
+            signer: swapper.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromExtProgram: extProgramA.publicKey,
+            toExtProgram: extProgramB.publicKey,
+            fromMint: mintA.publicKey,
+            toMint: mintB.publicKey,
+            fromTokenAccount: accounts.ataA,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper],
+        /Error Message: Index invalid for length of the array/
+      );
+    });
+
+    it("unwrap and wrap with remaining accounts", async () => {
+      await sendTransaction(
+        program.methods
+          .swap(new BN(1e3), 1)
+          .accounts({
+            signer: swapper.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromExtProgram: extProgramA.publicKey,
+            toExtProgram: extProgramB.publicKey,
+            fromMint: mintA.publicKey,
+            toMint: mintB.publicKey,
+            fromTokenAccount: accounts.ataA,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .remainingAccounts([
+            {
+              pubkey: new Keypair().publicKey,
+              isSigner: false,
+              isWritable: false,
+            },
+            {
+              pubkey: new Keypair().publicKey,
+              isSigner: false,
+              isWritable: false,
+            },
+          ])
+          .transaction(),
+        [swapper]
+      );
+
+      // Validate amounts
+      expect(await getTokenBalance(accounts.ataM)).toBe(0.99e6);
+      expect(await getTokenBalance(accounts.ataA)).toBe(0.008e6);
+      expect(await getTokenBalance(accounts.ataB)).toBe(0.002e6);
     });
   });
 });
