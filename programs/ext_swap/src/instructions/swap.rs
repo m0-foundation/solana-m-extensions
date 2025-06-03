@@ -3,7 +3,7 @@ use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use earn::state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED};
 use m_ext::cpi::accounts::{Unwrap, Wrap};
-use m_ext::state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
+use m_ext::state::{EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
 
 use crate::{
     errors::SwapError,
@@ -23,44 +23,38 @@ pub struct Swap<'info> {
         seeds = [GLOBAL_SEED],
         bump = swap_global.bump,
     )]
-    pub swap_global: Account<'info, SwapGlobal>,
+    pub swap_global: Box<Account<'info, SwapGlobal>>,
     #[account(
         mut,
-        has_one = m_mint,
         seeds = [EXT_GLOBAL_SEED],
         seeds::program = from_ext_program.key(),
-        bump = from_global.bump,
+        bump,
     )]
-    pub from_global: Account<'info, ExtGlobal>,
+    /// CHECK: CPI will validate the global account
+    pub from_global: AccountInfo<'info>,
     #[account(
         mut,
-        has_one = m_mint,
         seeds = [EXT_GLOBAL_SEED],
         seeds::program = to_ext_program.key(),
-        bump = to_global.bump,
+        bump,
     )]
-    pub to_global: Account<'info, ExtGlobal>,
+    /// CHECK: CPI will validate the global account
+    pub to_global: AccountInfo<'info>,
     #[account(
         seeds = [EARN_GLOBAL_SEED],
         seeds::program = earn::ID,
         bump = m_earn_global_account.bump,
     )]
-    pub m_earn_global_account: Account<'info, EarnGlobal>,
+    pub m_earn_global_account: Box<Account<'info, EarnGlobal>>,
 
     /*
      * Mints
      */
-    #[account(
-        mut,
-        address = from_global.ext_mint,
-    )]
-    pub from_mint: InterfaceAccount<'info, Mint>,
-    #[account(
-        mut,
-        address = to_global.ext_mint,
-    )]
-    pub to_mint: InterfaceAccount<'info, Mint>,
-    pub m_mint: InterfaceAccount<'info, Mint>,
+    #[account(mut)]
+    pub from_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(mut)]
+    pub to_mint: Box<InterfaceAccount<'info, Mint>>,
+    pub m_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /*
      * Token Accounts
@@ -70,7 +64,7 @@ pub struct Swap<'info> {
         token::mint = from_mint,
         token::token_program = to_token_program,
     )]
-    pub from_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub from_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         init_if_needed,
         payer = signer,
@@ -78,7 +72,7 @@ pub struct Swap<'info> {
         associated_token::authority = signer,
         associated_token::token_program = to_token_program,
     )]
-    pub to_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub to_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         init_if_needed,
         payer = signer,
@@ -86,7 +80,7 @@ pub struct Swap<'info> {
         associated_token::authority = signer,
         associated_token::token_program = m_token_program,
     )]
-    pub intermediate_m_account: InterfaceAccount<'info, TokenAccount>,
+    pub intermediate_m_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /*
      * Authorities
@@ -94,28 +88,28 @@ pub struct Swap<'info> {
     #[account(
         seeds = [M_VAULT_SEED],
         seeds::program = from_ext_program.key(),
-        bump = from_global.m_vault_bump,
+        bump,
     )]
     /// CHECK: account does not hold data
     pub from_m_vault_auth: AccountInfo<'info>,
     #[account(
         seeds = [M_VAULT_SEED],
         seeds::program = to_ext_program.key(),
-        bump = to_global.m_vault_bump,
+        bump,
     )]
     /// CHECK: account does not hold data
     pub to_m_vault_auth: AccountInfo<'info>,
     #[account(
         seeds = [MINT_AUTHORITY_SEED],
         seeds::program = from_ext_program.key(),
-        bump = from_global.ext_mint_authority_bump,
+        bump,
     )]
     /// CHECK: account does not hold data
     pub from_mint_authority: AccountInfo<'info>,
     #[account(
         seeds = [MINT_AUTHORITY_SEED],
         seeds::program = to_ext_program.key(),
-        bump = to_global.ext_mint_authority_bump,
+        bump,
     )]
     /// CHECK: account does not hold data
     pub to_mint_authority: AccountInfo<'info>,
@@ -129,14 +123,14 @@ pub struct Swap<'info> {
         associated_token::authority = from_m_vault_auth,
         associated_token::token_program = m_token_program,
     )]
-    pub from_m_vault: InterfaceAccount<'info, TokenAccount>,
+    pub from_m_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         associated_token::mint = m_mint,
         associated_token::authority = to_m_vault_auth,
         associated_token::token_program = m_token_program,
     )]
-    pub to_m_vault: InterfaceAccount<'info, TokenAccount>,
+    pub to_m_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /*
      * Token Programs
@@ -194,7 +188,7 @@ impl<'info> Swap<'info> {
             remaining_accounts.split_at(remaining_accounts_split_idx);
 
         m_ext::cpi::unwrap(
-            CpiContext::new(
+            CpiContext::new_with_signer(
                 ctx.accounts.from_ext_program.to_account_info(),
                 Unwrap {
                     signer: ctx.accounts.signer.to_account_info(),
@@ -211,6 +205,7 @@ impl<'info> Swap<'info> {
                     m_token_program: ctx.accounts.m_token_program.to_account_info(),
                     ext_token_program: ctx.accounts.from_token_program.to_account_info(),
                 },
+                &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
             )
             .with_remaining_accounts(unwrap_remaining_accounts.to_vec()),
             amount,
@@ -221,7 +216,7 @@ impl<'info> Swap<'info> {
         let m_delta = ctx.accounts.intermediate_m_account.amount - m_pre_balance;
 
         m_ext::cpi::wrap(
-            CpiContext::new(
+            CpiContext::new_with_signer(
                 ctx.accounts.to_ext_program.to_account_info(),
                 Wrap {
                     signer: ctx.accounts.signer.to_account_info(),
@@ -238,6 +233,7 @@ impl<'info> Swap<'info> {
                     m_token_program: ctx.accounts.m_token_program.to_account_info(),
                     ext_token_program: ctx.accounts.to_token_program.to_account_info(),
                 },
+                &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
             )
             .with_remaining_accounts(wrap_remaining_accounts.to_vec()),
             m_delta,
