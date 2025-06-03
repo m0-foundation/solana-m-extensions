@@ -39,17 +39,19 @@ describe("extension swap tests", () => {
     mintA,
     mintB,
     multisig,
+    extProgramC,
+    mintC,
   ] = loadKeypairs(
-    "6iMOkgS4ZAfVxUWOdzo8y+MDoRLfuX4oPbzQf8D2RuigU2i7DwWQ+x304o+/2aa0K695awmnbv1JfL+WWnDcPQ==", // BnqzwtopjSGB9nHfMFYEa5p1kgeDBthfRP8yiLW9U7Kz
-    "WmvqEmS7IwLjuBIMML4UY6d+VND9BnbG7B7Z4coApDdwumn5E6LBAS07RctOhxM5FXNEOizdNGuQwabX3Y/88w==", // 8b3XbqeN3VrrNH3u1WvjK5BasW5hKWKVpDGz5tsq5CbL
-    "VIC7l0xRw067AiX75WtZ2ehN3+1wIpGmH6gWvS4jvx+8LhpnI+sGHFi+6tair18K2nd6yr2IR97C5qZZYkkl5A==", // DfaRRLLVGYpfu33QdGHGLNKv2G4MyyMbmvGVpLQgFeeF
-    "XVFfL68OjRO5g+DZxbQHXVqEtoU976BAS6y5RP905ZIorgcghvm5mrP60XsmiUAp4aSIBadFzWUK/bbBmqweYA==", // 3joDhmLtHLrSBGfeAe1xQiv3gjikes3x8S4N3o6Ld8zB
-    "1y1p2+YND+xDi/CbPGRN7fiE08xzoD9Fd2vsLvH9r930OgOUua+nXoCRzIl9SRyiM5GyHki7EtaTGXT8mi3qmg==", // HSMnbWEkB7sEQAGSzBPeACNUCXC9FgNeeESLnHtKfoy3
-    "UeJL1Qx6czzbwDTUjOHjKLJ7Ao4XJUGXlDC5vkbPC+znwQmrzy6AxwYGUH2VX4vVZHX8DQAq/sWauL1ucUZUaA==", // GbfuJZa4zLNgxHCrXNTXzVZ3CPUCe5RYWPBq9bU9qekP
-    "XmidpDRbKR+D56M2trCoiPRzi1yxKy8aUnO+p3PuLxA8hz59ZTmu51Bn9qFsZHxaIWi1tCUd5ibpOj4pBKqTVA==", // 55H5CfmBxyaYnUhXxbToqT3FWhKMWmBJFrbd3WfuFy9u
-    "CXioALq/oVhI/8QWp7AphKgZiJB1haG5kPomzHJ+n2jYMMYbLiWQ5knEMn9iu3T+5rn/YEs+M78sq5vOSwISWA==", // FYvCWxAdFQYyJJPSXNKv2dzsdKq98EwmdRiu6rpY65gT
-    "YPIMBm2ykzl4I7GHdQyWqKwR9RJjiwNhDyOyWTHBjqdoLoa322EZkMKDzwDeycwd0vq3KrIs1ga19ecjWSJS0g==", // 81gYpXqg8ZT9gdkFSe35eqiitqBWqVfYwDwVfXuk8Xfw
-    "m+OGOQSbwMu+Io83qHWOFdPZsWxnFhaz0zwzFS6C0TDvIpUrxJFh8CBFOCAHmTJpK+I/1Zv1FOeqsykz2BPgDA==" // H6V2ShFqjRaHyewiqaHN6E6ok1XRH2xv4Zwy3JpL8Cxb
+    "6iMOkgS4ZAfVxUWOdzo8y+MDoRLfuX4oPbzQf8D2RuigU2i7DwWQ+x304o+/2aa0K695awmnbv1JfL+WWnDcPQ==", // BnqzwtopjSGB9nHfMFYEa5p1kgeDBthfRP8yiLW9U7Kz  admin
+    "WmvqEmS7IwLjuBIMML4UY6d+VND9BnbG7B7Z4coApDdwumn5E6LBAS07RctOhxM5FXNEOizdNGuQwabX3Y/88w==", // 8b3XbqeN3VrrNH3u1WvjK5BasW5hKWKVpDGz5tsq5CbL  swapper
+    "VIC7l0xRw067AiX75WtZ2ehN3+1wIpGmH6gWvS4jvx+8LhpnI+sGHFi+6tair18K2nd6yr2IR97C5qZZYkkl5A==", // DfaRRLLVGYpfu33QdGHGLNKv2G4MyyMbmvGVpLQgFeeF  mMint
+    "XVFfL68OjRO5g+DZxbQHXVqEtoU976BAS6y5RP905ZIorgcghvm5mrP60XsmiUAp4aSIBadFzWUK/bbBmqweYA==", // 3joDhmLtHLrSBGfeAe1xQiv3gjikes3x8S4N3o6Ld8zB  extProgramA
+    "1y1p2+YND+xDi/CbPGRN7fiE08xzoD9Fd2vsLvH9r930OgOUua+nXoCRzIl9SRyiM5GyHki7EtaTGXT8mi3qmg==", // HSMnbWEkB7sEQAGSzBPeACNUCXC9FgNeeESLnHtKfoy3  extProgramB
+    "UeJL1Qx6czzbwDTUjOHjKLJ7Ao4XJUGXlDC5vkbPC+znwQmrzy6AxwYGUH2VX4vVZHX8DQAq/sWauL1ucUZUaA==", // GbfuJZa4zLNgxHCrXNTXzVZ3CPUCe5RYWPBq9bU9qekP  mintA
+    "XmidpDRbKR+D56M2trCoiPRzi1yxKy8aUnO+p3PuLxA8hz59ZTmu51Bn9qFsZHxaIWi1tCUd5ibpOj4pBKqTVA==", // 55H5CfmBxyaYnUhXxbToqT3FWhKMWmBJFrbd3WfuFy9u  mintB
+    "CXioALq/oVhI/8QWp7AphKgZiJB1haG5kPomzHJ+n2jYMMYbLiWQ5knEMn9iu3T+5rn/YEs+M78sq5vOSwISWA==", // FYvCWxAdFQYyJJPSXNKv2dzsdKq98EwmdRiu6rpY65gT  multisig
+    "YPIMBm2ykzl4I7GHdQyWqKwR9RJjiwNhDyOyWTHBjqdoLoa322EZkMKDzwDeycwd0vq3KrIs1ga19ecjWSJS0g==", // 81gYpXqg8ZT9gdkFSe35eqiitqBWqVfYwDwVfXuk8Xfw  extProgramC
+    "m+OGOQSbwMu+Io83qHWOFdPZsWxnFhaz0zwzFS6C0TDvIpUrxJFh8CBFOCAHmTJpK+I/1Zv1FOeqsykz2BPgDA==" //  H6V2ShFqjRaHyewiqaHN6E6ok1XRH2xv4Zwy3JpL8Cxb  mintC
   );
 
   const svm = fromWorkspace("").withSplPrograms();
@@ -62,6 +64,7 @@ describe("extension swap tests", () => {
   // Sample extension programs for swapping
   svm.addProgramFromFile(extProgramA.publicKey, "tests/programs/ext_a.so");
   svm.addProgramFromFile(extProgramB.publicKey, "tests/programs/ext_b.so");
+  svm.addProgramFromFile(extProgramC.publicKey, "tests/programs/ext_c.so");
 
   // Replace the default token2022 program with updated one
   svm.addProgramFromFile(
@@ -73,14 +76,12 @@ describe("extension swap tests", () => {
   const provider = new LiteSVMProvider(svm, new NodeWallet(admin));
   const program = new Program<ExtSwap>(EXT_SWAP, provider);
   const earn = new Program<Earn>(EARN, provider);
-  const extensionA = new Program<MExt>(
-    { ...M_EXT, address: extProgramA.publicKey },
-    provider
-  );
-  const extensionB = new Program<MExt>(
-    { ...M_EXT, address: extProgramB.publicKey },
-    provider
-  );
+
+  const [extensionA, extensionB, extensionC] = [
+    extProgramA,
+    extProgramB,
+    extProgramC,
+  ].map((p) => new Program<MExt>({ ...M_EXT, address: p.publicKey }, provider));
 
   // Common accounts
   const accounts = {
@@ -154,13 +155,16 @@ describe("extension swap tests", () => {
   describe("initialize swap programs", () => {
     it("create mints", async () => {
       // Mint auth for each program
-      const [mintAuthA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("mint_authority")],
-        extensionA.programId
-      );
-      const [mintAuthB] = PublicKey.findProgramAddressSync(
-        [Buffer.from("mint_authority")],
-        extensionB.programId
+      const [mintAuthA, mintAuthB, mintAuthC] = [
+        extensionA,
+        extensionB,
+        extensionC,
+      ].map(
+        (p) =>
+          PublicKey.findProgramAddressSync(
+            [Buffer.from("mint_authority")],
+            p.programId
+          )[0]
       );
 
       // Create all mints
@@ -168,6 +172,7 @@ describe("extension swap tests", () => {
         [mMint, admin.publicKey],
         [mintA, mintAuthA],
         [mintB, mintAuthB],
+        [mintC, mintAuthC],
       ] as [Keypair, PublicKey][]) {
         await sendTransaction(
           await buildMintTxn(
@@ -211,29 +216,19 @@ describe("extension swap tests", () => {
         [admin]
       );
     });
-    it("initialize extension program A", async () => {
-      await sendTransaction(
-        extensionA.methods
-          .initialize([], new BN(0))
-          .accountsPartial({
-            mMint: mMint.publicKey,
-            extMint: mintA.publicKey,
-          })
-          .transaction(),
-        [admin]
-      );
-    });
-    it("initialize extension program B", async () => {
-      await sendTransaction(
-        extensionB.methods
-          .initialize([], new BN(0))
-          .accounts({
-            mMint: mMint.publicKey,
-            extMint: mintB.publicKey,
-          })
-          .transaction(),
-        [admin]
-      );
+    it("initialize extension programs", async () => {
+      for (const [i, p] of [extensionA, extensionB, extensionC].entries()) {
+        await sendTransaction(
+          p.methods
+            .initialize([], new BN(0))
+            .accountsPartial({
+              mMint: mMint.publicKey,
+              extMint: [mintA, mintB, mintC][i].publicKey,
+            })
+            .transaction(),
+          [admin]
+        );
+      }
     });
   });
 
@@ -333,7 +328,7 @@ describe("extension swap tests", () => {
       );
 
       // Whitelist both extensions
-      for (const [i, pid] of [extProgramA, extProgramB].entries()) {
+      for (const pid of [extProgramA, extProgramB, extProgramC]) {
         await sendTransaction(
           program.methods
             .whitelistExtension(pid.publicKey)
@@ -361,7 +356,7 @@ describe("extension swap tests", () => {
       );
 
       // Whitelist swap program signer
-      for (const p of [extensionA, extensionB]) {
+      for (const p of [extensionA, extensionB, extensionC]) {
         const [global] = PublicKey.findProgramAddressSync(
           [Buffer.from("global")],
           program.programId
@@ -442,7 +437,7 @@ describe("extension swap tests", () => {
       );
     });
 
-    it("unwrap and wrap with remaining accounts", async () => {
+    it("swap with unneeded remaining accounts", async () => {
       await sendTransaction(
         program.methods
           .swap(new BN(1e3), 1)
@@ -477,6 +472,85 @@ describe("extension swap tests", () => {
       expect(await getTokenBalance(accounts.ataM)).toBe(0.99e6);
       expect(await getTokenBalance(accounts.ataA)).toBe(0.008e6);
       expect(await getTokenBalance(accounts.ataB)).toBe(0.002e6);
+    });
+
+    it("wrap expects remaining account", async () => {
+      await sendTransaction(
+        program.methods
+          .swap(new BN(1e3), 0)
+          .accounts({
+            signer: swapper.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromExtProgram: extProgramA.publicKey,
+            toExtProgram: extProgramC.publicKey,
+            fromMint: mintA.publicKey,
+            toMint: mintC.publicKey,
+            fromTokenAccount: accounts.ataA,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper],
+        /Error Message: Not enough account keys given to the instruction/
+      );
+    });
+
+    it("wrap gets incorrect remaining account", async () => {
+      await sendTransaction(
+        program.methods
+          .swap(new BN(1e3), 0)
+          .accounts({
+            signer: swapper.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromExtProgram: extProgramA.publicKey,
+            toExtProgram: extProgramC.publicKey,
+            fromMint: mintA.publicKey,
+            toMint: mintC.publicKey,
+            fromTokenAccount: accounts.ataA,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .remainingAccounts([
+            {
+              pubkey: new Keypair().publicKey,
+              isSigner: false,
+              isWritable: false,
+            },
+          ])
+          .transaction(),
+        [swapper],
+        /Error Message: A seeds constraint was violated/
+      );
+    });
+
+    it("wrap gets expected remaining account", async () => {
+      await sendTransaction(
+        program.methods
+          .swap(new BN(1e3), 0)
+          .accounts({
+            signer: swapper.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromExtProgram: extProgramA.publicKey,
+            toExtProgram: extProgramC.publicKey,
+            fromMint: mintA.publicKey,
+            toMint: mintC.publicKey,
+            fromTokenAccount: accounts.ataA,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .remainingAccounts([
+            {
+              pubkey: PublicKey.findProgramAddressSync(
+                [Buffer.from("extra_account")],
+                extensionC.programId
+              )[0],
+              isSigner: false,
+              isWritable: false,
+            },
+          ])
+          .transaction(),
+        [swapper]
+      );
     });
   });
 });
