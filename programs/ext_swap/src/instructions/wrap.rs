@@ -133,6 +133,7 @@ impl<'info> WrapM<'info> {
                 ctx.accounts.to_ext_program.to_account_info(),
                 Wrap {
                     signer: ctx.accounts.signer.to_account_info(),
+                    program_authority: Some(ctx.accounts.swap_global.to_account_info()),
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.to_mint.to_account_info(),
                     global_account: ctx.accounts.to_global.to_account_info(),

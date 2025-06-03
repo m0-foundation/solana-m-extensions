@@ -15,6 +15,9 @@ use earn::state::Global as EarnGlobal;
 pub struct Wrap<'info> {
     pub signer: Signer<'info>,
 
+    // Will be set if called by a program on the whitelist
+    pub program_authority: Option<Signer<'info>>,
+
     #[account(mint::token_program = m_token_program)]
     pub m_mint: InterfaceAccount<'info, Mint>,
 
@@ -80,13 +83,13 @@ pub struct Wrap<'info> {
 
 impl Wrap<'_> {
     pub fn validate(&self) -> Result<()> {
-        // Ensure the signer is authorized to wrap
-        if self.signer.key() == Pubkey::default() || // probably don't need to check this, but it's included for completeness
-            !self
-            .global_account
-            .wrap_authorities
-            .contains(&self.signer.key())
-        {
+        let auth = match &self.program_authority {
+            Some(auth) => auth.key,
+            None => self.signer.key,
+        };
+
+        // Ensure the caller is authorized to wrap
+        if !self.global_account.wrap_authorities.contains(auth) {
             return err!(ExtError::NotAuthorized);
         }
 

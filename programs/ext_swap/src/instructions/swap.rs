@@ -28,7 +28,7 @@ pub struct Swap<'info> {
         mut,
         has_one = m_mint,
         seeds = [EXT_GLOBAL_SEED],
-        seeds::program = from_ext_program,
+        seeds::program = from_ext_program.key(),
         bump = from_global.bump,
     )]
     pub from_global: Account<'info, ExtGlobal>,
@@ -36,7 +36,7 @@ pub struct Swap<'info> {
         mut,
         has_one = m_mint,
         seeds = [EXT_GLOBAL_SEED],
-        seeds::program = to_ext_program,
+        seeds::program = to_ext_program.key(),
         bump = to_global.bump,
     )]
     pub to_global: Account<'info, ExtGlobal>,
@@ -93,28 +93,28 @@ pub struct Swap<'info> {
      */
     #[account(
         seeds = [M_VAULT_SEED],
-        seeds::program = from_ext_program,
+        seeds::program = from_ext_program.key(),
         bump = from_global.m_vault_bump,
     )]
     /// CHECK: account does not hold data
     pub from_m_vault_auth: AccountInfo<'info>,
     #[account(
         seeds = [M_VAULT_SEED],
-        seeds::program = to_ext_program,
+        seeds::program = to_ext_program.key(),
         bump = to_global.m_vault_bump,
     )]
     /// CHECK: account does not hold data
     pub to_m_vault_auth: AccountInfo<'info>,
     #[account(
         seeds = [MINT_AUTHORITY_SEED],
-        seeds::program = from_ext_program,
+        seeds::program = from_ext_program.key(),
         bump = from_global.ext_mint_authority_bump,
     )]
     /// CHECK: account does not hold data
     pub from_mint_authority: AccountInfo<'info>,
     #[account(
         seeds = [MINT_AUTHORITY_SEED],
-        seeds::program = to_ext_program,
+        seeds::program = to_ext_program.key(),
         bump = to_global.ext_mint_authority_bump,
     )]
     /// CHECK: account does not hold data
@@ -198,6 +198,7 @@ impl<'info> Swap<'info> {
                 ctx.accounts.from_ext_program.to_account_info(),
                 Unwrap {
                     signer: ctx.accounts.signer.to_account_info(),
+                    program_authority: Some(ctx.accounts.swap_global.to_account_info()),
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.from_mint.to_account_info(),
                     global_account: ctx.accounts.from_global.to_account_info(),
@@ -224,6 +225,7 @@ impl<'info> Swap<'info> {
                 ctx.accounts.to_ext_program.to_account_info(),
                 Wrap {
                     signer: ctx.accounts.signer.to_account_info(),
+                    program_authority: Some(ctx.accounts.swap_global.to_account_info()),
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.to_mint.to_account_info(),
                     global_account: ctx.accounts.to_global.to_account_info(),
