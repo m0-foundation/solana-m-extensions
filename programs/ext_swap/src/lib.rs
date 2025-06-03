@@ -28,12 +28,18 @@ pub mod ext_swap {
         InitializeGlobal::handler(ctx, m_mint)
     }
 
-    pub fn whitelist_ext<'info>(
+    pub fn whitelist_extension<'info>(
         ctx: Context<WhitelistExt>,
         ext_program: Pubkey,
-        insert_idx: u8,
     ) -> Result<()> {
-        WhitelistExt::handler(ctx, ext_program, insert_idx as usize)
+        WhitelistExt::handler(ctx, ext_program)
+    }
+
+    pub fn remove_whitelisted_extension<'info>(
+        ctx: Context<RemoveWhitelistedExt>,
+        ext_program: Pubkey,
+    ) -> Result<()> {
+        RemoveWhitelistedExt::handler(ctx, ext_program)
     }
 
     pub fn swap<'info>(

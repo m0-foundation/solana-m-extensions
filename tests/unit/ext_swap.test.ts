@@ -263,43 +263,55 @@ describe("extension swap tests", () => {
     it("add to whitelist", async () => {
       await sendTransaction(
         program.methods
-          .whitelistExt(new Keypair().publicKey, 0)
+          .whitelistExtension(earn.programId)
           .accounts({})
           .transaction(),
         [admin]
+      );
+
+      const { whitelistedExtensions } = await program.account.swapGlobal.fetch(
+        PublicKey.findProgramAddressSync(
+          [Buffer.from("global")],
+          program.programId
+        )[0]
+      );
+
+      // Validate the extension was added
+      expect(whitelistedExtensions).toHaveLength(1);
+      expect(whitelistedExtensions[0].toBase58()).toBe(
+        earn.programId.toBase58()
+      );
+    });
+
+    it("remove non-existent entry", async () => {
+      await sendTransaction(
+        program.methods
+          .removeWhitelistedExtension(new Keypair().publicKey)
+          .accounts({})
+          .transaction(),
+        [admin],
+        /Error Message: Extension is not whitelisted/
       );
     });
 
     it("remove from whitelist", async () => {
-      const [global] = PublicKey.findProgramAddressSync(
-        [Buffer.from("global")],
-        program.programId
-      );
-
-      const globalAccount = await program.account.swapGlobal.fetch(global);
-      const firstWhitelisted = globalAccount.whitelistedExtensions[0];
-
-      const result = await sendTransaction(
+      await sendTransaction(
         program.methods
-          .whitelistExt(PublicKey.default, 0)
+          .removeWhitelistedExtension(earn.programId)
           .accounts({})
           .transaction(),
         [admin]
       );
-      expect(result!.logs()[2]).toMatch(
-        `Program log: ${firstWhitelisted.toBase58()} -> 11111111111111111111111111111111`
-      );
-    });
 
-    it("invalid whitelist index", async () => {
-      await sendTransaction(
-        program.methods
-          .whitelistExt(new Keypair().publicKey, 99)
-          .accounts({})
-          .transaction(),
-        [admin],
-        /Error Message: Index invalid for length of the array/
+      const { whitelistedExtensions } = await program.account.swapGlobal.fetch(
+        PublicKey.findProgramAddressSync(
+          [Buffer.from("global")],
+          program.programId
+        )[0]
       );
+
+      // Validate the extension was removed
+      expect(whitelistedExtensions).toHaveLength(0);
     });
   });
 
@@ -324,7 +336,7 @@ describe("extension swap tests", () => {
       for (const [i, pid] of [extProgramA, extProgramB].entries()) {
         await sendTransaction(
           program.methods
-            .whitelistExt(pid.publicKey, i)
+            .whitelistExtension(pid.publicKey)
             .accounts({})
             .transaction(),
           [admin]

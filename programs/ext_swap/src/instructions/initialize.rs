@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::state::{SwapGlobal, GLOBAL_SEED, MAX_WHITELISTED_EXTENSIONS};
+use crate::state::{SwapGlobal, GLOBAL_SEED};
 
 #[derive(Accounts)]
 pub struct InitializeGlobal<'info> {
@@ -10,7 +10,7 @@ pub struct InitializeGlobal<'info> {
     #[account(
         init,
         payer = admin,
-        space = 8 + SwapGlobal::INIT_SPACE,
+        space = SwapGlobal::size(0),
         seeds = [GLOBAL_SEED],
         bump,
     )]
@@ -25,7 +25,7 @@ impl InitializeGlobal<'_> {
             bump: ctx.bumps.swap_global,
             admin: ctx.accounts.admin.key(),
             m_mint: m_mint,
-            whitelisted_extensions: [Pubkey::default(); MAX_WHITELISTED_EXTENSIONS],
+            whitelisted_extensions: vec![],
         });
 
         Ok(())
