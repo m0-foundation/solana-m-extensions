@@ -10,3 +10,4 @@ build-programs:
 
 test-programs:
 	@yarn run jest --preset ts-jest --verbose tests/unit/m_ext.test.ts
+	@cargo test

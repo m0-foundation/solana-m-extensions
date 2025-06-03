@@ -14,7 +14,6 @@ import { randomInt } from "crypto";
 
 import { Comparison, ExtensionTest, Variant } from "./ext_test_harness";
 import { padKeyArray } from "../test-utils";
-import { wrap } from "module";
 
 // Unit tests for ext earn program
 

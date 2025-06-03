@@ -250,6 +250,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
             BigInt(expectedBalance.add(tolerance).toString())
           );
         }
+        break;
       case Comparison.GreaterThanOrEqual:
         expect(uiBalance).toBeGreaterThanOrEqual(
           BigInt(expectedBalance.toString())
@@ -259,6 +260,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
             BigInt(expectedBalance.add(tolerance).toString())
           );
         }
+        break;
       case Comparison.LessThan:
         expect(uiBalance).toBeLessThan(BigInt(expectedBalance.toString()));
         if (tolerance) {
@@ -266,6 +268,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
             BigInt(expectedBalance.sub(tolerance).toString())
           );
         }
+        break;
       case Comparison.LessThanOrEqual:
         expect(uiBalance).toBeLessThanOrEqual(
           BigInt(expectedBalance.toString())
@@ -275,6 +278,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
             BigInt(expectedBalance.sub(tolerance).toString())
           );
         }
+        break;
       default:
         if (tolerance) {
           expect(uiBalance).toBeGreaterThanOrEqual(
@@ -870,18 +874,26 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     const state = await this.getScaledUiAmountConfig(mint);
 
     if (expected.authority) expect(state.authority).toEqual(expected.authority);
-    if (expected.multiplier)
-      expect(state.multiplier.toFixed(12)).toEqual(
-        (Math.floor(expected.multiplier * 1e12) / 1e12).toFixed(12)
-      );
+    if (expected.multiplier) {
+      // account for javascript vs. rust floating point precision differences
+      const exp_high = (Math.floor(expected.multiplier * 1e12) + 1) / 1e12;
+      const exp_low = (Math.floor(expected.multiplier * 1e12) - 1) / 1e12;
+
+      expect(state.multiplier).toBeGreaterThanOrEqual(exp_low);
+      expect(state.multiplier).toBeLessThanOrEqual(exp_high);
+    }
     if (expected.newMultiplierEffectiveTimestamp)
       expect(state.newMultiplierEffectiveTimestamp.toString()).toEqual(
         expected.newMultiplierEffectiveTimestamp.toString()
       );
-    if (expected.newMultiplier)
-      expect(state.newMultiplier.toFixed(12)).toEqual(
-        (Math.floor(expected.newMultiplier * 1e12) / 1e12).toFixed(12)
-      );
+    if (expected.newMultiplier) {
+      // account for javascript vs. rust floating point precision differences
+      const exp_high = (Math.floor(expected.newMultiplier * 1e12) + 1) / 1e12;
+      const exp_low = (Math.floor(expected.newMultiplier * 1e12) - 1) / 1e12;
+
+      expect(state.newMultiplier).toBeGreaterThanOrEqual(exp_low);
+      expect(state.newMultiplier).toBeLessThanOrEqual(exp_high);
+    }
   }
 
   createUniqueKeyArray = (size: number) => {
