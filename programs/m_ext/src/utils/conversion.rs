@@ -321,7 +321,10 @@ mod tests {
                 // 1. m_increase_factor = new_m_multiplier / last_m_multiplier
                 // 2. ext_increase_factor = m_increase_factor.powf(1.0 - fee_on_yield)
                 // 3. new_ext_multiplier = last_ext_multiplier * ext_increase_factor
-                // cases are listed with the expected behavior for each step being tested
+                // cases are listed with what the rounding behavior would be for each calculation
+                // even though the rounding only happens when converting back to u64 for the final result
+                // the basic expectation is that if there is a roundup anywhere in the sequence
+                // the final result will be off by one to the downside due to truncation
 
                 // cases:
                 // Note: we can't reliably get examples that wouldn't round either direction for the 2nd equation since it is a fractional exponent
