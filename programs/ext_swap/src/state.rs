@@ -8,16 +8,19 @@ pub struct SwapGlobal {
     pub bump: u8,
     pub admin: Pubkey,
     pub m_mint: Pubkey,
+    pub whitelisted_unwrappers: Vec<Pubkey>,
     pub whitelisted_extensions: Vec<Pubkey>,
 }
 
 impl SwapGlobal {
-    pub fn size(members_length: usize) -> usize {
+    pub fn size(unwrappers: usize, extensions: usize) -> usize {
         8 + // discriminator
         1 + // bump
         32 + // admin
         32 + // m_mint
+        4 + // length of whitelisted_unwrappers vector
+        unwrappers * 32 + // each Pubkey is 32 bytes
         4 + // length of whitelisted_extensions vector
-        members_length * 32 // each Pubkey is 32 bytes
+        extensions * 32 // each Pubkey is 32 bytes
     }
 }

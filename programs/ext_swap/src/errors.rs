@@ -8,4 +8,6 @@ pub enum SwapError {
     AlreadyWhitelisted,
     #[msg("Index invalid for length of the array")]
     InvalidIndex,
+    #[msg("Signer is not whitelisted")]
+    UnauthorizedUnwrapper,
 }

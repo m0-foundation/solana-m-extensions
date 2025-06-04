@@ -10,7 +10,7 @@ pub struct InitializeGlobal<'info> {
     #[account(
         init,
         payer = admin,
-        space = SwapGlobal::size(0),
+        space = SwapGlobal::size(0,0),
         seeds = [GLOBAL_SEED],
         bump,
     )]
@@ -25,6 +25,7 @@ impl InitializeGlobal<'_> {
             bump: ctx.bumps.swap_global,
             admin: ctx.accounts.admin.key(),
             m_mint: m_mint,
+            whitelisted_unwrappers: vec![],
             whitelisted_extensions: vec![],
         });
 

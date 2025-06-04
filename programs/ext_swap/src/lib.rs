@@ -42,6 +42,20 @@ pub mod ext_swap {
         RemoveWhitelistedExt::handler(ctx, ext_program)
     }
 
+    pub fn whitelist_unwrapper<'info>(
+        ctx: Context<WhitelistUnwrapper>,
+        authority: Pubkey,
+    ) -> Result<()> {
+        WhitelistUnwrapper::handler(ctx, authority)
+    }
+
+    pub fn remove_whitelisted_unwrapper<'info>(
+        ctx: Context<RemoveWhitelistedUnwrapper>,
+        authority: Pubkey,
+    ) -> Result<()> {
+        RemoveWhitelistedUnwrapper::handler(ctx, authority)
+    }
+
     pub fn swap<'info>(
         ctx: Context<'_, '_, '_, 'info, Swap<'info>>,
         amount: u64,
@@ -50,7 +64,14 @@ pub mod ext_swap {
         Swap::handler(ctx, amount, remaining_accounts_split_idx as usize)
     }
 
-    pub fn wrap<'info>(ctx: Context<'_, '_, '_, 'info, WrapM<'info>>, amount: u64) -> Result<()> {
-        WrapM::handler(ctx, amount)
+    pub fn wrap<'info>(ctx: Context<'_, '_, '_, 'info, Wrap<'info>>, amount: u64) -> Result<()> {
+        Wrap::handler(ctx, amount)
+    }
+
+    pub fn unwrap<'info>(
+        ctx: Context<'_, '_, '_, 'info, Unwrap<'info>>,
+        amount: u64,
+    ) -> Result<()> {
+        Unwrap::handler(ctx, amount)
     }
 }

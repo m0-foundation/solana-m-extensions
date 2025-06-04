@@ -255,7 +255,7 @@ describe("extension swap tests", () => {
       );
     });
 
-    it("add to whitelist", async () => {
+    it("add to ext whitelist", async () => {
       await sendTransaction(
         program.methods
           .whitelistExtension(earn.programId)
@@ -278,6 +278,34 @@ describe("extension swap tests", () => {
       );
     });
 
+    it("add to unwrap whitelist", async () => {
+      await sendTransaction(
+        program.methods
+          .whitelistUnwrapper(admin.publicKey)
+          .accounts({})
+          .transaction(),
+        [admin]
+      );
+
+      const { whitelistedExtensions, whitelistedUnwrappers } =
+        await program.account.swapGlobal.fetch(
+          PublicKey.findProgramAddressSync(
+            [Buffer.from("global")],
+            program.programId
+          )[0]
+        );
+
+      // Validate whitelists
+      expect(whitelistedExtensions).toHaveLength(1);
+      expect(whitelistedExtensions[0].toBase58()).toBe(
+        earn.programId.toBase58()
+      );
+      expect(whitelistedUnwrappers).toHaveLength(1);
+      expect(whitelistedUnwrappers[0].toBase58()).toBe(
+        admin.publicKey.toBase58()
+      );
+    });
+
     it("remove non-existent entry", async () => {
       await sendTransaction(
         program.methods
@@ -289,7 +317,32 @@ describe("extension swap tests", () => {
       );
     });
 
-    it("remove from whitelist", async () => {
+    it("remove from unwrap whitelist", async () => {
+      await sendTransaction(
+        program.methods
+          .removeWhitelistedUnwrapper(admin.publicKey)
+          .accounts({})
+          .transaction(),
+        [admin]
+      );
+
+      const { whitelistedExtensions, whitelistedUnwrappers } =
+        await program.account.swapGlobal.fetch(
+          PublicKey.findProgramAddressSync(
+            [Buffer.from("global")],
+            program.programId
+          )[0]
+        );
+
+      // Validate whitelists
+      expect(whitelistedExtensions).toHaveLength(1);
+      expect(whitelistedExtensions[0].toBase58()).toBe(
+        earn.programId.toBase58()
+      );
+      expect(whitelistedUnwrappers).toHaveLength(0);
+    });
+
+    it("remove from ext whitelist", async () => {
       await sendTransaction(
         program.methods
           .removeWhitelistedExtension(earn.programId)
@@ -389,6 +442,52 @@ describe("extension swap tests", () => {
       expect(await getTokenBalance(accounts.ataA)).toBe(0.01e6);
     });
 
+    it("unauthorized unwrap to M", async () => {
+      await sendTransaction(
+        program.methods
+          .unwrap(new BN(1e1))
+          .accounts({
+            signer: swapper.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromExtProgram: extProgramA.publicKey,
+            fromMint: mintA.publicKey,
+            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper],
+        /Error Message: Signer is not whitelisted/
+      );
+    });
+
+    it("unwrap to M", async () => {
+      // add swapper
+      await sendTransaction(
+        program.methods
+          .whitelistUnwrapper(swapper.publicKey)
+          .accounts({})
+          .transaction(),
+        [admin]
+      );
+
+      await sendTransaction(
+        program.methods
+          .unwrap(new BN(1e3))
+          .accounts({
+            signer: swapper.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromExtProgram: extProgramA.publicKey,
+            fromMint: mintA.publicKey,
+            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper]
+      );
+
+      // Validate amounts
+      expect(await getTokenBalance(accounts.ataM)).toBe(0.991e6);
+      expect(await getTokenBalance(accounts.ataA)).toBe(0.009e6);
+    });
+
     it("swap extension tokens", async () => {
       await sendTransaction(
         program.methods
@@ -409,8 +508,8 @@ describe("extension swap tests", () => {
       );
 
       // Validate amounts
-      expect(await getTokenBalance(accounts.ataM)).toBe(0.99e6);
-      expect(await getTokenBalance(accounts.ataA)).toBe(0.009e6);
+      expect(await getTokenBalance(accounts.ataM)).toBe(0.991e6);
+      expect(await getTokenBalance(accounts.ataA)).toBe(0.008e6);
       expect(await getTokenBalance(accounts.ataB)).toBe(0.001e6);
     });
   });
@@ -469,8 +568,8 @@ describe("extension swap tests", () => {
       );
 
       // Validate amounts
-      expect(await getTokenBalance(accounts.ataM)).toBe(0.99e6);
-      expect(await getTokenBalance(accounts.ataA)).toBe(0.008e6);
+      expect(await getTokenBalance(accounts.ataM)).toBe(0.991e6);
+      expect(await getTokenBalance(accounts.ataA)).toBe(0.007e6);
       expect(await getTokenBalance(accounts.ataB)).toBe(0.002e6);
     });
 
