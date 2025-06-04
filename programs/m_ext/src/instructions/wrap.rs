@@ -13,7 +13,7 @@ use earn::state::Global as EarnGlobal;
 
 #[derive(Accounts)]
 pub struct Wrap<'info> {
-    pub signer: Signer<'info>,
+    pub token_authority: Signer<'info>,
 
     // Will be set if called by a program on the whitelist
     pub program_authority: Option<Signer<'info>>,
@@ -85,7 +85,7 @@ impl Wrap<'_> {
     pub fn validate(&self) -> Result<()> {
         let auth = match &self.program_authority {
             Some(auth) => auth.key,
-            None => self.signer.key,
+            None => self.token_authority.key,
         };
 
         // Ensure the caller is authorized to wrap
@@ -117,12 +117,12 @@ impl Wrap<'_> {
 
         // Transfer the amount of m tokens from the user to the m vault
         transfer_tokens(
-            &ctx.accounts.from_m_token_account,     // from
-            &ctx.accounts.vault_m_token_account,    // to
-            amount,                                 // amount
-            &ctx.accounts.m_mint,                   // mint
-            &ctx.accounts.signer.to_account_info(), // authority
-            &ctx.accounts.m_token_program,          // token program
+            &ctx.accounts.from_m_token_account,              // from
+            &ctx.accounts.vault_m_token_account,             // to
+            amount,                                          // amount
+            &ctx.accounts.m_mint,                            // mint
+            &ctx.accounts.token_authority.to_account_info(), // authority
+            &ctx.accounts.m_token_program,                   // token program
         )?;
 
         // Calculate the amount of ext tokens to mint based

@@ -24,6 +24,19 @@ pub struct WhitelistExt<'info> {
 }
 
 impl WhitelistExt<'_> {
+    fn validate(&self, ext_program: &Pubkey) -> Result<()> {
+        if self
+            .swap_global
+            .whitelisted_extensions
+            .contains(ext_program)
+        {
+            return err!(SwapError::AlreadyWhitelisted);
+        }
+
+        Ok(())
+    }
+
+    #[access_control(ctx.accounts.validate(&ext_program))]
     pub fn handler(ctx: Context<Self>, ext_program: Pubkey) -> Result<()> {
         ctx.accounts
             .swap_global

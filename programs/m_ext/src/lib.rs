@@ -23,7 +23,7 @@ solana_security_txt::security_txt! {
     auditors: "<insert auditor name(s)>"
 }
 
-declare_id!("3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da");
+declare_id!("81gYpXqg8ZT9gdkFSe35eqiitqBWqVfYwDwVfXuk8Xfw");
 
 // Validate feature combinations
 const _: () = {
@@ -51,10 +51,10 @@ pub mod m_ext {
         Initialize::handler(ctx, wrap_authorities, fee_bps)
     }
 
-    #[cfg(feature = "no-yield")]
-    pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
-        Initialize::handler(ctx, wrap_authorities, 0)
-    }
+    // #[cfg(feature = "no-yield")]
+    // pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
+    //     Initialize::handler(ctx, wrap_authorities, 0)
+    // }
 
     #[cfg(feature = "scaled-ui")]
     pub fn set_fee(ctx: Context<SetFee>, fee_bps: u64) -> Result<()> {

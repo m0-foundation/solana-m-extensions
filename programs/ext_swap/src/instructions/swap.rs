@@ -191,7 +191,7 @@ impl<'info> Swap<'info> {
             CpiContext::new_with_signer(
                 ctx.accounts.from_ext_program.to_account_info(),
                 Unwrap {
-                    signer: ctx.accounts.signer.to_account_info(),
+                    token_authority: ctx.accounts.signer.to_account_info(),
                     program_authority: Some(ctx.accounts.swap_global.to_account_info()),
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.from_mint.to_account_info(),
@@ -219,7 +219,7 @@ impl<'info> Swap<'info> {
             CpiContext::new_with_signer(
                 ctx.accounts.to_ext_program.to_account_info(),
                 Wrap {
-                    signer: ctx.accounts.signer.to_account_info(),
+                    token_authority: ctx.accounts.signer.to_account_info(),
                     program_authority: Some(ctx.accounts.swap_global.to_account_info()),
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.to_mint.to_account_info(),

@@ -3,7 +3,7 @@ use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use earn::state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED};
 use m_ext::cpi::accounts::Wrap;
-use m_ext::state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
+use m_ext::state::{EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
 
 use crate::errors::SwapError;
 use crate::state::{SwapGlobal, GLOBAL_SEED};
@@ -24,12 +24,12 @@ pub struct WrapM<'info> {
     pub swap_global: Box<Account<'info, SwapGlobal>>,
     #[account(
         mut,
-        has_one = m_mint,
         seeds = [EXT_GLOBAL_SEED],
         seeds::program = to_ext_program.key(),
-        bump = to_global.bump,
+        bump,
     )]
-    pub to_global: Box<Account<'info, ExtGlobal>>,
+    /// CHECK: CPI will validate the global account
+    pub to_global: AccountInfo<'info>,
     #[account(
         seeds = [EARN_GLOBAL_SEED],
         seeds::program = earn::ID,
@@ -40,10 +40,7 @@ pub struct WrapM<'info> {
     /*
      * Mints
      */
-    #[account(
-        mut,
-        address = to_global.ext_mint,
-    )]
+    #[account(mut)]
     pub to_mint: Box<InterfaceAccount<'info, Mint>>,
     pub m_mint: Box<InterfaceAccount<'info, Mint>>,
 
@@ -72,14 +69,14 @@ pub struct WrapM<'info> {
     #[account(
         seeds = [M_VAULT_SEED],
         seeds::program = to_ext_program.key(),
-        bump = to_global.m_vault_bump,
+        bump,
     )]
     /// CHECK: account does not hold data
     pub to_m_vault_auth: AccountInfo<'info>,
     #[account(
         seeds = [MINT_AUTHORITY_SEED],
         seeds::program = to_ext_program.key(),
-        bump = to_global.ext_mint_authority_bump,
+        bump,
     )]
     /// CHECK: account does not hold data
     pub to_mint_authority: AccountInfo<'info>,
@@ -132,7 +129,7 @@ impl<'info> WrapM<'info> {
             CpiContext::new_with_signer(
                 ctx.accounts.to_ext_program.to_account_info(),
                 Wrap {
-                    signer: ctx.accounts.signer.to_account_info(),
+                    token_authority: ctx.accounts.signer.to_account_info(),
                     program_authority: Some(ctx.accounts.swap_global.to_account_info()),
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.to_mint.to_account_info(),
