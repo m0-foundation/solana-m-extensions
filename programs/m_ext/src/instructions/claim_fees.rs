@@ -8,10 +8,7 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{
-            amount_to_principal_down, principal_to_amount_down, principal_to_amount_up,
-            sync_multiplier,
-        },
+        conversion::{principal_to_amount_down, sync_multiplier},
         token::mint_tokens,
     },
 };
