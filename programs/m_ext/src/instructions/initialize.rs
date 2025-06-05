@@ -11,7 +11,7 @@ use earn::{
 use crate::{
     constants::ANCHOR_DISCRIMINATOR_SIZE,
     errors::ExtError,
-    state::{ExtGlobal, YieldConfig, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
+    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
 };
 
 // conditional dependencies
@@ -162,18 +162,6 @@ impl Initialize<'_> {
             wrap_authorities_array[i] = *authority;
         }
 
-        let yield_config: YieldConfig;
-        cfg_if! {
-            if #[cfg(feature = "scaled-ui")] {
-                yield_config = YieldConfig {
-                    fee_bps,
-                    accrued_fee_principal: 0,
-                };
-            } else {
-                yield_config = YieldConfig {};
-            }
-        }
-
         // Initialize the ExtGlobal account
         ctx.accounts.global_account.set_inner(ExtGlobal {
             admin: ctx.accounts.admin.key(),
@@ -183,8 +171,9 @@ impl Initialize<'_> {
             bump: ctx.bumps.global_account,
             m_vault_bump: ctx.bumps.m_vault,
             ext_mint_authority_bump: ctx.bumps.ext_mint_authority,
+            fee_bps,
+            accrued_fee_principal: 0,
             wrap_authorities: wrap_authorities_array,
-            yield_config,
         });
 
         // Set the ScaledUi multiplier to 1.0

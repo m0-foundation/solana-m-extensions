@@ -51,7 +51,7 @@ pub fn sync_multiplier<'info>(
             };
 
             let total_ext_principal = _ext_mint.supply
-                .checked_add(_ext_global_account.yield_config.accrued_fee_principal)
+                .checked_add(_ext_global_account.accrued_fee_principal)
                 .unwrap();
             let total_ext_amount = principal_to_amount_up(
                 total_ext_principal,
@@ -68,9 +68,9 @@ pub fn sync_multiplier<'info>(
             let mut increase_factor: f64 = (_vault_m_token_account.amount as f64) / (total_ext_amount as f64);
 
             // Calculate the new multiplier, handling the fee if required
-            let new_multiplier: f64 = if _ext_global_account.yield_config.fee_bps > 0 {
+            let new_multiplier: f64 = if _ext_global_account.fee_bps > 0 {
                 // Calculate the increase factor for the ext index
-                let fee_on_yield = _ext_global_account.yield_config.fee_bps as f64 / ONE_HUNDRED_PERCENT_F64;
+                let fee_on_yield = _ext_global_account.fee_bps as f64 / ONE_HUNDRED_PERCENT_F64;
                 // The precision of the powf operation is non-deterministic
                 // However, the margin of error is ~10^-16, which is smaller than the 10^-12 precision
                 // that we need for this use case. See: https://doc.rust-lang.org/std/primitive.f64.html#method.powf
@@ -84,7 +84,7 @@ pub fn sync_multiplier<'info>(
                 let new_fee_principal = amount_to_principal_down(_vault_m_token_account.amount - new_total_ext_amount, new_multiplier)?;
 
                 // Update the fee principal on the yield config
-                _ext_global_account.yield_config.accrued_fee_principal += new_fee_principal;
+                _ext_global_account.accrued_fee_principal += new_fee_principal;
 
                 new_multiplier
             } else {
@@ -110,6 +110,9 @@ pub fn sync_multiplier<'info>(
 
             return Ok(new_multiplier);
         } else {
+            // Add any excess m to the accrued fee principal
+
+
             // Ext tokens are 1:1 with M tokens and we don't need to sync this
             return Ok(1.0);
         }

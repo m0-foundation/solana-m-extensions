@@ -38,7 +38,7 @@ impl SetFee<'_> {
     #[access_control(ctx.accounts.validate(fee_bps))]
     pub fn handler(ctx: Context<Self>, fee_bps: u64) -> Result<()> {
         // Set the new fee
-        ctx.accounts.global_account.yield_config.fee_bps = fee_bps;
+        ctx.accounts.global_account.fee_bps = fee_bps;
 
         Ok(())
     }
