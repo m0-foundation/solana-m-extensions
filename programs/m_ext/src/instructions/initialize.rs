@@ -23,7 +23,7 @@ cfg_if! {
             StateWithExtensions,
         };
         use crate::{
-            constants::{INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
+            constants::ONE_HUNDRED_PERCENT_U64,
             utils::conversion::sync_multiplier,
         };
     }
@@ -167,8 +167,6 @@ impl Initialize<'_> {
             if #[cfg(feature = "scaled-ui")] {
                 yield_config = YieldConfig {
                     fee_bps,
-                    last_m_index: ctx.accounts.m_earn_global_account.index,
-                    last_ext_index: INDEX_SCALE_U64, // we set the extension index to 1.0 initially
                     accrued_fee_principal: 0,
                 };
             } else {
