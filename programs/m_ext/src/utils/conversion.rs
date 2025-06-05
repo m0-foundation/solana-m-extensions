@@ -111,7 +111,8 @@ pub fn sync_multiplier<'info>(
             return Ok(new_multiplier);
         } else {
             // Add any excess m to the accrued fee principal
-
+            let total_ext_amount = _ext_mint.supply.checked_add(_ext_global_account.accrued_fee_principal).unwrap();
+            _ext_global_account.accrued_fee_principal += _vault_m_token_account.amount.checked_sub(total_ext_amount).unwrap_or_default(); // adds zero if underflows
 
             // Ext tokens are 1:1 with M tokens and we don't need to sync this
             return Ok(1.0);
