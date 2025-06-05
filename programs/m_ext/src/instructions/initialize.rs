@@ -169,6 +169,7 @@ impl Initialize<'_> {
                     fee_bps,
                     last_m_index: ctx.accounts.m_earn_global_account.index,
                     last_ext_index: INDEX_SCALE_U64, // we set the extension index to 1.0 initially
+                    accrued_fee_principal: 0,
                 };
             } else {
                 yield_config = YieldConfig {};

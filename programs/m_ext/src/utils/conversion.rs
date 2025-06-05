@@ -13,7 +13,7 @@ cfg_if! {
     if #[cfg(feature = "scaled-ui")] {
         use anchor_lang::solana_program::program::invoke_signed;
         use spl_token_2022::extension::{
-            scaled_ui_amount::{PodF64, ScaledUiAmountConfig, UnixTimestamp},
+            scaled_ui_amount::ScaledUiAmountConfig,
             BaseStateWithExtensions, StateWithExtensions,
         };
         use crate::constants::ONE_HUNDRED_PERCENT_F64;
@@ -31,25 +31,65 @@ pub fn sync_multiplier<'info>(
 ) -> Result<f64> {
     cfg_if! {
         if #[cfg(feature = "scaled-ui")] {
-            // Get the current index and timestamp from the m_earn_global_account and cached values
-            let (multiplier, timestamp): (f64, i64) =
-                get_latest_multiplier_and_timestamp(_ext_global_account, _m_earn_global_account);
+            // Steps:
+            // 1. Calculate the UI amount of extension tokens outstanding (including fees) at the current multiplier
+            // 2. Compare to the amount of M in the vault token account
+            // 3. If M token amount higher, calculate the new multiplier, taking the fee into account
+            // 4. Calculate fee principal and update on ext global
+            // 5. Update the multiplier in the mint account
+            // 6. Return multiplier
 
-            // Compare against the current multiplier
-            // If the multiplier is the same, we don't need to update
-            {
-                // explicit scope to drop the borrow at the end of the code block
+            let current_multiplier: f64 = {
                 let ext_account_info = &_ext_mint.to_account_info();
                 let ext_data = ext_account_info.try_borrow_data()?;
                 let ext_mint_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&ext_data)?;
                 let scaled_ui_config = ext_mint_data.get_extension::<ScaledUiAmountConfig>()?;
 
-                if scaled_ui_config.new_multiplier == PodF64::from(multiplier)
-                    && scaled_ui_config.new_multiplier_effective_timestamp == UnixTimestamp::from(timestamp)
-                {
-                    return Ok(multiplier);
-                }
+                // The effective timestamp for the multiplier is always set the to current timestamp so the new
+                // multiplier is always effective
+                scaled_ui_config.new_multiplier.into()
+            };
+
+            let total_ext_principal = _ext_mint.supply
+                .checked_add(_ext_global_account.yield_config.accrued_fee_principal)
+                .unwrap();
+            let total_ext_amount = principal_to_amount_up(
+                total_ext_principal,
+                current_multiplier
+            )?;
+
+            // TODO: think about rounding here, only reason vault m token account would be less is a rounding error
+            if _vault_m_token_account.amount <= total_ext_amount {
+                // No need to sync multiplier, return current multiplier
+                return Ok(current_multiplier);
             }
+
+            // Calculate the new multiplier based on amount of M in the vault vs. the outstanding UI amount of extension tokens
+            let mut increase_factor: f64 = (_vault_m_token_account.amount as f64) / (total_ext_amount as f64);
+
+            // Calculate the new multiplier, handling the fee if required
+            let new_multiplier: f64 = if _ext_global_account.yield_config.fee_bps > 0 {
+                // Calculate the increase factor for the ext index
+                let fee_on_yield = _ext_global_account.yield_config.fee_bps as f64 / ONE_HUNDRED_PERCENT_F64;
+                // The precision of the powf operation is non-deterministic
+                // However, the margin of error is ~10^-16, which is smaller than the 10^-12 precision
+                // that we need for this use case. See: https://doc.rust-lang.org/std/primitive.f64.html#method.powf
+                increase_factor = increase_factor.powf(1.0f64 - fee_on_yield);
+
+                // Calculate the new multiplier from the increase factor
+                let new_multiplier = (current_multiplier * increase_factor * INDEX_SCALE_F64).floor() / INDEX_SCALE_F64;
+
+                // Calculate the new fee principal
+                let new_total_ext_amount = principal_to_amount_up(total_ext_principal, new_multiplier)?;
+                let new_fee_principal = amount_to_principal_down(_vault_m_token_account.amount - new_total_ext_amount, new_multiplier)?;
+
+                // Update the fee principal on the yield config
+                _ext_global_account.yield_config.accrued_fee_principal += new_fee_principal;
+
+                new_multiplier
+            } else {
+                (current_multiplier * increase_factor * INDEX_SCALE_F64).floor() / INDEX_SCALE_F64
+            };
 
             // Update the multiplier and timestamp in the mint account
             invoke_signed(
@@ -58,8 +98,8 @@ pub fn sync_multiplier<'info>(
                     &_ext_mint.key(),
                     &_authority.key(),
                     &[],
-                    multiplier,
-                    timestamp,
+                    new_multiplier,
+                    Clock::get()?.unix_timestamp as i64, // always set to current timestamp
                 )?,
                 &[_ext_mint.to_account_info(), _authority.clone()],
                 _authority_seeds,
@@ -68,30 +108,7 @@ pub fn sync_multiplier<'info>(
             // Reload the mint account so the new multiplier is reflected
             _ext_mint.reload()?;
 
-            // Update the last m index and last ext index in the global account
-            _ext_global_account.yield_config.last_m_index = _m_earn_global_account.index;
-            _ext_global_account.yield_config.last_ext_index = (multiplier * INDEX_SCALE_F64).floor() as u64;
-
-            // Check solvency of the vault
-            // i.e. that it holds enough M for each extension UI amount
-            // after the multiplier has been updated
-            if _ext_mint.supply > 0 {
-                // Calculate the amount of tokens in the vault
-                let vault_m = _vault_m_token_account.amount;
-
-                // Calculate the amount of tokens needed to be solvent
-                // Reduce it by two to avoid rounding errors (there is an edge cases where the rounding error
-                // from one index (down) to the next (up) can cause the difference to be 2)
-                let mut required_m = principal_to_amount_down(_ext_mint.supply, multiplier)?;
-                required_m -= std::cmp::min(2, required_m);
-
-                // Check if the vault has enough tokens
-                if vault_m < required_m {
-                    return err!(ExtError::InsufficientCollateral);
-                }
-            }
-
-            return Ok(multiplier);
+            return Ok(new_multiplier);
         } else {
             // Ext tokens are 1:1 with M tokens and we don't need to sync this
             return Ok(1.0);

@@ -31,6 +31,7 @@ cfg_if! {
             pub fee_bps: u64, // fee in basis points
             pub last_m_index: u64, // last m index
             pub last_ext_index: u64, // last ext index
+            pub accrued_fee_principal: u64
         }
     } else {
         #[derive(AnchorSerialize, AnchorDeserialize, Clone, InitSpace)]
