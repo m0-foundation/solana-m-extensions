@@ -11,20 +11,19 @@ use earn::{
 use crate::{
     constants::ANCHOR_DISCRIMINATOR_SIZE,
     errors::ExtError,
-    state::{ExtGlobal, YieldConfig, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
+    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
 };
+
+#[cfg(feature = "ibt")]
+use crate::utils::conversion::set_ibt_rate;
 
 // conditional dependencies
 cfg_if! {
-    if #[cfg(feature = "scaled-ui")] {
+    if #[cfg(feature = "ibt")] {
         use anchor_spl::token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey;
         use spl_token_2022::extension::{
-            scaled_ui_amount::ScaledUiAmountConfig, BaseStateWithExtensions, ExtensionType,
+            interest_bearing_mint::InterestBearingConfig, BaseStateWithExtensions, ExtensionType,
             StateWithExtensions,
-        };
-        use crate::{
-            constants::{INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
-            utils::conversion::sync_multiplier,
         };
     }
 }
@@ -93,13 +92,8 @@ pub struct Initialize<'info> {
 }
 
 impl Initialize<'_> {
-    // This instruction initializes the Scaled UI M extension for a given ext mint.
-    // It sets up the global account, validates the mint and its authority,
-    // and initializes the Scaled UI multiplier to 1.0.
-    // The ext_mint must have a supply of 0 to start.
-    // The wrap authorities are validated and stored in the global account.
-    // The fee_bps is validated to be within the allowed range.
-    fn validate(&self, wrap_authorities: &[Pubkey], _fee_bps: u64) -> Result<()> {
+    // This instruction initializes the program to make the provided ext_mint into an M extension
+    fn validate(&self, wrap_authorities: &[Pubkey], initial_rate: i16) -> Result<()> {
         // Validate the ext_mint_authority PDA is the mint authority for the ext mint
         let ext_mint_authority = self.ext_mint_authority.key();
         if self.ext_mint.mint_authority.unwrap_or_default() != ext_mint_authority {
@@ -117,9 +111,9 @@ impl Initialize<'_> {
         }
 
         cfg_if! {
-            if #[cfg(feature = "scaled-ui")] {
-                // Validate that the ext mint has the ScaledUiAmount extension and
-                // that the ext mint authority is the extension authority
+            if #[cfg(feature = "ibt")] {
+                // Validate that the ext mint has the InterestBearing extension and
+                // that the ext mint authority is the rate authority
                 {
                     // explicit scope to drop the borrow at the end of the code block
                     let ext_account_info = &self.ext_mint.to_account_info();
@@ -132,27 +126,29 @@ impl Initialize<'_> {
                         return err!(ExtError::InvalidMint);
                     }
 
-                    let scaled_ui_config = ext_mint_data.get_extension::<ScaledUiAmountConfig>()?;
-                    if scaled_ui_config.authority != OptionalNonZeroPubkey(ext_mint_authority) {
+                    let interest_bearing_config = ext_mint_data.get_extension::<InterestBearingConfig>()?;
+                    if interest_bearing_config.rate_authority != OptionalNonZeroPubkey(ext_mint_authority) {
                         return err!(ExtError::InvalidMint);
                     }
                 }
 
-                // Validate the fee_bps is within the allowed range
-                if _fee_bps > ONE_HUNDRED_PERCENT_U64 {
+                // Validate that the initial rate is not negative
+                if initial_rate < 0i16 {
                     return err!(ExtError::InvalidParam);
                 }
+
+                // TODO: Validate that the rate on the ext_mint prior to this has been zero?
             }
         }
 
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(&wrap_authorities, fee_bps))]
+    #[access_control(ctx.accounts.validate(&wrap_authorities, initial_rate))]
     pub fn handler(
         ctx: Context<Initialize>,
         wrap_authorities: Vec<Pubkey>,
-        fee_bps: u64,
+        initial_rate: i16,
     ) -> Result<()> {
         let mut wrap_authorities_array = [Pubkey::default(); 10];
         for (i, authority) in wrap_authorities.iter().enumerate() {
@@ -160,19 +156,6 @@ impl Initialize<'_> {
                 return err!(ExtError::InvalidParam);
             }
             wrap_authorities_array[i] = *authority;
-        }
-
-        let yield_config: YieldConfig;
-        cfg_if! {
-            if #[cfg(feature = "scaled-ui")] {
-                yield_config = YieldConfig {
-                    fee_bps,
-                    last_m_index: ctx.accounts.m_earn_global_account.index,
-                    last_ext_index: INDEX_SCALE_U64, // we set the extension index to 1.0 initially
-                };
-            } else {
-                yield_config = YieldConfig {};
-            }
         }
 
         // Initialize the ExtGlobal account
@@ -185,22 +168,16 @@ impl Initialize<'_> {
             m_vault_bump: ctx.bumps.m_vault,
             ext_mint_authority_bump: ctx.bumps.ext_mint_authority,
             wrap_authorities: wrap_authorities_array,
-            yield_config,
         });
 
-        // Set the ScaledUi multiplier to 1.0
-        // We can do this by calling the sync_multiplier function
-        // when the last_m_index equals the index on the m_earn_global_account
-        // and having last_ext_index set to 1e12
-        #[cfg(feature = "scaled-ui")]
-        sync_multiplier(
+        // If an IBT extension, set the initial rate
+        #[cfg(feature = "ibt")]
+        set_ibt_rate(
             &mut ctx.accounts.ext_mint,
-            &mut ctx.accounts.global_account,
-            &ctx.accounts.m_earn_global_account,
-            &ctx.accounts.vault_m_token_account,
+            &ctx.accounts.ext_token_program,
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
-            &ctx.accounts.ext_token_program,
+            initial_rate,
         )?;
 
         Ok(())

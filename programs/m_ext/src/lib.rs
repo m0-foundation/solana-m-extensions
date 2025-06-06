@@ -27,7 +27,7 @@ declare_id!("3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da");
 
 // Validate feature combinations
 const _: () = {
-    let yield_features = { cfg!(feature = "scaled-ui") as u32 + cfg!(feature = "no-yield") as u32 };
+    let yield_features = { cfg!(feature = "ibt") as u32 + cfg!(feature = "no-yield") as u32 };
 
     match yield_features {
         0 => panic!("No yield distribution feature enabled"),
@@ -42,23 +42,23 @@ pub mod m_ext {
 
     // Admin instructions
 
-    #[cfg(feature = "scaled-ui")]
-    pub fn initialize(
-        ctx: Context<Initialize>,
-        wrap_authorities: Vec<Pubkey>,
-        fee_bps: u64,
-    ) -> Result<()> {
-        Initialize::handler(ctx, wrap_authorities, fee_bps)
-    }
-
     #[cfg(feature = "no-yield")]
     pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
         Initialize::handler(ctx, wrap_authorities, 0)
     }
 
-    #[cfg(feature = "scaled-ui")]
-    pub fn set_fee(ctx: Context<SetFee>, fee_bps: u64) -> Result<()> {
-        SetFee::handler(ctx, fee_bps)
+    #[cfg(feature = "ibt")]
+    pub fn initialize(
+        ctx: Context<Initialize>,
+        wrap_authorities: Vec<Pubkey>,
+        initial_rate: i16,
+    ) -> Result<()> {
+        Initialize::handler(ctx, wrap_authorities, initial_rate)
+    }
+
+    #[cfg(feature = "ibt")]
+    pub fn set_ibt_rate(ctx: Context<SetIbtRate>, rate: i16) -> Result<()> {
+        SetIbtRate::handler(ctx, rate)
     }
 
     pub fn set_m_mint(ctx: Context<SetMMint>) -> Result<()> {
@@ -85,12 +85,5 @@ pub mod m_ext {
 
     pub fn unwrap(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
         Unwrap::handler(ctx, amount)
-    }
-
-    // Open instructions
-
-    #[cfg(feature = "scaled-ui")]
-    pub fn sync(ctx: Context<Sync>) -> Result<()> {
-        Sync::handler(ctx)
     }
 }

@@ -5,11 +5,10 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{amount_to_principal_down, sync_multiplier},
+        conversion::{amount_to_principal_down, get_multiplier},
         token::{mint_tokens, transfer_tokens},
     },
 };
-use earn::state::Global as EarnGlobal;
 
 #[derive(Accounts)]
 pub struct Wrap<'info> {
@@ -27,11 +26,8 @@ pub struct Wrap<'info> {
         bump = global_account.bump,
         has_one = m_mint @ ExtError::InvalidAccount,
         has_one = ext_mint @ ExtError::InvalidAccount,
-        has_one = m_earn_global_account @ ExtError::InvalidAccount,
     )]
     pub global_account: Account<'info, ExtGlobal>,
-
-    pub m_earn_global_account: Account<'info, EarnGlobal>,
 
     /// CHECK: This account is validated by the seed, it stores no data
     #[account(
@@ -95,22 +91,8 @@ impl Wrap<'_> {
 
     #[access_control(ctx.accounts.validate())]
     pub fn handler(ctx: Context<Self>, amount: u64) -> Result<()> {
-        let authority_seeds: &[&[&[u8]]] = &[&[
-            MINT_AUTHORITY_SEED,
-            &[ctx.accounts.global_account.ext_mint_authority_bump],
-        ]];
-
-        // If necessary, sync the multiplier between M and Ext tokens
-        // Return the current value to use for conversions
-        let multiplier = sync_multiplier(
-            &mut ctx.accounts.ext_mint,
-            &mut ctx.accounts.global_account,
-            &ctx.accounts.m_earn_global_account,
-            &ctx.accounts.vault_m_token_account,
-            &ctx.accounts.ext_mint_authority,
-            authority_seeds,
-            &ctx.accounts.ext_token_program,
-        )?;
+        // Get the multiplier to handle value conversions
+        let multiplier = get_multiplier(&ctx.accounts.ext_mint, &ctx.accounts.global_account)?;
 
         // Transfer the amount of m tokens from the user to the m vault
         transfer_tokens(
@@ -133,7 +115,10 @@ impl Wrap<'_> {
             principal,                          // amount
             &ctx.accounts.ext_mint,             // mint
             &ctx.accounts.ext_mint_authority,   // authority
-            authority_seeds,                    // authority seeds
+            &[&[
+                MINT_AUTHORITY_SEED,
+                &[ctx.accounts.global_account.ext_mint_authority_bump],
+            ]], // authority seeds
             &ctx.accounts.ext_token_program,    // token program
         )?;
 

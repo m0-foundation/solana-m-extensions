@@ -13,11 +13,11 @@ no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
 cpi = ["no-entrypoint"]
-default = ["scaled-ui"]
+default = ["ibt"]
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 
 # yield features
-scaled-ui = []
+ibt = []
 no-yield = []
 
 [dependencies]

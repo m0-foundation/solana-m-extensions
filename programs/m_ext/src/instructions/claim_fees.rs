@@ -8,7 +8,7 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{amount_to_principal_down, principal_to_amount_up, sync_multiplier},
+        conversion::{amount_to_principal_down, get_multiplier, principal_to_amount_up},
         token::mint_tokens,
     },
 };
@@ -73,17 +73,8 @@ pub struct ClaimFees<'info> {
 
 impl ClaimFees<'_> {
     pub fn handler(ctx: Context<Self>) -> Result<()> {
-        // Sync the multiplier before allowing any collateral withdrawals
-        let signer_bump = ctx.accounts.global_account.ext_mint_authority_bump;
-        let multiplier: f64 = sync_multiplier(
-            &mut ctx.accounts.ext_mint,
-            &mut ctx.accounts.global_account,
-            &ctx.accounts.m_earn_global_account,
-            &ctx.accounts.vault_m_token_account,
-            &ctx.accounts.ext_mint_authority,
-            &[&[MINT_AUTHORITY_SEED, &[signer_bump]]],
-            &ctx.accounts.ext_token_program,
-        )?;
+        // Get the multiplier to handle value conversions
+        let multiplier: f64 = get_multiplier(&ctx.accounts.ext_mint, &ctx.accounts.global_account)?;
 
         // Calculate the required collateral, rounding down to be conservative
         // This amount will always be greater than what is required in the check_solvency function

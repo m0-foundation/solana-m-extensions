@@ -13,11 +13,9 @@ pub use update_wrap_authority::*;
 pub use wrap::*;
 
 cfg_if::cfg_if!(
-    if #[cfg(feature = "scaled-ui")] {
-        pub mod set_fee;
-        pub mod sync;
+    if #[cfg(feature = "ibt")] {
+        pub mod set_ibt_rate;
 
-        pub use set_fee::*;
-        pub use sync::*;
+        pub use set_ibt_rate::*;
     }
 );
