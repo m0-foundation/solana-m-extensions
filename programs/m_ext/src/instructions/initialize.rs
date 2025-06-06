@@ -93,7 +93,7 @@ pub struct Initialize<'info> {
 
 impl Initialize<'_> {
     // This instruction initializes the program to make the provided ext_mint into an M extension
-    fn validate(&self, wrap_authorities: &[Pubkey], initial_rate: i16) -> Result<()> {
+    fn validate(&self, wrap_authorities: &[Pubkey], _initial_rate: i16) -> Result<()> {
         // Validate the ext_mint_authority PDA is the mint authority for the ext mint
         let ext_mint_authority = self.ext_mint_authority.key();
         if self.ext_mint.mint_authority.unwrap_or_default() != ext_mint_authority {
@@ -122,7 +122,7 @@ impl Initialize<'_> {
                         StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&ext_data)?;
                     let extensions = ext_mint_data.get_extension_types()?;
 
-                    if !extensions.contains(&ExtensionType::ScaledUiAmount) {
+                    if !extensions.contains(&ExtensionType::InterestBearingConfig) {
                         return err!(ExtError::InvalidMint);
                     }
 
@@ -133,7 +133,7 @@ impl Initialize<'_> {
                 }
 
                 // Validate that the initial rate is not negative
-                if initial_rate < 0i16 {
+                if _initial_rate < 0i16 {
                     return err!(ExtError::InvalidParam);
                 }
 
