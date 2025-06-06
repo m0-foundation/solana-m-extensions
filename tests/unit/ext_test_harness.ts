@@ -28,6 +28,9 @@ import {
   ExtensionType,
   getExtensionData,
   createApproveCheckedInstruction,
+  createInitializeInterestBearingMintInstruction,
+  InterestBearingMintConfigState,
+  InterestBearingMintConfigStateLayout,
 } from "@solana/spl-token";
 import {
   Earn,
@@ -36,16 +39,13 @@ import {
   MerkleTree,
   ProofElement,
 } from "@m0-foundation/solana-m-sdk";
-import {
-  ZERO_WORD,
-  InitializeScaledUiAmountConfigInstructionData,
-  ScaledUiAmountConfig,
-  ScaledUiAmountConfigLayout,
-} from "../test-utils";
+import { ZERO_WORD } from "../test-utils";
 
-import { MExt as ScaledUIExt } from "../../target/types/scaled_ui";
+const SECONDS_PER_YEAR: number = 6 * 6 * 24 * 36524;
+const ONE_IN_BASIS_POINTS: number = 10000;
+
+import { MExt as IBTExt } from "../../target/types/ibt";
 import { MExt as NoYieldExt } from "../../target/types/no_yield";
-import { token } from "@coral-xyz/anchor/dist/cjs/utils";
 
 export enum Comparison {
   Equal,
@@ -58,21 +58,13 @@ export enum Comparison {
 // Type definitions for accounts to make it easier to do comparisons
 
 export enum Variant {
-  ScaledUiAmount = "scaled_ui",
+  InterestBearingToken = "ibt",
   NoYield = "no_yield",
 }
 
-type MExt = ScaledUIExt | NoYieldExt;
+type MExt = IBTExt | NoYieldExt;
 
-export type YieldConfig<V extends Variant> = V extends Variant.ScaledUiAmount
-  ? {
-      feeBps?: BN;
-      lastMIndex?: BN;
-      lastExtIndex?: BN;
-    }
-  : {};
-
-export type ExtGlobal<V extends Variant> = {
+export type ExtGlobal = {
   admin?: PublicKey;
   extMint?: PublicKey;
   mMint?: PublicKey;
@@ -81,7 +73,6 @@ export type ExtGlobal<V extends Variant> = {
   mVaultBump?: number;
   extMintAuthorityBump?: number;
   wrapAuthorities?: PublicKey[];
-  yieldConfig?: YieldConfig<V>;
 };
 
 const PROGRAM_ID = new PublicKey(
@@ -89,7 +80,7 @@ const PROGRAM_ID = new PublicKey(
 );
 
 // Test harness for the MExt program that encapsulates all the necessary setup and helper functions to test a given program variant
-export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
+export class ExtensionTest<V extends Variant = Variant.InterestBearingToken> {
   public variant: V;
   public svm: LiteSVM;
   public provider: LiteSVMProvider;
@@ -104,6 +95,11 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   public wrapAuthority: Keypair;
   public nonAdmin: Keypair;
   public nonWrapAuthority: Keypair;
+
+  // internal M index calculations (reference)
+  public lastIndex: BN = new BN(1e12); // 1.0 index
+  public lastIndexTimestamp: BN = new BN(0); // last index update timestamp
+  public rate: number = 0;
 
   constructor(variant: V, addresses: PublicKey[]) {
     this.variant = variant;
@@ -159,14 +155,33 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     }
   }
 
-  public async init(initialSupply: BN, initialIndex: BN, claimCooldown: BN) {
+  public async init(
+    initialSupply: BN,
+    initialIndex: BN,
+    claimCooldown: BN,
+    mRateBps: number,
+    extRateBps?: number
+  ) {
+    // Set values for internal M index calculations
+    this.rate = mRateBps;
+    this.lastIndexTimestamp = this.currentTime();
+    this.lastIndex = initialIndex;
+
     // Create the M token mint
     await this.createMintWithMultisig(this.mMint, this.mMintAuthority);
 
     // Create the Ext token mint
     switch (this.variant) {
-      case Variant.ScaledUiAmount:
-        await this.createScaledUiMint(this.extMint, this.getExtMintAuthority());
+      case Variant.InterestBearingToken:
+        if (!extRateBps) {
+          throw new Error("extRateBps is required for IBT variant");
+        }
+
+        await this.createIbtMint(
+          this.extMint,
+          this.getExtMintAuthority(),
+          extRateBps
+        );
         break;
       case Variant.NoYield:
         await this.createMint(this.extMint, this.getExtMintAuthority());
@@ -233,9 +248,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       )
     ).amount;
 
-    const multiplier = (
-      await this.getScaledUiAmountConfig(this.extMint.publicKey)
-    ).multiplier;
+    const multiplier = await this.getCurrentMultiplier();
 
     const scale = 1e12;
 
@@ -439,85 +452,9 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     return mint.publicKey;
   }
 
-  public createInitializeScaledUiAmountConfigInstruction(
-    mint: PublicKey,
-    authority: PublicKey | null,
-    multiplier: number,
-    programId: PublicKey = TOKEN_2022_PROGRAM_ID
-  ): TransactionInstruction {
-    const keys = [{ pubkey: mint, isSigner: false, isWritable: true }];
-
-    const data = Buffer.alloc(
-      InitializeScaledUiAmountConfigInstructionData.span
-    );
-    InitializeScaledUiAmountConfigInstructionData.encode(
-      {
-        instruction: 43, // scaled ui amount extension
-        scaledUiAmountInstruction: 0, // initialize
-        authority: authority ?? PublicKey.default,
-        multiplier: multiplier,
-      },
-      data
-    );
-
-    return new TransactionInstruction({ keys, programId, data });
-  }
-
-  public async createScaledUiMint(
-    mint: Keypair,
-    mintAuthority: PublicKey,
-    decimals = 6
-  ) {
-    // Create and initialize mint account
-
-    const tokenProgram = TOKEN_2022_PROGRAM_ID;
-
-    const mintLen = getMintLen([ExtensionType.ScaledUiAmountConfig]);
-    const mintLamports =
-      await this.provider.connection.getMinimumBalanceForRentExemption(mintLen);
-    const createMintAccount = SystemProgram.createAccount({
-      fromPubkey: this.admin.publicKey,
-      newAccountPubkey: mint.publicKey,
-      space: mintLen,
-      lamports: mintLamports,
-      programId: tokenProgram,
-    });
-
-    const initializeScaledUiAmountConfig =
-      this.createInitializeScaledUiAmountConfigInstruction(
-        mint.publicKey,
-        mintAuthority,
-        1.0,
-        tokenProgram
-      );
-
-    const initializeMint = createInitializeMintInstruction(
-      mint.publicKey,
-      decimals, // decimals
-      mintAuthority, // mint authority
-      mintAuthority, // freeze authority
-      tokenProgram
-    );
-
-    let tx = new Transaction();
-    tx.add(createMintAccount, initializeScaledUiAmountConfig, initializeMint);
-
-    await this.provider.sendAndConfirm!(tx, [this.admin, mint]);
-
-    // Verify the mint was created properly
-    const mintInfo = await this.provider.connection.getAccountInfo(
-      mint.publicKey
-    );
-    if (!mintInfo) {
-      throw new Error("Mint account was not created");
-    }
-
-    return mint.publicKey;
-  }
-
-  public async getScaledUiAmountConfig(
+  public async getInterestBearingConfig(
     mint: PublicKey
-  ): Promise<ScaledUiAmountConfig> {
+  ): Promise<InterestBearingMintConfigState> {
     const mintAccount = await getMint(
       this.provider.connection,
       mint,
@@ -525,14 +462,14 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       TOKEN_2022_PROGRAM_ID
     );
     const extensionData = getExtensionData(
-      ExtensionType.ScaledUiAmountConfig,
+      ExtensionType.InterestBearingConfig,
       mintAccount.tlvData
     );
     if (extensionData === null) {
       throw new Error("Extension data not found");
     }
 
-    return ScaledUiAmountConfigLayout.decode(extensionData);
+    return InterestBearingMintConfigStateLayout.decode(extensionData);
   }
 
   public async createMintWithMultisig(mint: Keypair, mintAuthority: Keypair) {
@@ -602,6 +539,59 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     return mint.publicKey;
   }
 
+  public async createIbtMint(
+    mint: Keypair,
+    mintAuthority: PublicKey,
+    interestRateBps: number,
+    decimals = 6
+  ) {
+    // Create and initialize mint account
+
+    const tokenProgram = TOKEN_2022_PROGRAM_ID;
+
+    const mintLen = getMintLen([ExtensionType.InterestBearingConfig]);
+    const mintLamports =
+      await this.provider.connection.getMinimumBalanceForRentExemption(mintLen);
+    const createMintAccount = SystemProgram.createAccount({
+      fromPubkey: this.admin.publicKey,
+      newAccountPubkey: mint.publicKey,
+      space: mintLen,
+      lamports: mintLamports,
+      programId: tokenProgram,
+    });
+
+    const initializeInterestBearingMint =
+      createInitializeInterestBearingMintInstruction(
+        mint.publicKey,
+        mintAuthority,
+        interestRateBps,
+        tokenProgram
+      );
+
+    const initializeMint = createInitializeMintInstruction(
+      mint.publicKey,
+      decimals, // decimals
+      mintAuthority, // mint authority
+      mintAuthority, // freeze authority
+      tokenProgram
+    );
+
+    let tx = new Transaction();
+    tx.add(createMintAccount, initializeInterestBearingMint, initializeMint);
+
+    await this.provider.sendAndConfirm!(tx, [this.admin, mint]);
+
+    // Verify the mint was created properly
+    const mintInfo = await this.provider.connection.getAccountInfo(
+      mint.publicKey
+    );
+    if (!mintInfo) {
+      throw new Error("Mint account was not created");
+    }
+
+    return mint.publicKey;
+  }
+
   public async mintM(to: PublicKey, amount: BN) {
     const toATA: PublicKey = await this.getATA(this.mMint.publicKey, to);
 
@@ -646,9 +636,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       throw new Error("Account not created");
     }
 
-    const mp =
-      multiplier ??
-      (await this.getScaledUiAmountConfig(tokenAccountInfo.mint)).multiplier;
+    const mp = multiplier ?? (await this.getCurrentMultiplier());
 
     const scale = 1e12;
 
@@ -753,32 +741,88 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     return earnerAccount;
   }
 
-  public async getNewMultiplier(newIndex: BN): Promise<number> {
+  private calculateIbtMultiplier(
+    config: InterestBearingMintConfigState,
+    atTime: number
+  ): number {
+    if (atTime < Number(config.lastUpdateTimestamp)) {
+      throw new Error(
+        "Cannot calculate multiplier for time before last update"
+      );
+    }
+
+    let pre_update_timespan =
+      Number(config.lastUpdateTimestamp) -
+      Number(config.initializationTimestamp);
+    let post_update_timespan = atTime - Number(config.lastUpdateTimestamp);
+
+    let pre_update_accrual = config.preUpdateAverageRate * pre_update_timespan;
+    let post_update_accrual = config.currentRate * post_update_timespan;
+
+    return Math.exp(
+      (pre_update_accrual + post_update_accrual) /
+        SECONDS_PER_YEAR /
+        ONE_IN_BASIS_POINTS
+    );
+  }
+
+  public async getMultiplierAt(atTime: BN): Promise<number> {
     if (this.variant === Variant.NoYield) {
       return 1.0;
     }
 
-    const yieldConfig: YieldConfig<Variant.ScaledUiAmount> = (
-      await this.ext.account.extGlobal.fetch(this.getExtGlobalAccount())
-    ).yieldConfig;
+    const interestBearingConfig = await this.getInterestBearingConfig(
+      this.extMint.publicKey
+    );
 
-    return (
-      (yieldConfig.lastExtIndex!.toNumber() / 1e12) *
-      (newIndex.toNumber() / yieldConfig.lastMIndex!.toNumber()) **
-        (1 - yieldConfig.feeBps!.toNumber() / 1e4)
+    return this.calculateIbtMultiplier(
+      interestBearingConfig,
+      Number(atTime.toString())
     );
   }
 
+  // returns the ratio of ext tokens to m tokens
   public async getCurrentMultiplier(): Promise<number> {
     if (this.variant === Variant.NoYield) {
       return 1.0;
     }
 
-    const yieldConfig: YieldConfig<Variant.ScaledUiAmount> = (
-      await this.ext.account.extGlobal.fetch(this.getExtGlobalAccount())
-    ).yieldConfig;
+    const interestBearingConfig = await this.getInterestBearingConfig(
+      this.extMint.publicKey
+    );
 
-    return yieldConfig.lastExtIndex!.toNumber() / 1e12;
+    return this.calculateIbtMultiplier(
+      interestBearingConfig,
+      Number(this.currentTime().toString())
+    );
+  }
+
+  // returns the calculated M index based on the previously cached index, timestamp, and the last set rate on the test harness
+  // the point of this is to mimic the behavior of the EVM implementation of the index calculation
+  // from continously compounding yield (without some of the extra features related to safety against the minter rate)
+  public getCurrentIndex(): BN {
+    let increaseFactor = Math.exp(
+      (this.rate *
+        (this.currentTime().toNumber() - this.lastIndexTimestamp.toNumber())) /
+        SECONDS_PER_YEAR /
+        ONE_IN_BASIS_POINTS
+    );
+    return new BN(Math.floor(this.lastIndex.toNumber() * increaseFactor));
+  }
+
+  public getIndexAt(timestamp: BN): BN {
+    if (timestamp.lt(this.lastIndexTimestamp)) {
+      throw new Error("Cannot get index for a timestamp before last update");
+    }
+
+    let increaseFactor = Math.exp(
+      (this.rate *
+        (timestamp.toNumber() - this.lastIndexTimestamp.toNumber())) /
+        SECONDS_PER_YEAR /
+        ONE_IN_BASIS_POINTS
+    );
+
+    return new BN(Math.floor(this.lastIndex.toNumber() * increaseFactor));
   }
 
   // Utility functions for the tests
@@ -817,7 +861,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     }
   }
 
-  public async expectExtGlobalState(expected: ExtGlobal<V>) {
+  public async expectExtGlobalState(expected: ExtGlobal) {
     const state = await this.ext.account.extGlobal.fetch(
       this.getExtGlobalAccount()
     );
@@ -828,18 +872,6 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     if (expected.mEarnGlobalAccount)
       expect(state.mEarnGlobalAccount).toEqual(expected.mEarnGlobalAccount);
 
-    if (expected.yieldConfig) {
-      switch (this.variant) {
-        case Variant.ScaledUiAmount:
-          this.expectScaledUiYieldConfig(state.yieldConfig);
-          break;
-        case Variant.NoYield:
-          expect(state.yieldConfig).toEqual({});
-          break;
-        default:
-          throw new Error("Unsupported variant for yield config");
-      }
-    }
     if (expected.bump) expect(state.bump).toEqual(expected.bump);
     if (expected.mVaultBump)
       expect(state.mVaultBump).toEqual(expected.mVaultBump);
@@ -847,53 +879,28 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       expect(state.extMintAuthorityBump).toEqual(expected.extMintAuthorityBump);
   }
 
-  private expectScaledUiYieldConfig<V extends Variant.ScaledUiAmount>(
-    yieldConfig: YieldConfig<V>
-  ) {
-    if (yieldConfig.feeBps) {
-      expect(yieldConfig.feeBps.toString()).toEqual(
-        yieldConfig.feeBps.toString()
-      );
-    }
-    if (yieldConfig.lastMIndex) {
-      expect(yieldConfig.lastMIndex.toString()).toEqual(
-        yieldConfig.lastMIndex.toString()
-      );
-    }
-    if (yieldConfig.lastExtIndex) {
-      expect(yieldConfig.lastExtIndex.toString()).toEqual(
-        yieldConfig.lastExtIndex.toString()
-      );
-    }
-  }
-
-  public async expectScaledUiAmountConfig(
+  public async expectInterestBearingConfig(
     mint: PublicKey,
-    expected: ScaledUiAmountConfig
+    expected: InterestBearingMintConfigState
   ) {
-    const state = await this.getScaledUiAmountConfig(mint);
+    const state = await this.getInterestBearingConfig(mint);
 
-    if (expected.authority) expect(state.authority).toEqual(expected.authority);
-    if (expected.multiplier) {
-      // account for javascript vs. rust floating point precision differences
-      const exp_high = (Math.floor(expected.multiplier * 1e12) + 1) / 1e12;
-      const exp_low = (Math.floor(expected.multiplier * 1e12) - 1) / 1e12;
-
-      expect(state.multiplier).toBeGreaterThanOrEqual(exp_low);
-      expect(state.multiplier).toBeLessThanOrEqual(exp_high);
-    }
-    if (expected.newMultiplierEffectiveTimestamp)
-      expect(state.newMultiplierEffectiveTimestamp.toString()).toEqual(
-        expected.newMultiplierEffectiveTimestamp.toString()
+    if (expected.initializationTimestamp)
+      expect(state.initializationTimestamp.toString()).toEqual(
+        expected.initializationTimestamp.toString()
       );
-    if (expected.newMultiplier) {
-      // account for javascript vs. rust floating point precision differences
-      const exp_high = (Math.floor(expected.newMultiplier * 1e12) + 1) / 1e12;
-      const exp_low = (Math.floor(expected.newMultiplier * 1e12) - 1) / 1e12;
-
-      expect(state.newMultiplier).toBeGreaterThanOrEqual(exp_low);
-      expect(state.newMultiplier).toBeLessThanOrEqual(exp_high);
-    }
+    if (expected.lastUpdateTimestamp)
+      expect(state.lastUpdateTimestamp.toString()).toEqual(
+        expected.lastUpdateTimestamp.toString()
+      );
+    if (expected.currentRate)
+      expect(state.currentRate.toString()).toEqual(
+        expected.currentRate.toString()
+      );
+    if (expected.preUpdateAverageRate)
+      expect(state.preUpdateAverageRate.toString()).toEqual(
+        expected.preUpdateAverageRate.toString()
+      );
   }
 
   createUniqueKeyArray = (size: number) => {
@@ -1003,15 +1010,18 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
 
   // Helper functions for executing MExt instructions
 
-  public async initializeExt(wrapAuthorities: PublicKey[], fee_bps?: BN) {
+  public async initializeExt(
+    wrapAuthorities: PublicKey[],
+    initial_rate?: number
+  ) {
     switch (this.variant) {
-      case Variant.ScaledUiAmount:
-        if (!fee_bps) {
-          throw new Error("fee_bps is required for Scaled UI variant");
+      case Variant.InterestBearingToken:
+        if (!initial_rate) {
+          throw new Error("initial_rate is required for IBT variant");
         }
         // Send the transaction
         await this.ext.methods
-          .initialize(wrapAuthorities, fee_bps)
+          .initialize(wrapAuthorities, initial_rate)
           .accounts({
             admin: this.admin.publicKey,
             mMint: this.mMint.publicKey,
@@ -1170,17 +1180,6 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       .rpc();
 
     return { vaultMTokenAccount, toMTokenAccount, fromExtTokenAccount };
-  }
-
-  public async sync(): Promise<PublicKey> {
-    if (this.variant === Variant.NoYield) {
-      throw new Error("sync is not supported for No Yield variant");
-    }
-
-    // Send the instruction
-    await this.ext.methods.sync().accounts({}).signers([]).rpc();
-
-    return this.getExtGlobalAccount();
   }
 
   public async claimFees(

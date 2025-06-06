@@ -22,7 +22,11 @@ const initialSupply = new BN(100_000_000); // 100 tokens with 6 decimals
 const initialIndex = new BN(1_100_000_000_000); // 1.1
 const claimCooldown = new BN(0); // None
 
-const VARIANTS: Variant[] = [Variant.ScaledUiAmount, Variant.NoYield];
+// Start paramters for IBT extension
+const initialMRate = 415; // 4.15% APR
+const initialExtRate = 400; // 4.00% APR
+
+const VARIANTS: Variant[] = [Variant.InterestBearingToken, Variant.NoYield];
 
 // Implement test cases for all variants
 // Most are the same, but allows conditional tests when required for different variants
@@ -33,7 +37,13 @@ for (const variant of VARIANTS) {
     beforeEach(async () => {
       // Create new extenstion test harness and then initialize it
       $ = new ExtensionTest(variant, []);
-      await $.init(initialSupply, initialIndex, claimCooldown);
+      await $.init(
+        initialSupply,
+        initialIndex,
+        claimCooldown,
+        initialMRate,
+        initialExtRate
+      );
     });
 
     describe("admin instruction tests", () => {
@@ -76,7 +86,7 @@ for (const variant of VARIANTS) {
           await $.expectAnchorError(
             (variant === Variant.NoYield
               ? $.ext.methods.initialize([])
-              : $.ext.methods.initialize([], new BN(0))
+              : $.ext.methods.initialize([], 0)
             )
               .accountsPartial({
                 admin: $.nonAdmin.publicKey,
@@ -101,7 +111,7 @@ for (const variant of VARIANTS) {
           await $.expectAnchorError(
             (variant === Variant.NoYield
               ? $.ext.methods.initialize([])
-              : $.ext.methods.initialize([], new BN(0))
+              : $.ext.methods.initialize([], 0)
             )
               .accounts({
                 admin: $.nonAdmin.publicKey,
@@ -125,7 +135,7 @@ for (const variant of VARIANTS) {
           await $.expectAnchorError(
             (variant === Variant.NoYield
               ? $.ext.methods.initialize([])
-              : $.ext.methods.initialize([], new BN(0))
+              : $.ext.methods.initialize([], 0)
             )
               .accounts({
                 admin: $.nonAdmin.publicKey,
@@ -150,7 +160,7 @@ for (const variant of VARIANTS) {
           await $.expectSystemError(
             (variant === Variant.NoYield
               ? $.ext.methods.initialize([])
-              : $.ext.methods.initialize([], new BN(0))
+              : $.ext.methods.initialize([], 0)
             )
               .accountsPartial({
                 admin: $.nonAdmin.publicKey,
@@ -175,7 +185,7 @@ for (const variant of VARIANTS) {
           await $.expectSystemError(
             (variant === Variant.NoYield
               ? $.ext.methods.initialize([])
-              : $.ext.methods.initialize([], new BN(0))
+              : $.ext.methods.initialize([], 0)
             )
               .accountsPartial({
                 admin: $.nonAdmin.publicKey,
@@ -199,7 +209,7 @@ for (const variant of VARIANTS) {
           await $.expectAnchorError(
             (variant === Variant.NoYield
               ? $.ext.methods.initialize([])
-              : $.ext.methods.initialize([], new BN(0))
+              : $.ext.methods.initialize([], 0)
             )
               .accounts({
                 admin: $.nonAdmin.publicKey,
@@ -222,7 +232,7 @@ for (const variant of VARIANTS) {
           await $.expectAnchorError(
             (variant === Variant.NoYield
               ? $.ext.methods.initialize(wrapAuthorities)
-              : $.ext.methods.initialize(wrapAuthorities, new BN(0))
+              : $.ext.methods.initialize(wrapAuthorities, 0)
             )
               .accounts({
                 admin: $.nonAdmin.publicKey,
@@ -246,7 +256,7 @@ for (const variant of VARIANTS) {
           await $.expectAnchorError(
             (variant === Variant.NoYield
               ? $.ext.methods.initialize(wrapAuthorities)
-              : $.ext.methods.initialize(wrapAuthorities, new BN(0))
+              : $.ext.methods.initialize(wrapAuthorities, 0)
             )
               .accounts({
                 admin: $.nonAdmin.publicKey,
@@ -270,7 +280,7 @@ for (const variant of VARIANTS) {
           await $.expectAnchorError(
             (variant === Variant.NoYield
               ? $.ext.methods.initialize(wrapAuthorities)
-              : $.ext.methods.initialize(wrapAuthorities, new BN(0))
+              : $.ext.methods.initialize(wrapAuthorities, 0)
             )
               .accounts({
                 admin: $.nonAdmin.publicKey,
@@ -349,15 +359,14 @@ for (const variant of VARIANTS) {
               mVaultBump,
               extMintAuthorityBump,
               wrapAuthorities: paddedWrapAuthorities,
-              yieldConfig: {},
             });
           });
         }
 
-        // scaled ui test cases
-        // [X] given the ext_mint does not have the scaled ui amount extension
+        // ibt test cases
+        // [X] given the ext_mint does not have the ibt extension
         //   [X] it reverts with a InvalidMint error
-        // [X] given the ext_mint has the scaled ui amount extension, but the authority is not the mint authority PDA
+        // [X] given the ext_mint has the ibt extension, but the authority is not the mint authority PDA
         //   [X] it reverts with an InvalidMint error
         // [X] given all accounts and params are correct
         //   [X] the global account is created
@@ -367,21 +376,21 @@ for (const variant of VARIANTS) {
         //   [X] the m_earn_global_account is set correctly
         //   [X] the bumps are set correctly
         //   [X] the wrap authorities are set correctly
-        //   [X] the multiplier on the ext mint is initialized to m index
-        //   [X] the timestamp on the ext mint is set to the m timestamp
+        //   [X] the rate on the ext mint is initialized to the initial rate
+        //   [X] the last update timestamp on the ext mint is set to the current timestamp
 
-        if (variant === Variant.ScaledUiAmount) {
-          // given the ext_mint does not have the scaled ui amount extension
+        if (variant === Variant.InterestBearingToken) {
+          // given the ext_mint does not have the ibt extension
           // it reverts with a InvalidMint error
-          test("ext_mint does not have the scaled ui amount extension - reverts", async () => {
-            // Create a mint without the scaled ui amount extension
+          test("ext_mint does not have the ibt extension - reverts", async () => {
+            // Create a mint without the ibt extension
             const wrongMint = new Keypair();
             await $.createMint(wrongMint, $.getExtMintAuthority(), true, 6); // valid otherwise
 
             // Attempt to send the transaction
             await $.expectAnchorError(
               $.ext.methods
-                .initialize([], new BN(0))
+                .initialize([], 0)
                 .accounts({
                   admin: $.nonAdmin.publicKey,
                   mMint: $.mMint.publicKey,
@@ -393,17 +402,17 @@ for (const variant of VARIANTS) {
             );
           });
 
-          // given the ext_mint has the scaled ui amount extension, but the authority is not the mint authority PDA
+          // given the ext_mint has the ibt extension, but the authority is not the mint authority PDA
           // it reverts with an InvalidMint error
-          test("ext_mint has the scaled ui amount extension, but the authority is not the mint authority PDA - reverts", async () => {
-            // Create a mint with the scaled ui amount extension
+          test("ext_mint has the ibt extension, but the authority is not the mint authority PDA - reverts", async () => {
+            // Create a mint with the ibt extension
             const wrongMint = new Keypair();
-            await $.createScaledUiMint(wrongMint, $.nonAdmin.publicKey, 6);
+            await $.createIbtMint(wrongMint, $.nonAdmin.publicKey, 0, 6);
 
             // Attempt to send the transaction
             await $.expectAnchorError(
               $.ext.methods
-                .initialize([], new BN(0))
+                .initialize([], 0)
                 .accounts({
                   admin: $.nonAdmin.publicKey,
                   mMint: $.mMint.publicKey,
@@ -449,12 +458,17 @@ for (const variant of VARIANTS) {
             const globalAccount = $.getExtGlobalAccount();
             $.expectAccountEmpty(globalAccount);
 
-            // Get a random fee bps
-            const feeBps = new BN(randomInt(10000));
+            // Get a random initial rate (between 0% and 10%)
+            const initialRate = randomInt(1000);
+
+            // Get the state of the IBT config before we initialize the program
+            const ibtConfig = await $.getInterestBearingConfig(
+              $.extMint.publicKey
+            );
 
             // Send the transaction
             await $.ext.methods
-              .initialize(wrapAuthorities, feeBps)
+              .initialize(wrapAuthorities, initialRate)
               .accounts({
                 admin: $.admin.publicKey,
                 mMint: $.mMint.publicKey,
@@ -473,21 +487,15 @@ for (const variant of VARIANTS) {
               mVaultBump,
               extMintAuthorityBump,
               wrapAuthorities: paddedWrapAuthorities,
-              yieldConfig: {
-                feeBps,
-                lastMIndex: initialIndex,
-                lastExtIndex: new BN(1e12),
-              },
             });
 
             // Check the state of the mint
-            await $.expectScaledUiAmountConfig($.extMint.publicKey, {
-              authority: $.getExtMintAuthority(),
-              multiplier: 1.0,
-              newMultiplierEffectiveTimestamp: BigInt(
-                $.currentTime().toString()
-              ),
-              newMultiplier: 1.0,
+            await $.expectInterestBearingConfig($.extMint.publicKey, {
+              rateAuthority: $.getExtMintAuthority(),
+              currentRate: initialRate,
+              lastUpdateTimestamp: BigInt(await $.currentTime().toNumber()),
+              initializationTimestamp: ibtConfig.initializationTimestamp,
+              preUpdateAverageRate: ibtConfig.preUpdateAverageRate, // TODO, need to calculate an expected value based on the time since initialize (and actually add some time so it's different)
             });
           });
         }
@@ -495,12 +503,14 @@ for (const variant of VARIANTS) {
 
       describe("set_m_mint unit tests", () => {
         beforeEach(async () => {
-          const feeBps =
-            variant === Variant.NoYield ? undefined : new BN(randomInt(10000));
+          const initialRate =
+            variant === Variant.InterestBearingToken
+              ? randomInt(1000)
+              : undefined;
           // Initialize the extension program
           await $.initializeExt(
             [$.admin.publicKey, $.wrapAuthority.publicKey],
-            feeBps
+            initialRate
           );
 
           // wrap some tokens to the make the m vault's balance non-zero
@@ -794,10 +804,15 @@ for (const variant of VARIANTS) {
           wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
           paddedWrapAuthorities = padKeyArray(wrapAuthorities, 10);
 
-          const feeBps =
-            variant === Variant.NoYield ? new BN(0) : new BN(randomInt(10000));
+          const initialRate =
+            variant === Variant.InterestBearingToken
+              ? randomInt(1000)
+              : undefined;
           // Initialize the extension program
-          await $.initializeExt(wrapAuthorities, feeBps);
+          await $.initializeExt(
+            [$.admin.publicKey, $.wrapAuthority.publicKey],
+            initialRate
+          );
         });
 
         // test cases
@@ -926,13 +941,17 @@ for (const variant of VARIANTS) {
 
         const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
         let wrapAuthorities: PublicKey[];
-        const feeBps = new BN(randomInt(1, 10000)); // non-zero
+        const initialRate =
+          variant === Variant.InterestBearingToken
+            ? randomInt(1000)
+            : undefined;
         const startIndex = new BN(randomInt(initialIndex.toNumber() + 1, 2e12));
 
         beforeEach(async () => {
           wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
+
           // Initialize the extension program
-          await $.initializeExt(wrapAuthorities, feeBps);
+          await $.initializeExt(wrapAuthorities, initialRate);
 
           // Wrap some tokens from the admin to make the m vault's balance non-zero
           await $.wrap($.admin, initialWrappedAmount);
@@ -946,10 +965,6 @@ for (const variant of VARIANTS) {
           await $.mClaimFor(mVault, await $.getTokenBalance(mVaultATA));
           await $.mCompleteClaims();
 
-          if (variant !== Variant.NoYield) {
-            // Sync the multiplier
-            await $.sync();
-          }
           // Reset the blockhash to avoid issues with duplicate transactions
           $.svm.expireBlockhash();
         });
@@ -1138,239 +1153,239 @@ for (const variant of VARIANTS) {
           );
         });
 
-        // yield variant test cases
-        //   [X] given all the accounts are correct
-        //     [X] given the multiplier is not synced
-        //       [X] it syncs the multiplier to the current
-        //       [X] given the m vault has excess collateral
-        //         [X] it transfers the excess collateral to the recipient token account
-        //       [X] given the m vault does not have excess collateral
-        //         [X] it reverts with an InsufficientCollateral error
-        //     [X] given the multiplier is already synced
-        //       [X] given the m vault has excess collateral
-        //         [X] it transfers the excess collateral to the recipient token account
-        //       [X] given the m vault does not have excess collateral
-        //         [X] it completes but doesn't transfer any tokens
+        // // yield variant test cases
+        // //   [X] given all the accounts are correct
+        // //     [X] given the multiplier is not synced
+        // //       [X] it syncs the multiplier to the current
+        // //       [X] given the m vault has excess collateral
+        // //         [X] it transfers the excess collateral to the recipient token account
+        // //       [X] given the m vault does not have excess collateral
+        // //         [X] it reverts with an InsufficientCollateral error
+        // //     [X] given the multiplier is already synced
+        // //       [X] given the m vault has excess collateral
+        // //         [X] it transfers the excess collateral to the recipient token account
+        // //       [X] given the m vault does not have excess collateral
+        // //         [X] it completes but doesn't transfer any tokens
 
-        if (variant === Variant.ScaledUiAmount) {
-          // given all accounts are correct
-          // given the multiplier is not synced
-          // it syncs the multiplier to the current
-          // given the m vault has excess collateral
-          // it transfers the excess collateral to the recipient token account
-          test("multiplier not synced, excess collateral exists - success", async () => {
-            // warp forward in time slightly
-            $.warp(new BN(60), true);
+        // if (variant === Variant.InterestBearingToken) {
+        //   // given all accounts are correct
+        //   // given the multiplier is not synced
+        //   // it syncs the multiplier to the current
+        //   // given the m vault has excess collateral
+        //   // it transfers the excess collateral to the recipient token account
+        //   test("multiplier not synced, excess collateral exists - success", async () => {
+        //     // warp forward in time slightly
+        //     $.warp(new BN(60), true);
 
-            // Propagate a new index to create a situation where multiplier needs sync
-            const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12));
-            await $.propagateIndex(newIndex);
+        //     // Propagate a new index to create a situation where multiplier needs sync
+        //     const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12));
+        //     await $.propagateIndex(newIndex);
 
-            // Claim yield to ensure vault has enough collateral
-            const mVault = $.getMVault();
-            const mVaultATA = await $.getATA($.mMint.publicKey, mVault);
-            await $.mClaimFor(mVault, await $.getTokenBalance(mVaultATA));
-            await $.mCompleteClaims();
+        //     // Claim yield to ensure vault has enough collateral
+        //     const mVault = $.getMVault();
+        //     const mVaultATA = await $.getATA($.mMint.publicKey, mVault);
+        //     await $.mClaimFor(mVault, await $.getTokenBalance(mVaultATA));
+        //     await $.mCompleteClaims();
 
-            // Cache balances before claim excess
-            const initialVaultBalance = await $.getTokenBalance(mVaultATA);
-            const recipientATA = await $.getATA(
-              $.extMint.publicKey,
-              $.admin.publicKey
-            );
+        //     // Cache balances before claim excess
+        //     const initialVaultBalance = await $.getTokenBalance(mVaultATA);
+        //     const recipientATA = await $.getATA(
+        //       $.extMint.publicKey,
+        //       $.admin.publicKey
+        //     );
 
-            // Get the new multiplier calculate the expected excess
-            const multiplier = await $.getNewMultiplier(newIndex);
+        //     // Get the new multiplier calculate the expected excess
+        //     const multiplier = await $.getNewMultiplier(newIndex);
 
-            const initialRecipientPrincipal = await $.getTokenBalance(
-              recipientATA
-            );
-            const initialRecipientBalance = await $.getTokenUiBalance(
-              recipientATA,
-              multiplier
-            );
+        //     const initialRecipientPrincipal = await $.getTokenBalance(
+        //       recipientATA
+        //     );
+        //     const initialRecipientBalance = await $.getTokenUiBalance(
+        //       recipientATA,
+        //       multiplier
+        //     );
 
-            const extSupply = await getMint(
-              $.provider.connection,
-              $.extMint.publicKey,
-              undefined,
-              TOKEN_2022_PROGRAM_ID
-            ).then((mint) => mint.supply);
+        //     const extSupply = await getMint(
+        //       $.provider.connection,
+        //       $.extMint.publicKey,
+        //       undefined,
+        //       TOKEN_2022_PROGRAM_ID
+        //     ).then((mint) => mint.supply);
 
-            const requiredCollateral = new BN(
-              Math.ceil(Number(extSupply) * multiplier)
-            );
+        //     const requiredCollateral = new BN(
+        //       Math.ceil(Number(extSupply) * multiplier)
+        //     );
 
-            const expectedExcess = initialVaultBalance.sub(requiredCollateral);
-            const expectedExcessPrincipal = new BN(
-              Math.floor(Number(expectedExcess) / multiplier)
-            );
+        //     const expectedExcess = initialVaultBalance.sub(requiredCollateral);
+        //     const expectedExcessPrincipal = new BN(
+        //       Math.floor(Number(expectedExcess) / multiplier)
+        //     );
 
-            // Setup and execute the instruction
-            await $.ext.methods
-              .claimFees()
-              .accountsPartial({
-                admin: $.admin.publicKey,
-                recipientExtTokenAccount: recipientATA,
-              })
-              .signers([$.admin])
-              .rpc();
+        //     // Setup and execute the instruction
+        //     await $.ext.methods
+        //       .claimFees()
+        //       .accountsPartial({
+        //         admin: $.admin.publicKey,
+        //         recipientExtTokenAccount: recipientATA,
+        //       })
+        //       .signers([$.admin])
+        //       .rpc();
 
-            // Verify multiplier was updated
+        //     // Verify multiplier was updated
 
-            $.expectScaledUiAmountConfig($.extMint.publicKey, {
-              authority: $.getExtMintAuthority(),
-              multiplier,
-              newMultiplier: multiplier,
-              newMultiplierEffectiveTimestamp: BigInt(
-                $.currentTime().toString()
-              ),
-            });
+        //     $.expectScaledUiAmountConfig($.extMint.publicKey, {
+        //       authority: $.getExtMintAuthority(),
+        //       multiplier,
+        //       newMultiplier: multiplier,
+        //       newMultiplierEffectiveTimestamp: BigInt(
+        //         $.currentTime().toString()
+        //       ),
+        //     });
 
-            // Verify excess tokens were transferred
+        //     // Verify excess tokens were transferred
 
-            $.expectTokenBalance(mVaultATA, initialVaultBalance);
-            $.expectTokenUiBalance(
-              recipientATA,
-              initialRecipientBalance.add(expectedExcess),
-              Comparison.LessThanOrEqual,
-              new BN(1)
-            );
-            $.expectTokenBalance(
-              recipientATA,
-              initialRecipientPrincipal.add(expectedExcessPrincipal)
-            );
-          });
+        //     $.expectTokenBalance(mVaultATA, initialVaultBalance);
+        //     $.expectTokenUiBalance(
+        //       recipientATA,
+        //       initialRecipientBalance.add(expectedExcess),
+        //       Comparison.LessThanOrEqual,
+        //       new BN(1)
+        //     );
+        //     $.expectTokenBalance(
+        //       recipientATA,
+        //       initialRecipientPrincipal.add(expectedExcessPrincipal)
+        //     );
+        //   });
 
-          // given all accounts are correct
-          // given the multiplier is already synced
-          // given the m vault has excess collateral
-          // it transfers the excess collateral to the recipient token account
-          test("multiplier already synced, excess collateral exists - success", async () => {
-            // Cache balances before claim excess
-            const mVaultATA = await $.getATA($.mMint.publicKey, $.getMVault());
-            const initialVaultBalance = await $.getTokenBalance(mVaultATA);
-            const recipientATA = await $.getATA(
-              $.extMint.publicKey,
-              $.admin.publicKey
-            );
+        //   // given all accounts are correct
+        //   // given the multiplier is already synced
+        //   // given the m vault has excess collateral
+        //   // it transfers the excess collateral to the recipient token account
+        //   test("multiplier already synced, excess collateral exists - success", async () => {
+        //     // Cache balances before claim excess
+        //     const mVaultATA = await $.getATA($.mMint.publicKey, $.getMVault());
+        //     const initialVaultBalance = await $.getTokenBalance(mVaultATA);
+        //     const recipientATA = await $.getATA(
+        //       $.extMint.publicKey,
+        //       $.admin.publicKey
+        //     );
 
-            // Get the current multiplier and calculate the $.expected excess
-            const multiplier = await $.getCurrentMultiplier();
-            const initialRecipientBalance = await $.getTokenUiBalance(
-              recipientATA,
-              multiplier
-            );
-            const initialRecipientPrincipal = await $.getTokenBalance(
-              recipientATA
-            );
+        //     // Get the current multiplier and calculate the $.expected excess
+        //     const multiplier = await $.getCurrentMultiplier();
+        //     const initialRecipientBalance = await $.getTokenUiBalance(
+        //       recipientATA,
+        //       multiplier
+        //     );
+        //     const initialRecipientPrincipal = await $.getTokenBalance(
+        //       recipientATA
+        //     );
 
-            const extSupply = await getMint(
-              $.provider.connection,
-              $.extMint.publicKey,
-              undefined,
-              TOKEN_2022_PROGRAM_ID
-            ).then((mint) => mint.supply);
+        //     const extSupply = await getMint(
+        //       $.provider.connection,
+        //       $.extMint.publicKey,
+        //       undefined,
+        //       TOKEN_2022_PROGRAM_ID
+        //     ).then((mint) => mint.supply);
 
-            const requiredCollateral = new BN(
-              Math.ceil(Number(extSupply) * multiplier)
-            );
+        //     const requiredCollateral = new BN(
+        //       Math.ceil(Number(extSupply) * multiplier)
+        //     );
 
-            const expectedExcess = initialVaultBalance.sub(requiredCollateral);
-            const expectedExcessPrincipal = new BN(
-              Math.floor(Number(expectedExcess) / multiplier)
-            );
+        //     const expectedExcess = initialVaultBalance.sub(requiredCollateral);
+        //     const expectedExcessPrincipal = new BN(
+        //       Math.floor(Number(expectedExcess) / multiplier)
+        //     );
 
-            await $.ext.methods
-              .claimFees()
-              .accountsPartial({
-                admin: $.admin.publicKey,
-                recipientExtTokenAccount: recipientATA,
-              })
-              .signers([$.admin])
-              .rpc();
+        //     await $.ext.methods
+        //       .claimFees()
+        //       .accountsPartial({
+        //         admin: $.admin.publicKey,
+        //         recipientExtTokenAccount: recipientATA,
+        //       })
+        //       .signers([$.admin])
+        //       .rpc();
 
-            // Verify excess tokens were transferred
-            $.expectTokenBalance(mVaultATA, initialVaultBalance);
-            $.expectTokenUiBalance(
-              recipientATA,
-              initialRecipientBalance.add(expectedExcess),
-              Comparison.LessThanOrEqual,
-              new BN(1)
-            );
-            $.expectTokenBalance(
-              recipientATA,
-              initialRecipientPrincipal.add(expectedExcessPrincipal)
-            );
-          });
+        //     // Verify excess tokens were transferred
+        //     $.expectTokenBalance(mVaultATA, initialVaultBalance);
+        //     $.expectTokenUiBalance(
+        //       recipientATA,
+        //       initialRecipientBalance.add(expectedExcess),
+        //       Comparison.LessThanOrEqual,
+        //       new BN(1)
+        //     );
+        //     $.expectTokenBalance(
+        //       recipientATA,
+        //       initialRecipientPrincipal.add(expectedExcessPrincipal)
+        //     );
+        //   });
 
-          // given all accounts are correct
-          // given the multiplier is not synced
-          // given the m vault does not have excess collateral
-          // it reverts with an InsufficientCollateral error
-          test("multiplier not synced, no excess collateral - reverts", async () => {
-            // claim the existing excess so there isn't extra
-            await $.claimFees();
-            $.svm.expireBlockhash();
+        //   // given all accounts are correct
+        //   // given the multiplier is not synced
+        //   // given the m vault does not have excess collateral
+        //   // it reverts with an InsufficientCollateral error
+        //   test("multiplier not synced, no excess collateral - reverts", async () => {
+        //     // claim the existing excess so there isn't extra
+        //     await $.claimFees();
+        //     $.svm.expireBlockhash();
 
-            // Propagate a new index to create a situation where multiplier needs sync
-            const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12));
-            await $.propagateIndex(newIndex);
+        //     // Propagate a new index to create a situation where multiplier needs sync
+        //     const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12));
+        //     await $.propagateIndex(newIndex);
 
-            const recipientExtTokenAccount = await $.getATA(
-              $.extMint.publicKey,
-              $.admin.publicKey
-            );
+        //     const recipientExtTokenAccount = await $.getATA(
+        //       $.extMint.publicKey,
+        //       $.admin.publicKey
+        //     );
 
-            // Attempt to send the transaction
-            await $.expectAnchorError(
-              $.ext.methods
-                .claimFees()
-                .accountsPartial({
-                  admin: $.admin.publicKey,
-                  recipientExtTokenAccount,
-                })
-                .signers([$.admin])
-                .rpc(),
-              "InsufficientCollateral"
-            );
-          });
+        //     // Attempt to send the transaction
+        //     await $.expectAnchorError(
+        //       $.ext.methods
+        //         .claimFees()
+        //         .accountsPartial({
+        //           admin: $.admin.publicKey,
+        //           recipientExtTokenAccount,
+        //         })
+        //         .signers([$.admin])
+        //         .rpc(),
+        //       "InsufficientCollateral"
+        //     );
+        //   });
 
-          // given all accounts are correct
-          // given the multiplier is already synced
-          // given the m vault does not have excess collateral
-          // it completes successfully and does not transfer any tokens
-          test("multiplier already synced, no excess collateral - success", async () => {
-            // claim the existing excess so there isn't extra
-            await $.claimFees();
-            $.svm.expireBlockhash();
+        //   // given all accounts are correct
+        //   // given the multiplier is already synced
+        //   // given the m vault does not have excess collateral
+        //   // it completes successfully and does not transfer any tokens
+        //   test("multiplier already synced, no excess collateral - success", async () => {
+        //     // claim the existing excess so there isn't extra
+        //     await $.claimFees();
+        //     $.svm.expireBlockhash();
 
-            // Cache balances before claim excess
-            const mVaultATA = await $.getATA($.mMint.publicKey, $.getMVault());
-            const initialVaultBalance = await $.getTokenBalance(mVaultATA);
-            const recipientATA = await $.getATA(
-              $.extMint.publicKey,
-              $.admin.publicKey
-            );
-            const initialRecipientBalance = await $.getTokenBalance(
-              recipientATA
-            );
+        //     // Cache balances before claim excess
+        //     const mVaultATA = await $.getATA($.mMint.publicKey, $.getMVault());
+        //     const initialVaultBalance = await $.getTokenBalance(mVaultATA);
+        //     const recipientATA = await $.getATA(
+        //       $.extMint.publicKey,
+        //       $.admin.publicKey
+        //     );
+        //     const initialRecipientBalance = await $.getTokenBalance(
+        //       recipientATA
+        //     );
 
-            // Attempt to send the transaction
-            await $.ext.methods
-              .claimFees()
-              .accountsPartial({
-                admin: $.admin.publicKey,
-                recipientExtTokenAccount: recipientATA,
-              })
-              .signers([$.admin])
-              .rpc();
+        //     // Attempt to send the transaction
+        //     await $.ext.methods
+        //       .claimFees()
+        //       .accountsPartial({
+        //         admin: $.admin.publicKey,
+        //         recipientExtTokenAccount: recipientATA,
+        //       })
+        //       .signers([$.admin])
+        //       .rpc();
 
-            // Verify no tokens were transferred
-            $.expectTokenBalance(mVaultATA, initialVaultBalance);
-            $.expectTokenBalance(recipientATA, initialRecipientBalance);
-          });
-        }
+        //     // Verify no tokens were transferred
+        //     $.expectTokenBalance(mVaultATA, initialVaultBalance);
+        //     $.expectTokenBalance(recipientATA, initialRecipientBalance);
+        //   });
+        // }
 
         // no yield test cases
         //   [X] given all the accounts are correct
@@ -1464,9 +1479,11 @@ for (const variant of VARIANTS) {
       const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
 
       let wrapAuthorities: PublicKey[];
-      const feeBps = new BN(randomInt(10000));
+      const initialRate =
+        variant === Variant.InterestBearingToken ? randomInt(1000) : undefined;
 
-      const startIndex = new BN(randomInt(initialIndex.toNumber() + 1, 2e12));
+      let startTime: BN;
+      let startIndex: BN;
 
       let vaultMTokenAccount: PublicKey;
 
@@ -1476,11 +1493,16 @@ for (const variant of VARIANTS) {
         vaultMTokenAccount = await $.getATA($.mMint.publicKey, $.getMVault());
 
         // Initialize the extension program
-        await $.initializeExt(wrapAuthorities, feeBps);
+        await $.initializeExt(wrapAuthorities, initialRate);
 
         // Mint M tokens to a wrap authority and a non-wrap authority
         await $.mintM($.wrapAuthority.publicKey, mintAmount);
         await $.mintM($.nonWrapAuthority.publicKey, mintAmount);
+
+        // Warp time forward to the start time
+        startTime = $.currentTime().add(new BN(randomInt(60, 86401)));
+        $.warp(startTime, false);
+        startIndex = $.getCurrentIndex();
 
         // Wrap some tokens from the admin to the make the m vault's balance non-zero
         await $.wrap($.admin, initialWrappedAmount);
@@ -1495,11 +1517,6 @@ for (const variant of VARIANTS) {
           await $.getTokenBalance(vaultMTokenAccount)
         );
         await $.mCompleteClaims();
-
-        // Sync the scaled ui multiplier with the m index
-        if (variant !== Variant.NoYield) {
-          await $.sync();
-        }
 
         // Claim excess tokens to make it easier to test collateral checks
         try {
@@ -1780,7 +1797,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount
             );
             const toExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.InterestBearingToken
                 ? await $.getTokenUiBalance(toExtTokenAccount)
                 : await $.getTokenBalance(toExtTokenAccount);
 
@@ -1804,7 +1821,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount,
               vaultMTokenAccountBalance.add(wrapAmount)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.InterestBearingToken
               ? await $.expectTokenUiBalance(
                   toExtTokenAccount,
                   toExtTokenAccountBalance.add(wrapAmount),
@@ -1830,7 +1847,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount
             );
             const toExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.InterestBearingToken
                 ? await $.getTokenUiBalance(toExtTokenAccount)
                 : await $.getTokenBalance(toExtTokenAccount);
 
@@ -1856,7 +1873,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount,
               vaultMTokenAccountBalance.add(wrapAmount)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.InterestBearingToken
               ? await $.expectTokenUiBalance(
                   toExtTokenAccount,
                   toExtTokenAccountBalance.add(wrapAmount),
@@ -1888,7 +1905,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount
             );
             const toExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.InterestBearingToken
                 ? await $.getTokenUiBalance(toExtTokenAccount)
                 : await $.getTokenBalance(toExtTokenAccount);
 
@@ -1914,7 +1931,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount,
               vaultMTokenAccountBalance.add(wrapAmount)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.InterestBearingToken
               ? await $.expectTokenUiBalance(
                   toExtTokenAccount,
                   toExtTokenAccountBalance.add(wrapAmount),
@@ -1950,108 +1967,31 @@ for (const variant of VARIANTS) {
 
         describe("index different from start (sync required)", () => {
           // M Index is strictly increasing
-          const newIndex = new BN(
-            randomInt(startIndex.toNumber() + 1, 2e12 + 1)
-          );
+          let newTime: BN;
+          let newIndex: BN;
 
           beforeEach(async () => {
             // Reset the blockhash to avoid issues with duplicate transactions from multiple claim cycles
             $.svm.expireBlockhash();
 
+            // Warp forward to the new timestamp and get the new index
+            newTime = $.currentTime().add(new BN(randomInt(60, 86401)));
+            $.warp(newTime, false);
+            newIndex = $.getCurrentIndex();
+
             // Propagate the new index
             await $.propagateIndex(newIndex);
           });
 
-          // no yield test cases
+          // test cases
           // [X] given yield has not been minted to the m vault for the new index
           //   [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
           // [X] given yield has been minted to the m vault for the new index
           //   [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
 
-          // yield test cases
-          // [X] given yield has not been minted to the m vault for the new index
-          //   [X] it reverts with an InsufficientCollateral error
-          // [X] given yield has been minted to the m vault for the new index
-          //   [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
-
-          if (variant === Variant.NoYield) {
-            // given yield has not been minted to the m vault for the new index
-            // it wraps the amount of M tokens from the user's M token account to the M vault token account
-            test("Yield not minted for new index - success", async () => {
-              // Cache initial balances
-              const fromMTokenAccountBalance = await $.getTokenBalance(
-                fromMTokenAccount
-              );
-              const vaultMTokenAccountBalance = await $.getTokenBalance(
-                vaultMTokenAccount
-              );
-              const toExtTokenAccountBalance = await $.getTokenBalance(
-                toExtTokenAccount
-              );
-
-              const wrapAmount = new BN(
-                randomInt(1, fromMTokenAccountBalance.toNumber() + 1)
-              );
-
-              // Send the instruction
-              await $.ext.methods
-                .wrap(wrapAmount)
-                .accounts({
-                  signer: $.wrapAuthority.publicKey,
-                  fromMTokenAccount,
-                  toExtTokenAccount,
-                })
-                .signers([$.wrapAuthority])
-                .rpc();
-
-              // Confirm updated balances
-              await $.expectTokenBalance(
-                fromMTokenAccount,
-                fromMTokenAccountBalance.sub(wrapAmount)
-              );
-              await $.expectTokenBalance(
-                vaultMTokenAccount,
-                vaultMTokenAccountBalance.add(wrapAmount)
-              );
-              await $.expectTokenBalance(
-                toExtTokenAccount,
-                toExtTokenAccountBalance.add(wrapAmount)
-              );
-            });
-          } else {
-            // given yield has not been minted to the m vault for the new index
-            // it reverts with an InsufficientCollateral error
-            test("Yield not minted for new index - reverts", async () => {
-              const wrapAmount = new BN(
-                randomInt(1, mintAmount.toNumber() + 1)
-              );
-
-              // Send the instruction
-              await $.expectAnchorError(
-                $.ext.methods
-                  .wrap(wrapAmount)
-                  .accounts({
-                    signer: $.wrapAuthority.publicKey,
-                    fromMTokenAccount,
-                    toExtTokenAccount,
-                  })
-                  .signers([$.wrapAuthority])
-                  .rpc(),
-                "InsufficientCollateral"
-              );
-            });
-          }
-
-          // given yield has been minted to the m vault for the new index
+          // given yield has not been minted to the m vault for the new index
           // it wraps the amount of M tokens from the user's M token account to the M vault token account
-          test("Wrap with new index - success", async () => {
-            // Mint yield to the m vault for the new index
-            await $.mClaimFor(
-              $.getMVault(),
-              await $.getTokenBalance(vaultMTokenAccount)
-            );
-            await $.mCompleteClaims();
-
+          test("Yield not minted for new index - success", async () => {
             // Cache initial balances
             const fromMTokenAccountBalance = await $.getTokenBalance(
               fromMTokenAccount
@@ -2060,7 +2000,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount
             );
             const toExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.InterestBearingToken
                 ? await $.getTokenUiBalance(toExtTokenAccount)
                 : await $.getTokenBalance(toExtTokenAccount);
 
@@ -2088,7 +2028,66 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount,
               vaultMTokenAccountBalance.add(wrapAmount)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.InterestBearingToken
+              ? await $.expectTokenUiBalance(
+                  toExtTokenAccount,
+                  toExtTokenAccountBalance.add(wrapAmount),
+                  Comparison.LessThanOrEqual,
+                  new BN(2)
+                )
+              : await $.expectTokenBalance(
+                  toExtTokenAccount,
+                  toExtTokenAccountBalance.add(wrapAmount)
+                );
+          });
+
+          // given yield has been minted to the m vault for the new index
+          // it wraps the amount of M tokens from the user's M token account to the M vault token account
+          test("Wrap with new index - success", async () => {
+            // Mint yield to the m vault for the new index
+            await $.mClaimFor(
+              $.getMVault(),
+              await $.getTokenBalance(vaultMTokenAccount)
+            );
+            await $.mCompleteClaims();
+
+            // Cache initial balances
+            const fromMTokenAccountBalance = await $.getTokenBalance(
+              fromMTokenAccount
+            );
+            const vaultMTokenAccountBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+            const toExtTokenAccountBalance =
+              variant === Variant.InterestBearingToken
+                ? await $.getTokenUiBalance(toExtTokenAccount)
+                : await $.getTokenBalance(toExtTokenAccount);
+
+            const wrapAmount = new BN(
+              randomInt(1, fromMTokenAccountBalance.toNumber() + 1)
+            );
+
+            // Send the instruction
+            await $.ext.methods
+              .wrap(wrapAmount)
+              .accounts({
+                signer: $.wrapAuthority.publicKey,
+                fromMTokenAccount,
+                toExtTokenAccount,
+              })
+              .signers([$.wrapAuthority])
+              .rpc();
+
+            // Confirm updated balances
+            await $.expectTokenBalance(
+              fromMTokenAccount,
+              fromMTokenAccountBalance.sub(wrapAmount)
+            );
+            await $.expectTokenBalance(
+              vaultMTokenAccount,
+              vaultMTokenAccountBalance.add(wrapAmount)
+            );
+            variant === Variant.InterestBearingToken
               ? await $.expectTokenUiBalance(
                   toExtTokenAccount,
                   toExtTokenAccountBalance.add(wrapAmount),
@@ -2380,7 +2379,7 @@ for (const variant of VARIANTS) {
 
             // Cache initial balances
             const fromExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.InterestBearingToken
                 ? await $.getTokenUiBalance(fromExtTokenAccount)
                 : await $.getTokenBalance(fromExtTokenAccount);
             const vaultMTokenAccountBalance = await $.getTokenBalance(
@@ -2402,7 +2401,7 @@ for (const variant of VARIANTS) {
               .rpc();
 
             // Confirm updated balances
-            variant === Variant.ScaledUiAmount
+            variant === Variant.InterestBearingToken
               ? await $.expectTokenUiBalance(
                   fromExtTokenAccount,
                   fromExtTokenAccountBalance.sub(unwrapAmount),
@@ -2430,7 +2429,7 @@ for (const variant of VARIANTS) {
           test("Unwrap to wrap authority account - success", async () => {
             // Cache initial balances
             const fromExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.InterestBearingToken
                 ? await $.getTokenUiBalance(fromExtTokenAccount)
                 : await $.getTokenBalance(fromExtTokenAccount);
             const vaultMTokenAccountBalance = await $.getTokenBalance(
@@ -2464,7 +2463,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount,
               vaultMTokenAccountBalance.sub(unwrapAmount)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.InterestBearingToken
               ? await $.expectTokenUiBalance(
                   fromExtTokenAccount,
                   fromExtTokenAccountBalance.sub(unwrapAmount),
@@ -2489,7 +2488,7 @@ for (const variant of VARIANTS) {
 
             // Cache initial balances
             const fromExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.InterestBearingToken
                 ? await $.getTokenUiBalance(fromExtTokenAccount)
                 : await $.getTokenBalance(fromExtTokenAccount);
             const vaultMTokenAccountBalance = await $.getTokenBalance(
@@ -2523,7 +2522,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount,
               vaultMTokenAccountBalance.sub(unwrapAmount)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.InterestBearingToken
               ? await $.expectTokenUiBalance(
                   fromExtTokenAccount,
                   fromExtTokenAccountBalance.sub(unwrapAmount),
@@ -2538,114 +2537,38 @@ for (const variant of VARIANTS) {
         });
 
         describe("index different from start", () => {
-          const newIndex = new BN(
-            randomInt(startIndex.toNumber() + 1, 2e12 + 1)
-          );
+          // M Index is strictly increasing
+          let newTime: BN;
+          let newIndex: BN;
           let newMultiplier: number = 1.0;
 
           beforeEach(async () => {
             // Reset the blockhash to avoid issues with duplicate transactions from multiple claim cycles
             $.svm.expireBlockhash();
 
+            // Warp forward to the new timestamp and get the new index
+            newTime = $.currentTime().add(new BN(randomInt(60, 86401)));
+            $.warp(newTime, false);
+            newIndex = $.getCurrentIndex();
+
             // Propagate the new index
             await $.propagateIndex(newIndex);
 
             // Calculate the expected multipler after the new index push
-            if (variant === Variant.ScaledUiAmount) {
-              newMultiplier = await $.getNewMultiplier(newIndex);
+            if (variant === Variant.InterestBearingToken) {
+              newMultiplier = await $.getCurrentMultiplier();
             }
           });
 
-          // no yield test cases
+          // test cases
           // [X] given yield has not been minted to the m vault for the new index
           //   [X] it unwraps the amount of M tokens from the M vault token account to the user's M token account
           // [X] given yield has been minted to the m vault for the new index
           //   [X] it unwraps the amount of M tokens from the M vault token account to the user's M token account
 
-          // yield test cases
-          // [X] given yield has not been minted to the m vault for the new index
-          //   [X] it reverts with an InsufficientCollateral error
-          // [X] given yield has been minted to the m vault for the new index
-          //   [X] it unwraps the amount of M tokens from the M vault token account to the user's M token account
-
-          if (variant === Variant.NoYield) {
-            // given yield has not been minted to the m vault for the new index
-            // it unwraps the amount of M tokens from the M vault token account to the user's M token account
-            test("Yield not minted for new index - success", async () => {
-              // Cache initial balances
-              const vaultMTokenAccountBalance = await $.getTokenBalance(
-                vaultMTokenAccount
-              );
-              const toMTokenAccountBalance = await $.getTokenBalance(
-                toMTokenAccount
-              );
-              const fromExtTokenAccountBalance = await $.getTokenBalance(
-                fromExtTokenAccount
-              );
-
-              const unwrapAmount = new BN(
-                randomInt(1, fromExtTokenAccountBalance.toNumber() + 1)
-              );
-
-              // Send the instruction
-              await $.ext.methods
-                .unwrap(unwrapAmount)
-                .accounts({
-                  signer: $.wrapAuthority.publicKey,
-                  fromExtTokenAccount,
-                  toMTokenAccount,
-                })
-                .signers([$.wrapAuthority])
-                .rpc();
-
-              // Confirm updated balances
-              await $.expectTokenBalance(
-                toMTokenAccount,
-                toMTokenAccountBalance.add(unwrapAmount)
-              );
-              await $.expectTokenBalance(
-                vaultMTokenAccount,
-                vaultMTokenAccountBalance.sub(unwrapAmount)
-              );
-              await $.expectTokenBalance(
-                fromExtTokenAccount,
-                fromExtTokenAccountBalance.sub(unwrapAmount)
-              );
-            });
-          } else {
-            // given yield has not been minted to the m vault for the new index
-            // it reverts with an InsufficientCollateral error
-            test("Yield not minted for new index - reverts", async () => {
-              const unwrapAmount = new BN(
-                randomInt(1, wrappedAmount.toNumber() + 1)
-              );
-
-              // Send the instruction
-              await $.expectAnchorError(
-                $.ext.methods
-                  .unwrap(unwrapAmount)
-                  .accounts({
-                    signer: $.wrapAuthority.publicKey,
-                    fromExtTokenAccount,
-                    toMTokenAccount,
-                  })
-                  .signers([$.wrapAuthority])
-                  .rpc(),
-                "InsufficientCollateral"
-              );
-            });
-          }
-
-          // given yield has been minted to the m vault for the new index
+          // given yield has not been minted to the m vault for the new index
           // it unwraps the amount of M tokens from the M vault token account to the user's M token account
-          test("Unwrap with new index - success", async () => {
-            // Mint yield to the m vault for the new index
-            await $.mClaimFor(
-              $.getMVault(),
-              await $.getTokenBalance(vaultMTokenAccount)
-            );
-            await $.mCompleteClaims();
-
+          test("Yield not minted for new index - success", async () => {
             // Cache initial balances
             const vaultMTokenAccountBalance = await $.getTokenBalance(
               vaultMTokenAccount
@@ -2654,7 +2577,7 @@ for (const variant of VARIANTS) {
               toMTokenAccount
             );
             const fromExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.InterestBearingToken
                 ? await $.getTokenUiBalance(fromExtTokenAccount, newMultiplier)
                 : await $.getTokenBalance(fromExtTokenAccount);
 
@@ -2682,7 +2605,66 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount,
               vaultMTokenAccountBalance.sub(unwrapAmount)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.InterestBearingToken
+              ? await $.expectTokenUiBalance(
+                  fromExtTokenAccount,
+                  fromExtTokenAccountBalance.sub(unwrapAmount),
+                  Comparison.LessThanOrEqual,
+                  new BN(2)
+                )
+              : await $.expectTokenBalance(
+                  fromExtTokenAccount,
+                  fromExtTokenAccountBalance.sub(unwrapAmount)
+                );
+          });
+
+          // given yield has been minted to the m vault for the new index
+          // it unwraps the amount of M tokens from the M vault token account to the user's M token account
+          test("Unwrap with new index - success", async () => {
+            // Mint yield to the m vault for the new index
+            await $.mClaimFor(
+              $.getMVault(),
+              await $.getTokenBalance(vaultMTokenAccount)
+            );
+            await $.mCompleteClaims();
+
+            // Cache initial balances
+            const vaultMTokenAccountBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+            const toMTokenAccountBalance = await $.getTokenBalance(
+              toMTokenAccount
+            );
+            const fromExtTokenAccountBalance =
+              variant === Variant.InterestBearingToken
+                ? await $.getTokenUiBalance(fromExtTokenAccount, newMultiplier)
+                : await $.getTokenBalance(fromExtTokenAccount);
+
+            const unwrapAmount = new BN(
+              randomInt(1, fromExtTokenAccountBalance.toNumber() + 1)
+            );
+
+            // Send the instruction
+            await $.ext.methods
+              .unwrap(unwrapAmount)
+              .accounts({
+                signer: $.wrapAuthority.publicKey,
+                fromExtTokenAccount,
+                toMTokenAccount,
+              })
+              .signers([$.wrapAuthority])
+              .rpc();
+
+            // Confirm updated balances
+            await $.expectTokenBalance(
+              toMTokenAccount,
+              toMTokenAccountBalance.add(unwrapAmount)
+            );
+            await $.expectTokenBalance(
+              vaultMTokenAccount,
+              vaultMTokenAccountBalance.sub(unwrapAmount)
+            );
+            variant === Variant.InterestBearingToken
               ? await $.expectTokenUiBalance(
                   fromExtTokenAccount,
                   fromExtTokenAccountBalance.sub(unwrapAmount),
@@ -2697,253 +2679,5 @@ for (const variant of VARIANTS) {
         });
       });
     });
-
-    if (variant !== Variant.NoYield) {
-      describe("open instruction tests", () => {
-        describe("sync unit tests", () => {
-          const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
-
-          let wrapAuthorities: PublicKey[];
-          let vaultMTokenAccount: PublicKey;
-          const feeBps = new BN(randomInt(10000));
-
-          const startIndex = new BN(
-            randomInt(initialIndex.toNumber() + 1, 2e12)
-          );
-
-          // Setup accounts with M tokens so we can test wrapping and unwrapping
-          beforeEach(async () => {
-            wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
-            vaultMTokenAccount = await $.getATA(
-              $.mMint.publicKey,
-              $.getMVault()
-            );
-
-            // Initialize the extension program
-            await $.initializeExt(wrapAuthorities, feeBps);
-
-            // Wrap some tokens from the admin to the make the m vault's balance non-zero
-            await $.wrap($.admin, initialWrappedAmount);
-
-            // Warp ahead slightly to change the timestamp of the new index
-            $.warp(new BN(60), true);
-
-            // Propagate the start index
-            await $.propagateIndex(startIndex);
-
-            // Claim yield for the m vault and complete the claim cycle
-            // so that the m vault is collateralized to start
-            await $.mClaimFor(
-              $.getMVault(),
-              await $.getTokenBalance(vaultMTokenAccount)
-            );
-            await $.mCompleteClaims();
-
-            // Reset the blockhash to avoid issues with duplicate transactions from multiple claim cycles
-            $.svm.expireBlockhash();
-          });
-
-          // test cases
-          // [X] given m earn global account does not match the one stored in the global account
-          //   [X] it reverts with an InvalidAccount error
-          // [X] given the m vault account does not match the derived PDA
-          //   [X] it reverts with a ConstraintSeeds error
-          // [X] given the vault m token account is not the M vault PDA's ATA
-          //   [X] it reverts with a ConstraintAssociated error
-          // [X] given the ext mint account does not match the one stored in the global account
-          //   [X] it reverts with an InvalidMint error
-          // [X] given the ext mint authority account does match the derived PDA
-          //   [X] it reverts with a ConstraintSeeds error
-          // [X] given the multiplier is already up to date
-          //   [X] it remains the same
-          // [X] given the multiplier is not up to date
-          //   [X] given the m vault has not received yield to match the latest M index
-          //     [X] it reverts with an InsufficientCollateral error
-          //   [X] given the m vault has received yield to match the latest M index
-          //     [X] it updates the scaled ui config on the ext mint to match the m index
-
-          // given m earn global account does not match the one stored in the global account
-          // it reverts with an InvalidAccount error
-          test("M earn global account does not match global account - reverts", async () => {
-            // Change the m earn global account
-            const mEarnGlobalAccount = PublicKey.unique();
-            if (mEarnGlobalAccount.equals($.getEarnGlobalAccount())) {
-              return;
-            }
-
-            // Attempt to send the transaction
-            // Expect an invalid account error (though could be others like not initialized)
-            await $.expectSystemError(
-              $.ext.methods
-                .sync()
-                .accountsPartial({
-                  mEarnGlobalAccount,
-                })
-                .signers([])
-                .rpc()
-            );
-          });
-
-          // given the m vault account does not match the derived PDA
-          // it reverts with a ConstraintSeeds error
-          test("M vault account does not match derived PDA - reverts", async () => {
-            // Change the m vault account
-            const mVault = PublicKey.unique();
-            if (mVault.equals($.getMVault())) {
-              return;
-            }
-
-            // Attempt to send the transaction
-            // Expect an invalid account error
-            await $.expectSystemError(
-              $.ext.methods
-                .sync()
-                .accountsPartial({
-                  mVault,
-                })
-                .signers([])
-                .rpc()
-            );
-          });
-
-          // given the vault m token account is not the M vault PDA's ATA
-          // it reverts with a ConstraintAssociated error
-          test("M vault token account is not the M Vault PDA's ATA - reverts", async () => {
-            // Create a valid token account that is not the ATA
-            const { tokenAccount: vaultMTokenAccount } =
-              await $.createTokenAccount($.mMint.publicKey, $.getMVault());
-
-            // Attempt to send the transaction
-            // Expect revert with a ConstraintAssociated error
-            await $.expectAnchorError(
-              $.ext.methods
-                .sync()
-                .accountsPartial({
-                  vaultMTokenAccount,
-                })
-                .signers([])
-                .rpc(),
-              "ConstraintAssociated"
-            );
-          });
-
-          // given the ext mint account does not match the one stored in the global account
-          // it reverts with an InvalidMint error
-          test("Ext mint account does not match global account - reverts", async () => {
-            // Create a new mint
-            const newMint = Keypair.generate();
-            await $.createMint(newMint, $.nonAdmin.publicKey, true, 6);
-
-            // Attempt to send the transaction
-            // Expect an invalid account error
-            await $.expectAnchorError(
-              $.ext.methods
-                .sync()
-                .accountsPartial({
-                  extMint: newMint.publicKey,
-                })
-                .signers([])
-                .rpc(),
-              "InvalidMint"
-            );
-          });
-
-          // given the ext mint authority account does match the derived PDA
-          // it reverts with a ConstraintSeeds error
-          test("Ext mint authority account does not match derived PDA - reverts", async () => {
-            // Change the ext mint authority account
-            const extMintAuthority = PublicKey.unique();
-            if (extMintAuthority.equals($.getExtMintAuthority())) {
-              return;
-            }
-
-            // Attempt to send the transaction
-            // Expect an invalid account error
-            await $.expectAnchorError(
-              $.ext.methods
-                .sync()
-                .accountsPartial({
-                  extMintAuthority,
-                })
-                .signers([])
-                .rpc(),
-              "ConstraintSeeds"
-            );
-          });
-
-          // given the multiplier is already up to date
-          // it remains the same
-          test("Multiplier is already up to date - success", async () => {
-            // Sync the multiplier to the start index
-            await $.sync();
-
-            // Load the scaled ui config
-            const scaledUiAmountConfig = await $.getScaledUiAmountConfig(
-              $.extMint.publicKey
-            );
-
-            $.svm.expireBlockhash();
-
-            // Sync again
-            await $.sync();
-
-            // Confirm the scaled ui config on the ext mint is the same
-            $.expectScaledUiAmountConfig(
-              $.extMint.publicKey,
-              scaledUiAmountConfig
-            );
-          });
-
-          // given the multiplier is not up to date
-          // given the m vault has not received yield to match the latest M index
-          // it reverts with an InsufficientCollateral error
-          test("M vault has not received yield to match latest M index - reverts", async () => {
-            // Claim excess tokens to make it easier to test collateral checks
-            try {
-              await $.claimFees();
-            } catch (e) {
-              // Ignore the error if there are no excess tokens
-            }
-
-            // Propagate a new index but do not distribute yield yet
-            const newIndex = new BN(
-              randomInt(startIndex.toNumber() + 1, 2e12 + 1)
-            );
-            await $.propagateIndex(newIndex);
-
-            // Attempt to send the transaction
-            // Expect an invalid account error
-            await $.expectAnchorError(
-              $.ext.methods.sync().accounts({}).signers([]).rpc(),
-              "InsufficientCollateral"
-            );
-          });
-
-          // given the m vault has received yield to match the latest M index
-          // it updates the scaled ui config on the ext mint to match the m index
-          test("M vault has received yield to match latest M index - success", async () => {
-            // Cache the scaled ui amount config
-            const scaledUiAmountConfig = await $.getScaledUiAmountConfig(
-              $.extMint.publicKey
-            );
-
-            // Send the instruction
-            await $.ext.methods.sync().accounts({}).signers([]).rpc();
-
-            // Confirm the scaled ui config on the ext mint matches the m index
-            const multiplier = await $.getCurrentMultiplier();
-
-            await $.expectScaledUiAmountConfig($.extMint.publicKey, {
-              authority: scaledUiAmountConfig.authority,
-              multiplier,
-              newMultiplier: multiplier,
-              newMultiplierEffectiveTimestamp: BigInt(
-                $.currentTime().toString()
-              ),
-            });
-          });
-        });
-      });
-    }
   });
 }
