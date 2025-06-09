@@ -5,17 +5,17 @@ use crate::{
 };
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
-use earn::state::Global as EarnGlobal;
+use earn::{
+    state::{Earner, EARNER_SEED},
+    ID as EARN_PROGRAM,
+};
 
 #[derive(Accounts)]
 pub struct Sync<'info> {
-    pub m_earn_global_account: Account<'info, EarnGlobal>,
-
     #[account(
         mut,
         seeds = [EXT_GLOBAL_SEED],
         bump = global_account.bump,
-        has_one = m_earn_global_account @ ExtError::InvalidAccount,
         has_one = ext_mint @ ExtError::InvalidMint,
     )]
     pub global_account: Account<'info, ExtGlobal>,
@@ -33,6 +33,13 @@ pub struct Sync<'info> {
         associated_token::token_program = Token2022::id(),
     )]
     pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(
+        seeds = [EARNER_SEED, vault_m_token_account.key().as_ref()],
+        seeds::program = EARN_PROGRAM,
+        bump = m_earner_account.bump,
+    )]
+    pub m_earner_account: Account<'info, Earner>,
 
     #[account(mut)]
     pub ext_mint: InterfaceAccount<'info, Mint>,
@@ -57,7 +64,7 @@ impl Sync<'_> {
         sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
-            &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.m_earner_account,
             &ctx.accounts.vault_m_token_account,
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[signer_bump]]],

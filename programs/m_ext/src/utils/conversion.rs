@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use cfg_if::cfg_if;
-use earn::state::Global as EarnGlobal;
+use earn::state::Earner;
 
 use crate::{
     constants::{INDEX_SCALE_F64, INDEX_SCALE_U64},
@@ -23,7 +23,7 @@ cfg_if! {
 pub fn sync_multiplier<'info>(
     _ext_mint: &mut InterfaceAccount<'info, Mint>,
     _ext_global_account: &mut Account<'info, ExtGlobal>,
-    _m_earn_global_account: &Account<'info, EarnGlobal>,
+    _m_earner_account: &Account<'info, Earner>,
     _vault_m_token_account: &InterfaceAccount<'info, TokenAccount>,
     _authority: &AccountInfo<'info>,
     _authority_seeds: &[&[&[u8]]],
@@ -33,7 +33,7 @@ pub fn sync_multiplier<'info>(
         if #[cfg(feature = "scaled-ui")] {
             // Get the current index and timestamp from the m_earn_global_account and cached values
             let (multiplier, timestamp): (f64, i64) =
-                get_latest_multiplier_and_timestamp(_ext_global_account, _m_earn_global_account);
+                get_latest_multiplier_and_timestamp(_ext_global_account, _m_earner_account);
 
             // Compare against the current multiplier
             // If the multiplier is the same, we don't need to update
@@ -69,9 +69,12 @@ pub fn sync_multiplier<'info>(
             _ext_mint.reload()?;
 
             // Update the last m index and last ext index in the global account
-            _ext_global_account.yield_config.last_m_index = _m_earn_global_account.index;
+            _ext_global_account.yield_config.last_m_index = _m_earner_account.last_claim_index;
             _ext_global_account.yield_config.last_ext_index = (multiplier * INDEX_SCALE_F64).floor() as u64;
 
+            // Note: This check should not be required anymore because we are using the vault's last claim index
+            // however, we keep it here for now to continue testing
+            //
             // Check solvency of the vault
             // i.e. that it holds enough M for each extension UI amount
             // after the multiplier has been updated
@@ -195,11 +198,11 @@ cfg_if! {
     if #[cfg(feature = "scaled-ui")] {
         fn get_latest_multiplier_and_timestamp<'info>(
             ext_global_account: &Account<'info, ExtGlobal>,
-            m_earn_global_account: &Account<'info, EarnGlobal>,
+            m_earner_account: &Account<'info, Earner>,
         ) -> (f64, i64) {
-            let latest_m_multiplier = m_earn_global_account.index as f64 / INDEX_SCALE_F64;
+            let latest_m_multiplier = m_earner_account.last_claim_index as f64 / INDEX_SCALE_F64;
             let cached_m_multiplier = ext_global_account.yield_config.last_m_index as f64 / INDEX_SCALE_F64;
-            let latest_timestamp: i64 = m_earn_global_account.timestamp as i64;
+            let latest_timestamp: i64 = m_earner_account.last_claim_timestamp as i64;
             let cached_ext_multiplier =
                 ext_global_account.yield_config.last_ext_index as f64 / INDEX_SCALE_F64;
 
