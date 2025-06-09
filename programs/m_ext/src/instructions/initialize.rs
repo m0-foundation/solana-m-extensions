@@ -6,6 +6,7 @@ use earn::{
     state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
     ID as EARN_PROGRAM,
 };
+use switchboard_on_demand::{on_demand::accounts::pull_feed::PullFeedAccountData, sb_pid};
 
 // local dependencies
 use crate::{
@@ -84,6 +85,10 @@ pub struct Initialize<'info> {
     )]
     pub m_earn_global_account: Account<'info, EarnGlobal>,
 
+    #[cfg(feature = "ibt")]
+    #[account(owner = sb_pid())]
+    pub rate_feed: AccountInfo<'info>,
+
     pub m_token_program: Program<'info, Token2022>, // we have duplicate entries for the token2022 program bc the M token program could change in the future
 
     pub ext_token_program: Program<'info, Token2022>,
@@ -93,7 +98,7 @@ pub struct Initialize<'info> {
 
 impl Initialize<'_> {
     // This instruction initializes the program to make the provided ext_mint into an M extension
-    fn validate(&self, wrap_authorities: &[Pubkey], _initial_rate: i16) -> Result<()> {
+    fn validate(&self, wrap_authorities: &[Pubkey]) -> Result<()> {
         // Validate the ext_mint_authority PDA is the mint authority for the ext mint
         let ext_mint_authority = self.ext_mint_authority.key();
         if self.ext_mint.mint_authority.unwrap_or_default() != ext_mint_authority {
@@ -132,9 +137,19 @@ impl Initialize<'_> {
                     }
                 }
 
-                // Validate that the initial rate is not negative
-                if _initial_rate < 0i16 {
-                    return err!(ExtError::InvalidParam);
+                // Validate oracle
+                #[cfg(feature = "ibt")]
+                {
+                    let feed_account = self.rate_feed.data.borrow();
+                    let feed = PullFeedAccountData::parse(feed_account)
+                        .map_err(|_| ExtError::InvalidSwitchboardFeed)?;
+
+                    let value = feed.value(&Clock::get().unwrap())
+                        .map_err(|_| ExtError::InvalidSwitchboardFeed)?;
+
+                    if value.is_sign_negative() || value.gt(&u16::MAX.into()) {
+                        return err!(ExtError::InvalidSwitchboardFeed);
+                    }
                 }
 
                 // TODO: Validate that the rate on the ext_mint prior to this has been zero?
@@ -144,12 +159,8 @@ impl Initialize<'_> {
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(&wrap_authorities, initial_rate))]
-    pub fn handler(
-        ctx: Context<Initialize>,
-        wrap_authorities: Vec<Pubkey>,
-        initial_rate: i16,
-    ) -> Result<()> {
+    #[access_control(ctx.accounts.validate(&wrap_authorities))]
+    pub fn handler(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
         let mut wrap_authorities_array = [Pubkey::default(); 10];
         for (i, authority) in wrap_authorities.iter().enumerate() {
             if wrap_authorities_array.contains(authority) {
@@ -172,13 +183,19 @@ impl Initialize<'_> {
 
         // If an IBT extension, set the initial rate
         #[cfg(feature = "ibt")]
-        set_ibt_rate(
-            &mut ctx.accounts.ext_mint,
-            &ctx.accounts.ext_token_program,
-            &ctx.accounts.ext_mint_authority,
-            &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
-            initial_rate,
-        )?;
+        {
+            let feed_account = ctx.accounts.rate_feed.data.borrow();
+            let feed = PullFeedAccountData::parse(feed_account).unwrap();
+            let rate = feed.value(&Clock::get().unwrap()).unwrap();
+
+            set_ibt_rate(
+                &mut ctx.accounts.ext_mint,
+                &ctx.accounts.ext_token_program,
+                &ctx.accounts.ext_mint_authority,
+                &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
+                rate.to_u16(),
+            )?;
+        }
 
         Ok(())
     }

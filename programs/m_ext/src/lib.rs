@@ -42,18 +42,8 @@ pub mod m_ext {
 
     // Admin instructions
 
-    #[cfg(feature = "no-yield")]
     pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
-        Initialize::handler(ctx, wrap_authorities, 0)
-    }
-
-    #[cfg(feature = "ibt")]
-    pub fn initialize(
-        ctx: Context<Initialize>,
-        wrap_authorities: Vec<Pubkey>,
-        initial_rate: i16,
-    ) -> Result<()> {
-        Initialize::handler(ctx, wrap_authorities, initial_rate)
+        Initialize::handler(ctx, wrap_authorities)
     }
 
     #[cfg(feature = "ibt")]
