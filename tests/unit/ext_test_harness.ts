@@ -960,6 +960,10 @@ export class ExtensionTest<V extends Variant = Variant.InterestBearingToken> {
       })
       .signers([this.admin])
       .rpc();
+
+    // Update our local values to ensure the values remain the same
+    this.lastIndex = newIndex;
+    this.lastIndexTimestamp = this.currentTime();
   }
 
   public async mClaimFor(earner: PublicKey, balance?: BN) {
