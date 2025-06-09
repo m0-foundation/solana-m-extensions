@@ -15,9 +15,11 @@ import {
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
   createInitializeMintInstruction,
+  createInitializeImmutableOwnerInstruction,
   createAssociatedTokenAccountInstruction,
   createCloseAccountInstruction,
   getAccount,
+  getAccountLen,
   getMint,
   getMintLen,
   getMinimumBalanceForRentExemptMultisig,
@@ -104,6 +106,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   public wrapAuthority: Keypair;
   public nonAdmin: Keypair;
   public nonWrapAuthority: Keypair;
+  public mEarnerList: PublicKey[] = [];
 
   constructor(variant: V, addresses: PublicKey[]) {
     this.variant = variant;
@@ -188,17 +191,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
 
     // Add the m vault as an M earner
     const mVault = this.getMVault();
-    const earnerMerkleTree = new MerkleTree([this.admin.publicKey, mVault]);
-
-    // Create the m vault ATA for the m token
-    await this.createATA(this.mMint.publicKey, mVault);
-
-    // Propagate the merkle root
-    await this.propagateIndex(initialIndex, earnerMerkleTree.getRoot());
-
-    // Add the earner account for the vault
-    const { proof } = earnerMerkleTree.getInclusionProof(mVault);
-    await this.addRegistrarEarner(mVault, proof);
+    await this.addMEarner(mVault);
   }
 
   // Helper functions for token operations and checks on the SVM instance
@@ -349,30 +342,48 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   public async createTokenAccount(
     mint: PublicKey,
     owner: PublicKey,
-    use2022: boolean = true
+    use2022: boolean = true,
+    immutableOwner: boolean = false
   ) {
     // We want to create a token account that is not the ATA
     const tokenAccount = new Keypair();
+    const tokenAccountLen =
+      use2022 && immutableOwner
+        ? getAccountLen([ExtensionType.ImmutableOwner])
+        : ACCOUNT_SIZE;
 
-    let tx = new Transaction();
-    tx.add(
+    let ixs: TransactionInstruction[] = [];
+    ixs.push(
       SystemProgram.createAccount({
         fromPubkey: this.admin.publicKey,
         newAccountPubkey: tokenAccount.publicKey,
-        space: ACCOUNT_SIZE,
+        space: tokenAccountLen,
         lamports:
           await this.provider.connection.getMinimumBalanceForRentExemption(
-            ACCOUNT_SIZE
+            tokenAccountLen
           ),
         programId: use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID,
-      }),
+      })
+    );
+    if (use2022 && immutableOwner) {
+      ixs.push(
+        createInitializeImmutableOwnerInstruction(
+          tokenAccount.publicKey,
+          TOKEN_2022_PROGRAM_ID
+        )
+      );
+    }
+    ixs.push(
       createInitializeAccountInstruction(
         tokenAccount.publicKey,
         mint,
         owner,
-        TOKEN_2022_PROGRAM_ID
+        use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
       )
     );
+
+    let tx = new Transaction();
+    tx.add(...ixs);
 
     await this.provider.sendAndConfirm!(tx, [this.admin, tokenAccount]);
 
@@ -986,21 +997,115 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       .rpc();
   }
 
-  public async addRegistrarEarner(earner: PublicKey, proof: ProofElement[]) {
+  async addRegistrarEarner(
+    earner: PublicKey,
+    proof: ProofElement[],
+    earnerTokenAccount?: PublicKey
+  ) {
     // Get the earner ATA
-    const earnerATA = await this.getATA(this.mMint.publicKey, earner);
+    const tokenAccount =
+      earnerTokenAccount ?? (await this.getATA(this.mMint.publicKey, earner));
 
     // Send the instruction
     await this.earn.methods
       .addRegistrarEarner(earner, proof)
       .accountsPartial({
         signer: this.nonAdmin.publicKey,
-        userTokenAccount: earnerATA,
+        userTokenAccount: tokenAccount,
       })
       .signers([this.nonAdmin])
       .rpc();
   }
 
+  async removeRegistrarEarner(
+    earner: PublicKey,
+    proofs: ProofElement[][],
+    neighbors: PublicKey[],
+    earnerTokenAccount?: PublicKey
+  ) {
+    // Get the earner ATA
+    const tokenAccount =
+      earnerTokenAccount ?? (await this.getATA(this.mMint.publicKey, earner));
+    const earnerAccount = this.getMEarnerAccount(tokenAccount);
+
+    // Send the instruction
+    await this.earn.methods
+      .removeRegistrarEarner(proofs, neighbors)
+      .accountsPartial({
+        signer: this.nonAdmin.publicKey,
+        userTokenAccount: tokenAccount,
+        earnerAccount,
+      })
+      .signers([this.nonAdmin])
+      .rpc();
+  }
+
+  public async addMEarner(
+    earner: PublicKey,
+    earnerTokenAccount?: PublicKey
+  ): Promise<PublicKey> {
+    // Check that the earner is not already in the list
+    if (this.mEarnerList.map((e) => e.toBase58()).includes(earner.toBase58())) {
+      throw new Error("Earner already exists in the list");
+    }
+
+    // Add the earner to the list and get the merkle tree
+    this.mEarnerList.push(earner);
+    const earnerMerkleTree = new MerkleTree(this.mEarnerList);
+
+    // Get the current index to reuse
+    const currentIndex = (
+      await this.earn.account.global.fetch(this.getEarnGlobalAccount())
+    ).index;
+
+    // Propagate the merkle root
+    await this.propagateIndex(currentIndex, earnerMerkleTree.getRoot());
+
+    // Create the earner token for the m token
+    const tokenAccount =
+      earnerTokenAccount ?? (await this.getATA(this.mMint.publicKey, earner));
+
+    // Add the earner to the earn program
+    const { proof } = earnerMerkleTree.getInclusionProof(earner);
+    await this.addRegistrarEarner(earner, proof, tokenAccount);
+
+    // Get the earner account address
+    const earnerAccount = this.getMEarnerAccount(tokenAccount);
+
+    return earnerAccount;
+  }
+
+  public async removeMEarner(
+    earner: PublicKey,
+    earnerTokenAccount?: PublicKey
+  ): Promise<void> {
+    // Check that the earner is in the list
+    if (
+      !this.mEarnerList.map((e) => e.toBase58()).includes(earner.toBase58())
+    ) {
+      throw new Error("Earner does not exist in the list");
+    }
+
+    // Remove the earner from the list and get the merkle tree
+    this.mEarnerList = this.mEarnerList.filter((e) => !e.equals(earner));
+    const earnerMerkleTree = new MerkleTree(this.mEarnerList);
+
+    // Get the current index to reuse
+    const currentIndex = (
+      await this.earn.account.global.fetch(this.getEarnGlobalAccount())
+    ).index;
+
+    // Propagate the merkle root
+    await this.propagateIndex(currentIndex, earnerMerkleTree.getRoot());
+
+    // Get the earner token account
+    const tokenAccount =
+      earnerTokenAccount ?? (await this.getATA(this.mMint.publicKey, earner));
+
+    // Remove the earner from the earn program
+    const { proofs, neighbors } = earnerMerkleTree.getExclusionProof(earner);
+    await this.removeRegistrarEarner(earner, proofs, neighbors, tokenAccount);
+  }
   // Helper functions for executing MExt instructions
 
   public async initializeExt(wrapAuthorities: PublicKey[], fee_bps?: BN) {
