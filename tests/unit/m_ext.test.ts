@@ -1530,6 +1530,8 @@ for (const variant of VARIANTS) {
         let fromMTokenAccount: PublicKey;
         let toExtTokenAccount: PublicKey;
 
+        const wrappedAmount = new BN(25_000_000);
+
         beforeEach(async () => {
           fromMTokenAccount = await $.getATA(
             $.mMint.publicKey,
@@ -1539,6 +1541,10 @@ for (const variant of VARIANTS) {
             $.extMint.publicKey,
             $.wrapAuthority.publicKey
           );
+
+          // Wrap some tokens initially so it's not empty
+          await $.mintM($.wrapAuthority.publicKey, wrappedAmount);
+          await $.wrap($.wrapAuthority, wrappedAmount);
         });
 
         describe("index same as start", () => {
@@ -2123,29 +2129,58 @@ for (const variant of VARIANTS) {
             );
             expect(endVaultBalance).toBeGreaterThanOrEqual(extMintSupply);
           });
+        });
 
-          // given there are net inflows into the extension during the distribution cycle
-          // it wraps the amount of tokens at the correct multiplier
-          // it handles yield distribution correctly to existing holders
-          test("Net inflows since last yield distribution - success", async () => {
+        describe("index different from start (sync required) - net inflows", () => {
+          // M Index is strictly increasing
+          let newTime: BN;
+          let newIndex: BN;
+          let weightedVaultBalance: BN;
+
+          beforeEach(async () => {
+            // Reset the blockhash to avoid issues with duplicate transactions from multiple claim cycles
+            $.svm.expireBlockhash();
+
+            // Warp forward to the new timestamp and get the new index
+            const timeIncrement = randomInt(60, 86401);
+            const halfTime = $.currentTime().add(new BN(timeIncrement / 2));
+            newTime = $.currentTime().add(new BN(timeIncrement));
+
+            // Warp forward to half of the new timestamp to simulate inflows
+            $.warp(halfTime, false);
+
             // Cache start vault balance
             const vaultStartBalance = await $.getTokenBalance(
               vaultMTokenAccount
             );
 
             // Wrap additional tokens to create net inflows
-            const inflow = new BN(randomInt(1, mintAmount.toNumber()));
+            const inflow = new BN(randomInt(1000, mintAmount.toNumber()));
             $.mintM($.admin.publicKey, inflow);
             await $.wrap($.admin, inflow);
 
-            // Mint yield to the m vault for the new index
-            // Assume the inflows happened halfway through the cycle
-            await $.mClaimFor(
-              $.getMVault(),
-              vaultStartBalance.add(inflow.div(new BN(2)))
-            );
-            await $.mCompleteClaims();
+            weightedVaultBalance = vaultStartBalance.add(inflow.div(new BN(2)));
 
+            // Warp forward to the new timestamp
+            $.warp(newTime, false);
+            newIndex = $.getCurrentIndex();
+
+            // Propagate the new index
+            await $.propagateIndex(newIndex);
+          });
+
+          // test cases
+          // [X] given yield has not been minted to the m vault for the new index
+          //   [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
+          //   [X] the extension is slightly insolvent due to not receiving yield yet
+          // [X] given yield has been minted to the m vault for the new index
+          //   [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
+          //   [X] the extension is solvent
+
+          // given yield has not been minted to the m vault for the new index
+          // it wraps the amount of M tokens from the user's M token account to the M vault token account
+          // the extension is slightly insolvent due to not receiving yield yet
+          test("Yield not minted for new index - success", async () => {
             // Cache initial balances
             const fromMTokenAccountBalance = await $.getTokenBalance(
               fromMTokenAccount
@@ -2193,56 +2228,37 @@ for (const variant of VARIANTS) {
                   toExtTokenAccount,
                   toExtTokenAccountBalance.add(wrapAmount)
                 );
-          });
-        });
 
-        describe("index different from start (sync required) - net inflows", () => {
-          // M Index is strictly increasing
-          let newTime: BN;
-          let newIndex: BN;
-          let weightedVaultBalance: BN;
-
-          beforeEach(async () => {
-            // Reset the blockhash to avoid issues with duplicate transactions from multiple claim cycles
-            $.svm.expireBlockhash();
-
-            // Warp forward to the new timestamp and get the new index
-            newTime = $.currentTime().add(new BN(randomInt(60, 86401)));
-
-            // Warp forward to half of the new timestamp to simulate inflows
-            $.warp(newTime.div(new BN(2)), false);
-
-            // Cache start vault balance
-            const vaultStartBalance = await $.getTokenBalance(
-              vaultMTokenAccount
+            // Extension should be slightly insolvent from the amount distributed
+            // until it receives inflows
+            const extMintSupply = BigInt(
+              Math.ceil(
+                Number(
+                  await getMint(
+                    $.provider.connection,
+                    $.extMint.publicKey,
+                    undefined,
+                    TOKEN_2022_PROGRAM_ID
+                  ).then((mint) => mint.supply)
+                ) * (await $.getCurrentMultiplier())
+              )
             );
-
-            // Wrap additional tokens to create net inflows
-            const inflow = new BN(randomInt(1, mintAmount.toNumber()));
-            $.mintM($.admin.publicKey, inflow);
-            await $.wrap($.admin, inflow);
-
-            weightedVaultBalance = vaultStartBalance.add(inflow.div(new BN(2)));
-
-            // Warp forward to the new timestamp
-            $.warp(newTime, false);
-            newIndex = $.getCurrentIndex();
-
-            // Propagate the new index
-            await $.propagateIndex(newIndex);
+            const endVaultBalance = BigInt(
+              (await $.getTokenBalance(vaultMTokenAccount)).toString()
+            );
+            expect(endVaultBalance).toBeLessThanOrEqual(extMintSupply);
+            expect(endVaultBalance).toBeGreaterThan(
+              (extMintSupply * 9999n) / 10000n
+            ); // Allow for slight insolvency
           });
 
-          // test cases
-          // [X] given yield has not been minted to the m vault for the new index
-          //   [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
-          //   [ ] the extension is solvent
-          // [X] given yield has been minted to the m vault for the new index
-          //   [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
-          //   [ ] the extension is solvent
-
-          // given yield has not been minted to the m vault for the new index
+          // given yield has been minted to the m vault for the new index
           // it wraps the amount of M tokens from the user's M token account to the M vault token account
-          test("Yield not minted for new index - success", async () => {
+          test("Wrap with new index - success", async () => {
+            // Mint yield to the m vault for the new index
+            await $.mClaimFor($.getMVault(), weightedVaultBalance);
+            await $.mCompleteClaims();
+
             // Cache initial balances
             const fromMTokenAccountBalance = await $.getTokenBalance(
               fromMTokenAccount
@@ -2307,9 +2323,130 @@ for (const variant of VARIANTS) {
             const endVaultBalance = BigInt(
               (await $.getTokenBalance(vaultMTokenAccount)).toString()
             );
-            console.log("End Vault Balance:", endVaultBalance.toString());
-            console.log("Ext Mint Supply (UI):", extMintSupply.toString());
             expect(endVaultBalance).toBeGreaterThanOrEqual(extMintSupply);
+          });
+        });
+
+        describe("index different from start (sync required) - net outflows", () => {
+          // M Index is strictly increasing
+          let newTime: BN;
+          let newIndex: BN;
+          let weightedVaultBalance: BN;
+
+          beforeEach(async () => {
+            // Reset the blockhash to avoid issues with duplicate transactions from multiple claim cycles
+            $.svm.expireBlockhash();
+
+            // Warp forward to the new timestamp and get the new index
+            const timeIncrement = randomInt(60, 86401);
+            const halfTime = $.currentTime().add(new BN(timeIncrement / 2));
+            newTime = $.currentTime().add(new BN(timeIncrement));
+
+            // Warp forward to half of the new timestamp to simulate inflows
+            $.warp(halfTime, false);
+
+            // Cache start vault balance
+            const vaultStartBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+
+            // Wrap additional tokens to create net inflows
+            const outflow = new BN(randomInt(1000, wrappedAmount.toNumber()));
+            await $.unwrap($.wrapAuthority, outflow);
+
+            weightedVaultBalance = vaultStartBalance.sub(
+              outflow.div(new BN(2))
+            );
+
+            // Warp forward to the new timestamp
+            $.warp(newTime, false);
+            newIndex = $.getCurrentIndex();
+
+            // Propagate the new index
+            await $.propagateIndex(newIndex);
+          });
+
+          // test cases
+          // [X] given yield has not been minted to the m vault for the new index
+          //   [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
+          //   [X] the extension is slightly insolvent due to not receiving yield yet
+          // [X] given yield has been minted to the m vault for the new index
+          //   [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
+          //   [X] the extension is solvent
+
+          // given yield has not been minted to the m vault for the new index
+          // it wraps the amount of M tokens from the user's M token account to the M vault token account
+          // the extension is slightly insolvent due to not receiving yield yet
+          test("Yield not minted for new index - success", async () => {
+            // Cache initial balances
+            const fromMTokenAccountBalance = await $.getTokenBalance(
+              fromMTokenAccount
+            );
+            const vaultMTokenAccountBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+            const toExtTokenAccountBalance =
+              variant === Variant.InterestBearingToken
+                ? await $.getTokenUiBalance(toExtTokenAccount)
+                : await $.getTokenBalance(toExtTokenAccount);
+
+            const wrapAmount = new BN(
+              randomInt(1, fromMTokenAccountBalance.toNumber() + 1)
+            );
+
+            // Send the instruction
+            await $.ext.methods
+              .wrap(wrapAmount)
+              .accounts({
+                signer: $.wrapAuthority.publicKey,
+                fromMTokenAccount,
+                toExtTokenAccount,
+              })
+              .signers([$.wrapAuthority])
+              .rpc();
+
+            // Confirm updated balances
+            await $.expectTokenBalance(
+              fromMTokenAccount,
+              fromMTokenAccountBalance.sub(wrapAmount)
+            );
+            await $.expectTokenBalance(
+              vaultMTokenAccount,
+              vaultMTokenAccountBalance.add(wrapAmount)
+            );
+            variant === Variant.InterestBearingToken
+              ? await $.expectTokenUiBalance(
+                  toExtTokenAccount,
+                  toExtTokenAccountBalance.add(wrapAmount),
+                  Comparison.LessThanOrEqual,
+                  new BN(2)
+                )
+              : await $.expectTokenBalance(
+                  toExtTokenAccount,
+                  toExtTokenAccountBalance.add(wrapAmount)
+                );
+
+            // Extension should be slightly insolvent from the amount distributed
+            // until it receives inflows
+            const extMintSupply = BigInt(
+              Math.ceil(
+                Number(
+                  await getMint(
+                    $.provider.connection,
+                    $.extMint.publicKey,
+                    undefined,
+                    TOKEN_2022_PROGRAM_ID
+                  ).then((mint) => mint.supply)
+                ) * (await $.getCurrentMultiplier())
+              )
+            );
+            const endVaultBalance = BigInt(
+              (await $.getTokenBalance(vaultMTokenAccount)).toString()
+            );
+            expect(endVaultBalance).toBeLessThanOrEqual(extMintSupply);
+            expect(endVaultBalance).toBeGreaterThan(
+              (extMintSupply * 9999n) / 10000n
+            ); // Allow for slight insolvency
           });
 
           // given yield has been minted to the m vault for the new index
