@@ -1,6 +1,6 @@
 # Solana M Extension Programs
 
-The program (`m_ext`) in this repository implements different version of an "M Extension", which is a stablecoin backed by $M. The versions have a shared codebase for the majority of the code and use Rust feature flags to implement version-specific logic. The program relies on the underlying yield distribution of the $M token on Solana, which can be found in the [solana-m repository](https://github.com/m0-foundation/solana-m).
+The program (`m_ext`) in this repository implements different versions of an "M Extension", which is a stablecoin backed by $M. The versions have a shared codebase for the majority of the code and use Rust feature flags to implement version-specific logic. The program relies on the underlying yield distribution of the $M token on Solana, which can be found in the [solana-m repository](https://github.com/m0-foundation/solana-m).
 
 ## Extensions
 
