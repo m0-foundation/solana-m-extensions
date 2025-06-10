@@ -19,18 +19,21 @@ import {
   Transaction,
 } from "@solana/web3.js";
 import { fromWorkspace, LiteSVMProvider } from "anchor-litesvm";
-import { PROGRAM_ID as EARN_PROGRAM_ID } from "@m0-foundation/solana-m-sdk";
+import {
+  PROGRAM_ID as EARN_PROGRAM_ID,
+  MerkleTree,
+} from "@m0-foundation/solana-m-sdk";
 import { Earn } from "../../tests/programs/earn";
 import EARN from "../../tests/programs/earn.json";
 import EXT_SWAP from "../../target/idl/ext_swap.json";
-import M_EXT from "../../target/idl/m_ext.json";
+import M_EXT from "../../target/idl/scaled_ui.json";
 import { BN, Program } from "@coral-xyz/anchor";
 import { ExtSwap } from "../../target/types/ext_swap";
 import { TransactionMetadata } from "litesvm";
-import { MExt } from "../../target/types/m_ext";
+import { MExt } from "../../target/types/scaled_ui";
 
 describe("extension swap tests", () => {
-  const [
+  const {
     admin,
     swapper,
     mMint,
@@ -41,18 +44,7 @@ describe("extension swap tests", () => {
     multisig,
     extProgramC,
     mintC,
-  ] = loadKeypairs(
-    "6iMOkgS4ZAfVxUWOdzo8y+MDoRLfuX4oPbzQf8D2RuigU2i7DwWQ+x304o+/2aa0K695awmnbv1JfL+WWnDcPQ==", // BnqzwtopjSGB9nHfMFYEa5p1kgeDBthfRP8yiLW9U7Kz  admin
-    "WmvqEmS7IwLjuBIMML4UY6d+VND9BnbG7B7Z4coApDdwumn5E6LBAS07RctOhxM5FXNEOizdNGuQwabX3Y/88w==", // 8b3XbqeN3VrrNH3u1WvjK5BasW5hKWKVpDGz5tsq5CbL  swapper
-    "VIC7l0xRw067AiX75WtZ2ehN3+1wIpGmH6gWvS4jvx+8LhpnI+sGHFi+6tair18K2nd6yr2IR97C5qZZYkkl5A==", // DfaRRLLVGYpfu33QdGHGLNKv2G4MyyMbmvGVpLQgFeeF  mMint
-    "XVFfL68OjRO5g+DZxbQHXVqEtoU976BAS6y5RP905ZIorgcghvm5mrP60XsmiUAp4aSIBadFzWUK/bbBmqweYA==", // 3joDhmLtHLrSBGfeAe1xQiv3gjikes3x8S4N3o6Ld8zB  extProgramA
-    "1y1p2+YND+xDi/CbPGRN7fiE08xzoD9Fd2vsLvH9r930OgOUua+nXoCRzIl9SRyiM5GyHki7EtaTGXT8mi3qmg==", // HSMnbWEkB7sEQAGSzBPeACNUCXC9FgNeeESLnHtKfoy3  extProgramB
-    "UeJL1Qx6czzbwDTUjOHjKLJ7Ao4XJUGXlDC5vkbPC+znwQmrzy6AxwYGUH2VX4vVZHX8DQAq/sWauL1ucUZUaA==", // GbfuJZa4zLNgxHCrXNTXzVZ3CPUCe5RYWPBq9bU9qekP  mintA
-    "XmidpDRbKR+D56M2trCoiPRzi1yxKy8aUnO+p3PuLxA8hz59ZTmu51Bn9qFsZHxaIWi1tCUd5ibpOj4pBKqTVA==", // 55H5CfmBxyaYnUhXxbToqT3FWhKMWmBJFrbd3WfuFy9u  mintB
-    "CXioALq/oVhI/8QWp7AphKgZiJB1haG5kPomzHJ+n2jYMMYbLiWQ5knEMn9iu3T+5rn/YEs+M78sq5vOSwISWA==", // FYvCWxAdFQYyJJPSXNKv2dzsdKq98EwmdRiu6rpY65gT  multisig
-    "YPIMBm2ykzl4I7GHdQyWqKwR9RJjiwNhDyOyWTHBjqdoLoa322EZkMKDzwDeycwd0vq3KrIs1ga19ecjWSJS0g==", // 81gYpXqg8ZT9gdkFSe35eqiitqBWqVfYwDwVfXuk8Xfw  extProgramC
-    "m+OGOQSbwMu+Io83qHWOFdPZsWxnFhaz0zwzFS6C0TDvIpUrxJFh8CBFOCAHmTJpK+I/1Zv1FOeqsykz2BPgDA==" //  H6V2ShFqjRaHyewiqaHN6E6ok1XRH2xv4Zwy3JpL8Cxb  mintC
-  );
+  } = loadKeypairs();
 
   const svm = fromWorkspace("").withSplPrograms();
   svm.airdrop(admin.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
@@ -215,13 +207,64 @@ describe("extension swap tests", () => {
           .transaction(),
         [admin]
       );
+
+      const getVault = (p: PublicKey) =>
+        PublicKey.findProgramAddressSync([Buffer.from("m_vault")], p)[0];
+
+      // Add all vaults as earners
+      const earnerMerkleTree = new MerkleTree([
+        getVault(extensionA.programId),
+        getVault(extensionB.programId),
+        getVault(extensionC.programId),
+      ]);
+
+      await earn.methods
+        .propagateIndex(new BN(1_000_000_000_001), earnerMerkleTree.getRoot())
+        .accountsPartial({
+          mint: mMint.publicKey,
+        })
+        .rpc();
+
+      for (const p of [extensionA, extensionB, extensionC]) {
+        const vault = getVault(p.programId);
+
+        const ata = await getAssociatedTokenAddressSync(
+          mMint.publicKey,
+          vault,
+          true,
+          TOKEN_2022_PROGRAM_ID
+        );
+
+        // Create ata
+        await sendTransaction(
+          new Transaction().add(
+            createAssociatedTokenAccountInstruction(
+              admin.publicKey,
+              ata,
+              vault,
+              mMint.publicKey,
+              TOKEN_2022_PROGRAM_ID
+            )
+          ),
+          [admin]
+        );
+
+        // Create earner account
+        const { proof } = earnerMerkleTree.getInclusionProof(vault);
+        await earn.methods
+          .addRegistrarEarner(vault, proof)
+          .accounts({
+            userTokenAccount: ata,
+          })
+          .rpc();
+      }
     });
     it("initialize extension programs", async () => {
       for (const [i, p] of [extensionA, extensionB, extensionC].entries()) {
         await sendTransaction(
           p.methods
             .initialize([], new BN(0))
-            .accountsPartial({
+            .accounts({
               mMint: mMint.publicKey,
               extMint: [mintA, mintB, mintC][i].publicKey,
             })
@@ -654,10 +697,6 @@ describe("extension swap tests", () => {
   });
 });
 
-function loadKeypairs(...keys: string[]): Keypair[] {
-  return keys.map((k) => Keypair.fromSecretKey(Buffer.from(k, "base64")));
-}
-
 async function buildMintTxn(
   connection: Connection,
   creator: PublicKey,
@@ -696,4 +735,51 @@ async function buildMintTxn(
   let tx = new Transaction();
   tx.add(createMintAccount, initializeScaledUiAmountConfig, initializeMint);
   return tx;
+}
+
+function loadKeypairs() {
+  const key = (k: string) => Keypair.fromSecretKey(Buffer.from(k, "base64"));
+
+  return {
+    admin: key(
+      // BnqzwtopjSGB9nHfMFYEa5p1kgeDBthfRP8yiLW9U7Kz
+      "6iMOkgS4ZAfVxUWOdzo8y+MDoRLfuX4oPbzQf8D2RuigU2i7DwWQ+x304o+/2aa0K695awmnbv1JfL+WWnDcPQ=="
+    ),
+    swapper: key(
+      // 8b3XbqeN3VrrNH3u1WvjK5BasW5hKWKVpDGz5tsq5CbL
+      "WmvqEmS7IwLjuBIMML4UY6d+VND9BnbG7B7Z4coApDdwumn5E6LBAS07RctOhxM5FXNEOizdNGuQwabX3Y/88w=="
+    ),
+    mMint: key(
+      // DfaRRLLVGYpfu33QdGHGLNKv2G4MyyMbmvGVpLQgFeeF
+      "VIC7l0xRw067AiX75WtZ2ehN3+1wIpGmH6gWvS4jvx+8LhpnI+sGHFi+6tair18K2nd6yr2IR97C5qZZYkkl5A=="
+    ),
+    extProgramA: key(
+      // 3joDhmLtHLrSBGfeAe1xQiv3gjikes3x8S4N3o6Ld8zB
+      "XVFfL68OjRO5g+DZxbQHXVqEtoU976BAS6y5RP905ZIorgcghvm5mrP60XsmiUAp4aSIBadFzWUK/bbBmqweYA=="
+    ),
+    extProgramB: key(
+      // HSMnbWEkB7sEQAGSzBPeACNUCXC9FgNeeESLnHtKfoy3
+      "1y1p2+YND+xDi/CbPGRN7fiE08xzoD9Fd2vsLvH9r930OgOUua+nXoCRzIl9SRyiM5GyHki7EtaTGXT8mi3qmg=="
+    ),
+    mintA: key(
+      // GbfuJZa4zLNgxHCrXNTXzVZ3CPUCe5RYWPBq9bU9qekP
+      "UeJL1Qx6czzbwDTUjOHjKLJ7Ao4XJUGXlDC5vkbPC+znwQmrzy6AxwYGUH2VX4vVZHX8DQAq/sWauL1ucUZUaA=="
+    ),
+    mintB: key(
+      // 55H5CfmBxyaYnUhXxbToqT3FWhKMWmBJFrbd3WfuFy9u
+      "XmidpDRbKR+D56M2trCoiPRzi1yxKy8aUnO+p3PuLxA8hz59ZTmu51Bn9qFsZHxaIWi1tCUd5ibpOj4pBKqTVA=="
+    ),
+    multisig: key(
+      // FYvCWxAdFQYyJJPSXNKv2dzsdKq98EwmdRiu6rpY65gT
+      "CXioALq/oVhI/8QWp7AphKgZiJB1haG5kPomzHJ+n2jYMMYbLiWQ5knEMn9iu3T+5rn/YEs+M78sq5vOSwISWA=="
+    ),
+    extProgramC: key(
+      // 81gYpXqg8ZT9gdkFSe35eqiitqBWqVfYwDwVfXuk8Xfw
+      "YPIMBm2ykzl4I7GHdQyWqKwR9RJjiwNhDyOyWTHBjqdoLoa322EZkMKDzwDeycwd0vq3KrIs1ga19ecjWSJS0g=="
+    ),
+    mintC: key(
+      //  H6V2ShFqjRaHyewiqaHN6E6ok1XRH2xv4Zwy3JpL8Cxb
+      "m+OGOQSbwMu+Io83qHWOFdPZsWxnFhaz0zwzFS6C0TDvIpUrxJFh8CBFOCAHmTJpK+I/1Zv1FOeqsykz2BPgDA=="
+    ),
+  };
 }
