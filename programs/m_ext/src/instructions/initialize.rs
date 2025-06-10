@@ -18,13 +18,10 @@ use crate::{
 cfg_if! {
     if #[cfg(feature = "scaled-ui")] {
         use anchor_spl::token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey;
-        use spl_token_2022::extension::{
-            scaled_ui_amount::ScaledUiAmountConfig, BaseStateWithExtensions, ExtensionType,
-            StateWithExtensions,
-        };
+        use spl_token_2022::extension::ExtensionType;
         use crate::{
             constants::{INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
-            utils::conversion::sync_multiplier,
+            utils::conversion::{sync_multiplier, get_mint_extensions, get_scaled_ui_config},
         };
     }
 }
@@ -127,22 +124,15 @@ impl Initialize<'_> {
             if #[cfg(feature = "scaled-ui")] {
                 // Validate that the ext mint has the ScaledUiAmount extension and
                 // that the ext mint authority is the extension authority
-                {
-                    // explicit scope to drop the borrow at the end of the code block
-                    let ext_account_info = &self.ext_mint.to_account_info();
-                    let ext_data = ext_account_info.try_borrow_data()?;
-                    let ext_mint_data =
-                        StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&ext_data)?;
-                    let extensions = ext_mint_data.get_extension_types()?;
+                let extensions = get_mint_extensions(&self.ext_mint)?;
 
-                    if !extensions.contains(&ExtensionType::ScaledUiAmount) {
-                        return err!(ExtError::InvalidMint);
-                    }
+                if !extensions.contains(&ExtensionType::ScaledUiAmount) {
+                    return err!(ExtError::InvalidMint);
+                }
 
-                    let scaled_ui_config = ext_mint_data.get_extension::<ScaledUiAmountConfig>()?;
-                    if scaled_ui_config.authority != OptionalNonZeroPubkey(ext_mint_authority) {
-                        return err!(ExtError::InvalidMint);
-                    }
+                let scaled_ui_config = get_scaled_ui_config(&self.ext_mint)?;
+                if scaled_ui_config.authority != OptionalNonZeroPubkey(ext_mint_authority) {
+                    return err!(ExtError::InvalidMint);
                 }
 
                 // Validate the fee_bps is within the allowed range
