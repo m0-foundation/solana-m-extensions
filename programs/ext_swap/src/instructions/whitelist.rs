@@ -15,7 +15,7 @@ pub struct WhitelistExt<'info> {
         seeds = [GLOBAL_SEED],
         bump = swap_global.bump,
         realloc = SwapGlobal::size(
-            swap_global.whitelisted_unwrappers.len(), 
+            swap_global.whitelisted_unwrappers.len(),
             swap_global.whitelisted_extensions.len() + 1,
         ),
         realloc::payer = admin,
@@ -60,7 +60,7 @@ pub struct WhitelistUnwrapper<'info> {
         seeds = [GLOBAL_SEED],
         bump = swap_global.bump,
         realloc = SwapGlobal::size(
-            swap_global.whitelisted_unwrappers.len() + 1, 
+            swap_global.whitelisted_unwrappers.len() + 1,
             swap_global.whitelisted_extensions.len() ,
         ),
         realloc::payer = admin,
@@ -73,11 +73,7 @@ pub struct WhitelistUnwrapper<'info> {
 
 impl WhitelistUnwrapper<'_> {
     fn validate(&self, authority: &Pubkey) -> Result<()> {
-        if self
-            .swap_global
-            .whitelisted_unwrappers
-            .contains(authority)
-        {
+        if self.swap_global.whitelisted_unwrappers.contains(authority) {
             return err!(SwapError::AlreadyWhitelisted);
         }
 
@@ -151,11 +147,7 @@ pub struct RemoveWhitelistedUnwrapper<'info> {
 
 impl RemoveWhitelistedUnwrapper<'_> {
     fn validate(&self, authority: &Pubkey) -> Result<()> {
-        if !self
-            .swap_global
-            .whitelisted_unwrappers
-            .contains(authority)
-        {
+        if !self.swap_global.whitelisted_unwrappers.contains(authority) {
             return err!(SwapError::InvalidExtension);
         }
 

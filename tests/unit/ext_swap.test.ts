@@ -661,7 +661,7 @@ describe("extension swap tests", () => {
           ])
           .transaction(),
         [swapper],
-        /Error Message: A seeds constraint was violated/
+        /Error Message: Program ID was not as expected/
       );
     });
 
@@ -682,10 +682,7 @@ describe("extension swap tests", () => {
           })
           .remainingAccounts([
             {
-              pubkey: PublicKey.findProgramAddressSync(
-                [Buffer.from("extra_account")],
-                extensionC.programId
-              )[0],
+              pubkey: TOKEN_2022_PROGRAM_ID,
               isSigner: false,
               isWritable: false,
             },

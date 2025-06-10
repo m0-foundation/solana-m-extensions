@@ -25,7 +25,10 @@ build-test-programs:
 	anchor build -p m_ext 
 	@mv target/deploy/m_ext.so tests/programs/ext_b.so
 	$(call update-program-id,81gYpXqg8ZT9gdkFSe35eqiitqBWqVfYwDwVfXuk8Xfw)
-	anchor build -p m_ext 
+	sed -i '' '/pub ext_token_program: Program<'\''info, Token2022>,/a\'$$'\n''\ pub dummy_account: Program<'\''info, Token2022>,' programs/m_ext/src/instructions/wrap.rs
+	cargo fmt
+	anchor build -p m_ext --skip-lint
 	@mv target/deploy/m_ext.so tests/programs/ext_c.so
+	sed -i '' '/pub dummy_account: Program<'\''info, Token2022>,/d' programs/m_ext/src/instructions/wrap.rs
 	$(call update-program-id,3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da)
 	anchor build -p m_ext
