@@ -9,4 +9,5 @@ build-programs:
 	@mv target/types/m_ext.ts target/types/no_yield.ts
 
 test-programs:
-	@yarn run jest --preset ts-jest --verbose
+	@yarn run jest --preset ts-jest --verbose tests/unit/m_ext.test.ts
+	@cargo test

@@ -5,32 +5,32 @@ use anchor_spl::{
     token_interface::{Mint, Token2022, TokenAccount},
 };
 use cfg_if::cfg_if;
-
-#[cfg(feature = "scaled-ui")]
-use anchor_spl::token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey;
-#[cfg(feature = "scaled-ui")]
-use spl_token_2022::extension::{
-    scaled_ui_amount::ScaledUiAmountConfig, BaseStateWithExtensions, ExtensionType,
-    StateWithExtensions,
+use earn::{
+    state::{Earner, Global as EarnGlobal, EARNER_SEED, GLOBAL_SEED as EARN_GLOBAL_SEED},
+    ID as EARN_PROGRAM,
 };
 
 // local dependencies
-#[cfg(feature = "scaled-ui")]
-use crate::{
-    constants::{INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
-    utils::conversion::sync_multiplier,
-};
-
 use crate::{
     constants::ANCHOR_DISCRIMINATOR_SIZE,
     errors::ExtError,
     state::{ExtGlobal, YieldConfig, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
 };
 
-use earn::{
-    state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
-    ID as EARN_PROGRAM,
-};
+// conditional dependencies
+cfg_if! {
+    if #[cfg(feature = "scaled-ui")] {
+        use anchor_spl::token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey;
+        use spl_token_2022::extension::{
+            scaled_ui_amount::ScaledUiAmountConfig, BaseStateWithExtensions, ExtensionType,
+            StateWithExtensions,
+        };
+        use crate::{
+            constants::{INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
+            utils::conversion::sync_multiplier,
+        };
+    }
+}
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
@@ -90,6 +90,13 @@ pub struct Initialize<'info> {
     )]
     pub m_earn_global_account: Account<'info, EarnGlobal>,
 
+    #[account(
+        seeds = [EARNER_SEED, vault_m_token_account.key().as_ref()],
+        seeds::program = EARN_PROGRAM,
+        bump = m_earner_account.bump,
+    )]
+    pub m_earner_account: Account<'info, Earner>,
+
     pub m_token_program: Program<'info, Token2022>, // we have duplicate entries for the token2022 program bc the M token program could change in the future
 
     pub ext_token_program: Program<'info, Token2022>,
@@ -110,6 +117,11 @@ impl Initialize<'_> {
         // Validate the ext_mint_authority PDA is the mint authority for the ext mint
         let ext_mint_authority = self.ext_mint_authority.key();
         if self.ext_mint.mint_authority.unwrap_or_default() != ext_mint_authority {
+            return err!(ExtError::InvalidMint);
+        }
+
+        // Validate that the ext mint has a freeze authority
+        if self.ext_mint.freeze_authority.is_none() {
             return err!(ExtError::InvalidMint);
         }
 
@@ -198,7 +210,7 @@ impl Initialize<'_> {
         sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
-            &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.m_earner_account,
             &ctx.accounts.vault_m_token_account,
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
