@@ -670,6 +670,22 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     return new BN(uiBalance.toString());
   }
 
+  public async getTokenSupply(mint: PublicKey) {
+    const mintInfo = await getMint(
+      this.provider.connection,
+      mint,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
+    if (!mintInfo) {
+      throw new Error("Mint not found");
+    }
+
+    return new BN(
+      Math.floor(Number(mintInfo.supply) * (await this.getCurrentMultiplier()))
+    );
+  }
+
   public async approve(
     source: Keypair,
     delegate: PublicKey,
@@ -916,6 +932,21 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       return key;
     });
   };
+
+  public async expectExtSolvent() {
+    const extSupply = await this.getTokenSupply(this.extMint.publicKey);
+    const mVaultBalance = await this.getTokenBalance(
+      await this.getATA(this.mMint.publicKey, this.getMVault())
+    );
+
+    this.variant === Variant.ScaledUiAmount
+      ? expect(BigInt(mVaultBalance.toString())).toBeGreaterThan(
+          BigInt(extSupply.sub(BN.min(new BN(2), extSupply)).toString())
+        ) // allow for a rounding error of 2 for scaled ui due to precision issues
+      : expect(BigInt(mVaultBalance.toString())).toBeGreaterThanOrEqual(
+          BigInt(extSupply.toString())
+        );
+  }
 
   padKeyArray = (array: PublicKey[], desiredLen: number) => {
     const currentLen = array.length;

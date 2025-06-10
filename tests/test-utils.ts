@@ -2,8 +2,6 @@ import { struct, u8, f64 } from "@solana/buffer-layout";
 import { publicKey, u64 } from "@solana/buffer-layout-utils";
 import { PublicKey } from "@solana/web3.js";
 
-// TODO this file is currently a catch-all for random things I didn't want in the test harness file
-
 // Byte utilities
 export function toFixedSizedArray(buffer: Buffer, size: number): number[] {
   const array = new Array(size).fill(0);

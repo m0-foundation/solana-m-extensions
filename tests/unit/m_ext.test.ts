@@ -1488,7 +1488,7 @@ for (const variant of VARIANTS) {
 
     describe("wrap_authority instruction tests", () => {
       const mintAmount = new BN(100_000_000); // 100 with 6 decimals
-      const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
+      const initialWrappedAmount = new BN(100_000_000); // 100 with 6 decimals
 
       let wrapAuthorities: PublicKey[];
       const feeBps = new BN(randomInt(10000));
@@ -1999,66 +1999,476 @@ for (const variant of VARIANTS) {
           });
 
           // test cases
-          // [X] given yield has been minted to the m vault for the new index
-          //   [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
+          // [x] given the user has no ext tokens to start with
+          //   [X] given no flows before the yield is distributed
+          //     [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
+          //     [X] the user receives the correct amount of ext tokens
+          //     [X] the extension is solvent
+          //   [X] given there are net inflows before the yield is distributed
+          //     [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
+          //     [X] the user receives the correct amount of ext tokens
+          //     [X] the extension is solvent
+          //   [X] given there are net outflows before the yield is distributed
+          //     [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
+          //     [X] the user receives the correct amount of ext tokens
+          //     [X] the extension is solvent
+          // [X] given the user has ext tokens to start with
+          //   [X] given no flows before the yield is distributed
+          //     [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
+          //     [X] it adjusts the user's existing balance for the new index and then adds the wrap amount
+          //     [X] the extension is solvent
+          //   [X] given there are net inflows before the yield is distributed
+          //     [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
+          //     [X] it adjusts the user's existing balance for the new index and then adds the wrap amount
+          //     [X] the extension is solvent
+          //   [X] given there are net outflows before the yield is distributed
+          //     [X] it wraps the amount of M tokens from the user's M token account to the M vault token account
+          //     [X] it adjusts the user's existing balance for the new index and then adds the wrap amount
+          //     [X] the extension is solvent
 
-          // given yield has been minted to the m vault for the new index
-          // it wraps the amount of M tokens from the user's M token account to the M vault token account
-          test("Wrap with new index - success", async () => {
-            // Mint yield to the m vault for the new index
-            await $.mClaimFor(
-              $.getMVault(),
-              await $.getTokenBalance(vaultMTokenAccount)
-            );
-            await $.mCompleteClaims();
+          describe("user has no starting balance", () => {
+            // given no flows before the yield is distributed
+            // it wraps the amount of M tokens from the user's M token account to the M vault token account
+            // the extension is solvent
+            test("Wrap with new index - no flows - success", async () => {
+              // Mint yield to the m vault for the new index
+              await $.mClaimFor(
+                $.getMVault(),
+                await $.getTokenBalance(vaultMTokenAccount)
+              );
+              await $.mCompleteClaims();
 
-            // Cache initial balances
-            const fromMTokenAccountBalance = await $.getTokenBalance(
-              fromMTokenAccount
-            );
-            const vaultMTokenAccountBalance = await $.getTokenBalance(
-              vaultMTokenAccount
-            );
-            const toExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
-                ? await $.getTokenUiBalance(toExtTokenAccount)
-                : await $.getTokenBalance(toExtTokenAccount);
+              // Cache initial balances
+              const fromMTokenAccountBalance = await $.getTokenBalance(
+                fromMTokenAccount
+              );
+              const vaultMTokenAccountBalance = await $.getTokenBalance(
+                vaultMTokenAccount
+              );
+              const toExtTokenAccountBalance =
+                variant === Variant.ScaledUiAmount
+                  ? await $.getTokenUiBalance(toExtTokenAccount)
+                  : await $.getTokenBalance(toExtTokenAccount);
 
-            const wrapAmount = new BN(
-              randomInt(1, fromMTokenAccountBalance.toNumber() + 1)
-            );
+              const wrapAmount = new BN(
+                randomInt(1, fromMTokenAccountBalance.toNumber() + 1)
+              );
 
-            // Send the instruction
-            await $.ext.methods
-              .wrap(wrapAmount)
-              .accounts({
-                signer: $.wrapAuthority.publicKey,
+              // Send the instruction
+              await $.ext.methods
+                .wrap(wrapAmount)
+                .accounts({
+                  signer: $.wrapAuthority.publicKey,
+                  fromMTokenAccount,
+                  toExtTokenAccount,
+                })
+                .signers([$.wrapAuthority])
+                .rpc();
+
+              // Confirm updated balances
+              await $.expectTokenBalance(
                 fromMTokenAccount,
-                toExtTokenAccount,
-              })
-              .signers([$.wrapAuthority])
-              .rpc();
+                fromMTokenAccountBalance.sub(wrapAmount)
+              );
+              await $.expectTokenBalance(
+                vaultMTokenAccount,
+                vaultMTokenAccountBalance.add(wrapAmount)
+              );
+              variant === Variant.ScaledUiAmount
+                ? await $.expectTokenUiBalance(
+                    toExtTokenAccount,
+                    toExtTokenAccountBalance.add(wrapAmount),
+                    Comparison.LessThanOrEqual,
+                    new BN(2)
+                  )
+                : await $.expectTokenBalance(
+                    toExtTokenAccount,
+                    toExtTokenAccountBalance.add(wrapAmount)
+                  );
 
-            // Confirm updated balances
-            await $.expectTokenBalance(
-              fromMTokenAccount,
-              fromMTokenAccountBalance.sub(wrapAmount)
-            );
-            await $.expectTokenBalance(
-              vaultMTokenAccount,
-              vaultMTokenAccountBalance.add(wrapAmount)
-            );
-            variant === Variant.ScaledUiAmount
-              ? await $.expectTokenUiBalance(
+              // Confirm the extension is solvent
+              await $.expectExtSolvent();
+            });
+
+            // given the extension has net inflows before the yield is distributed
+            // it wraps the amount of M tokens from the user's M token account to the M vault token account
+            // the extension is solvent
+            test("Wrap - extension has inflows - success", async () => {
+              // Mint and wrap additional tokens prior to claim
+              const inflows = new BN(randomInt(100, mintAmount.toNumber() + 1));
+              await $.mintM($.admin.publicKey, inflows);
+              await $.wrap($.admin, inflows);
+
+              // Mint yield to the m vault for the new index
+              await $.mClaimFor(
+                $.getMVault(),
+                await $.getTokenBalance(vaultMTokenAccount)
+              );
+              await $.mCompleteClaims();
+
+              // Cache initial balances
+              const fromMTokenAccountBalance = await $.getTokenBalance(
+                fromMTokenAccount
+              );
+              const vaultMTokenAccountBalance = await $.getTokenBalance(
+                vaultMTokenAccount
+              );
+              const toExtTokenAccountBalance =
+                variant === Variant.ScaledUiAmount
+                  ? await $.getTokenUiBalance(toExtTokenAccount)
+                  : await $.getTokenBalance(toExtTokenAccount);
+
+              const wrapAmount = new BN(
+                randomInt(1, fromMTokenAccountBalance.toNumber() + 1)
+              );
+
+              // Send the instruction
+              await $.ext.methods
+                .wrap(wrapAmount)
+                .accounts({
+                  signer: $.wrapAuthority.publicKey,
+                  fromMTokenAccount,
                   toExtTokenAccount,
-                  toExtTokenAccountBalance.add(wrapAmount),
-                  Comparison.LessThanOrEqual,
-                  new BN(2)
-                )
-              : await $.expectTokenBalance(
+                })
+                .signers([$.wrapAuthority])
+                .rpc();
+
+              // Confirm updated balances
+              await $.expectTokenBalance(
+                fromMTokenAccount,
+                fromMTokenAccountBalance.sub(wrapAmount)
+              );
+              await $.expectTokenBalance(
+                vaultMTokenAccount,
+                vaultMTokenAccountBalance.add(wrapAmount)
+              );
+              variant === Variant.ScaledUiAmount
+                ? await $.expectTokenUiBalance(
+                    toExtTokenAccount,
+                    toExtTokenAccountBalance.add(wrapAmount),
+                    Comparison.LessThanOrEqual,
+                    new BN(2)
+                  )
+                : await $.expectTokenBalance(
+                    toExtTokenAccount,
+                    toExtTokenAccountBalance.add(wrapAmount)
+                  );
+              // Confirm the extension is solvent
+              await $.expectExtSolvent();
+            });
+
+            // given the extension has net outflows before the yield is distributed
+            // it wraps the amount of M tokens from the user's M token account to the M vault token account
+            // the extension is solvent
+            test("Wrap - extension has outflows - success", async () => {
+              // Mint and wrap additional tokens
+              const outflows = new BN(
+                randomInt(100, initialWrappedAmount.toNumber() + 1)
+              );
+              await $.unwrap($.admin, outflows);
+
+              // Mint yield to the m vault for the new index
+              await $.mClaimFor(
+                $.getMVault(),
+                await $.getTokenBalance(vaultMTokenAccount)
+              );
+              await $.mCompleteClaims();
+
+              // Cache initial balances
+              const fromMTokenAccountBalance = await $.getTokenBalance(
+                fromMTokenAccount
+              );
+              const vaultMTokenAccountBalance = await $.getTokenBalance(
+                vaultMTokenAccount
+              );
+              const toExtTokenAccountBalance =
+                variant === Variant.ScaledUiAmount
+                  ? await $.getTokenUiBalance(toExtTokenAccount)
+                  : await $.getTokenBalance(toExtTokenAccount);
+
+              const wrapAmount = new BN(
+                randomInt(1, fromMTokenAccountBalance.toNumber() + 1)
+              );
+
+              // Send the instruction
+              await $.ext.methods
+                .wrap(wrapAmount)
+                .accounts({
+                  signer: $.wrapAuthority.publicKey,
+                  fromMTokenAccount,
                   toExtTokenAccount,
-                  toExtTokenAccountBalance.add(wrapAmount)
-                );
+                })
+                .signers([$.wrapAuthority])
+                .rpc();
+
+              // Confirm updated balances
+              await $.expectTokenBalance(
+                fromMTokenAccount,
+                fromMTokenAccountBalance.sub(wrapAmount)
+              );
+              await $.expectTokenBalance(
+                vaultMTokenAccount,
+                vaultMTokenAccountBalance.add(wrapAmount)
+              );
+              variant === Variant.ScaledUiAmount
+                ? await $.expectTokenUiBalance(
+                    toExtTokenAccount,
+                    toExtTokenAccountBalance.add(wrapAmount),
+                    Comparison.LessThanOrEqual,
+                    new BN(2)
+                  )
+                : await $.expectTokenBalance(
+                    toExtTokenAccount,
+                    toExtTokenAccountBalance.add(wrapAmount)
+                  );
+              // Confirm the extension is solvent
+              await $.expectExtSolvent();
+            });
+          });
+
+          describe("user has starting balance", () => {
+            beforeEach(async () => {
+              // Give the wrap authority some initial tokens
+              const initialAmount = new BN(
+                randomInt(1, mintAmount.toNumber() + 1)
+              );
+              await $.mintM($.wrapAuthority.publicKey, initialAmount);
+              await $.wrap($.wrapAuthority, initialAmount);
+            });
+
+            // given no flows before the yield is distributed
+            // it adjusts the user's existing balance correctly and then adds the new wrapped amount
+            // the extension is solvent
+            test("Wrap with new index - no flows - success", async () => {
+              const startMultiplier = new BN(
+                Math.floor((await $.getCurrentMultiplier()) * 1e12)
+              );
+
+              // Mint yield to the m vault for the new index
+              await $.mClaimFor(
+                $.getMVault(),
+                await $.getTokenBalance(vaultMTokenAccount)
+              );
+              await $.mCompleteClaims();
+
+              // Cache initial balances
+              const fromMTokenAccountBalance = await $.getTokenBalance(
+                fromMTokenAccount
+              );
+              const vaultMTokenAccountBalance = await $.getTokenBalance(
+                vaultMTokenAccount
+              );
+              const toExtTokenAccountBalance =
+                variant === Variant.ScaledUiAmount
+                  ? await $.getTokenUiBalance(toExtTokenAccount)
+                  : await $.getTokenBalance(toExtTokenAccount);
+
+              const wrapAmount = new BN(
+                randomInt(1, fromMTokenAccountBalance.toNumber() + 1)
+              );
+
+              // Send the instruction
+              await $.ext.methods
+                .wrap(wrapAmount)
+                .accounts({
+                  signer: $.wrapAuthority.publicKey,
+                  fromMTokenAccount,
+                  toExtTokenAccount,
+                })
+                .signers([$.wrapAuthority])
+                .rpc();
+
+              // Get new multiplier
+              const newMultiplier = new BN(
+                Math.floor((await $.getCurrentMultiplier()) * 1e12)
+              );
+
+              // Confirm updated balances
+              await $.expectTokenBalance(
+                fromMTokenAccount,
+                fromMTokenAccountBalance.sub(wrapAmount)
+              );
+              await $.expectTokenBalance(
+                vaultMTokenAccount,
+                vaultMTokenAccountBalance.add(wrapAmount)
+              );
+              variant === Variant.ScaledUiAmount
+                ? await $.expectTokenUiBalance(
+                    toExtTokenAccount,
+                    toExtTokenAccountBalance
+                      .mul(newMultiplier)
+                      .div(startMultiplier)
+                      .add(wrapAmount),
+                    Comparison.Equal,
+                    new BN(2)
+                  )
+                : await $.expectTokenBalance(
+                    toExtTokenAccount,
+                    toExtTokenAccountBalance.add(wrapAmount)
+                  );
+
+              // Confirm the extension is solvent
+              await $.expectExtSolvent();
+            });
+
+            // given the extension has net inflows before the yield is distributed
+            // it adjusts the user's existing balance correctly and then adds the new wrapped amount
+            // the extension is solvent
+            test("Wrap - extension has inflows - success", async () => {
+              const startMultiplier = new BN(
+                Math.floor((await $.getCurrentMultiplier()) * 1e12)
+              );
+
+              // Mint and wrap additional tokens prior to claim
+              const inflows = new BN(randomInt(100, mintAmount.toNumber() + 1));
+              await $.mintM($.admin.publicKey, inflows);
+              await $.wrap($.admin, inflows);
+
+              // Mint yield to the m vault for the new index
+              await $.mClaimFor(
+                $.getMVault(),
+                await $.getTokenBalance(vaultMTokenAccount)
+              );
+              await $.mCompleteClaims();
+
+              // Cache initial balances
+              const fromMTokenAccountBalance = await $.getTokenBalance(
+                fromMTokenAccount
+              );
+              const vaultMTokenAccountBalance = await $.getTokenBalance(
+                vaultMTokenAccount
+              );
+              const toExtTokenAccountBalance =
+                variant === Variant.ScaledUiAmount
+                  ? await $.getTokenUiBalance(toExtTokenAccount)
+                  : await $.getTokenBalance(toExtTokenAccount);
+
+              const wrapAmount = new BN(
+                randomInt(1, fromMTokenAccountBalance.toNumber() + 1)
+              );
+
+              // Send the instruction
+              await $.ext.methods
+                .wrap(wrapAmount)
+                .accounts({
+                  signer: $.wrapAuthority.publicKey,
+                  fromMTokenAccount,
+                  toExtTokenAccount,
+                })
+                .signers([$.wrapAuthority])
+                .rpc();
+
+              // Get new multiplier
+              const newMultiplier = new BN(
+                Math.floor((await $.getCurrentMultiplier()) * 1e12)
+              );
+
+              // Confirm updated balances
+              await $.expectTokenBalance(
+                fromMTokenAccount,
+                fromMTokenAccountBalance.sub(wrapAmount)
+              );
+              await $.expectTokenBalance(
+                vaultMTokenAccount,
+                vaultMTokenAccountBalance.add(wrapAmount)
+              );
+              variant === Variant.ScaledUiAmount
+                ? await $.expectTokenUiBalance(
+                    toExtTokenAccount,
+                    toExtTokenAccountBalance
+                      .mul(newMultiplier)
+                      .div(startMultiplier)
+                      .add(wrapAmount),
+                    Comparison.Equal,
+                    new BN(2)
+                  )
+                : await $.expectTokenBalance(
+                    toExtTokenAccount,
+                    toExtTokenAccountBalance.add(wrapAmount)
+                  );
+              // Confirm the extension is solvent
+              await $.expectExtSolvent();
+            });
+
+            // given the extension has net outflows before the yield is distributed
+            // it wraps the amount of M tokens from the user's M token account to the M vault token account
+            // the extension is solvent
+            test("Wrap - extension has outflows - success", async () => {
+              const startMultiplier = new BN(
+                Math.floor((await $.getCurrentMultiplier()) * 1e12)
+              );
+
+              // Mint and wrap additional tokens
+              const outflows = new BN(
+                randomInt(100, initialWrappedAmount.toNumber() + 1)
+              );
+              await $.unwrap($.admin, outflows);
+
+              // Mint yield to the m vault for the new index
+              await $.mClaimFor(
+                $.getMVault(),
+                await $.getTokenBalance(vaultMTokenAccount)
+              );
+              await $.mCompleteClaims();
+
+              // Cache initial balances
+              const fromMTokenAccountBalance = await $.getTokenBalance(
+                fromMTokenAccount
+              );
+              const vaultMTokenAccountBalance = await $.getTokenBalance(
+                vaultMTokenAccount
+              );
+              const toExtTokenAccountBalance =
+                variant === Variant.ScaledUiAmount
+                  ? await $.getTokenUiBalance(toExtTokenAccount)
+                  : await $.getTokenBalance(toExtTokenAccount);
+
+              const wrapAmount = new BN(
+                randomInt(1, fromMTokenAccountBalance.toNumber() + 1)
+              );
+
+              // Send the instruction
+              await $.ext.methods
+                .wrap(wrapAmount)
+                .accounts({
+                  signer: $.wrapAuthority.publicKey,
+                  fromMTokenAccount,
+                  toExtTokenAccount,
+                })
+                .signers([$.wrapAuthority])
+                .rpc();
+
+              // Get new multiplier
+              const newMultiplier = new BN(
+                Math.floor((await $.getCurrentMultiplier()) * 1e12)
+              );
+
+              // Confirm updated balances
+              await $.expectTokenBalance(
+                fromMTokenAccount,
+                fromMTokenAccountBalance.sub(wrapAmount)
+              );
+              await $.expectTokenBalance(
+                vaultMTokenAccount,
+                vaultMTokenAccountBalance.add(wrapAmount)
+              );
+              variant === Variant.ScaledUiAmount
+                ? await $.expectTokenUiBalance(
+                    toExtTokenAccount,
+                    toExtTokenAccountBalance
+                      .mul(newMultiplier)
+                      .div(startMultiplier)
+                      .add(wrapAmount),
+                    Comparison.Equal,
+                    new BN(2)
+                  )
+                : await $.expectTokenBalance(
+                    toExtTokenAccount,
+                    toExtTokenAccountBalance.add(wrapAmount)
+                  );
+              // Confirm the extension is solvent
+              await $.expectExtSolvent();
+            });
           });
         });
       });
@@ -2527,12 +2937,22 @@ for (const variant of VARIANTS) {
           });
 
           // test cases
-          // [X] given yield has been minted to the m vault for the new index
+          // [X] given there are no flows before the yield is distributed
           //   [X] it unwraps the amount of M tokens from the M vault token account to the user's M token account
+          //   [X] it burns the correct amount of ext tokens from the user's ext token account
+          //   [X] the extension is solvent
+          // [X] given there are net inflows before the yield is distributed
+          //   [X] it unwraps the amount of M tokens from the M vault token account to the user's M token account
+          //   [X] it unwraps the correct amount of ext tokens from the user's ext token account
+          //   [X] the extension is solvent
+          // [X] given there are net outflows before the yield is distributed
+          //   [X] it unwraps the amount of M tokens from the M vault token account to the user's M token account
+          //   [X] it unwraps the correct amount of ext tokens from the user's ext token account
+          //   [X] the extension is solvent
 
           // given yield has been minted to the m vault for the new index
           // it unwraps the amount of M tokens from the M vault token account to the user's M token account
-          test("Unwrap with new index - success", async () => {
+          test("Unwrap with new index - no flows - success", async () => {
             // Mint yield to the m vault for the new index
             await $.mClaimFor(
               $.getMVault(),
@@ -2587,6 +3007,150 @@ for (const variant of VARIANTS) {
                   fromExtTokenAccount,
                   fromExtTokenAccountBalance.sub(unwrapAmount)
                 );
+
+            // Confirm the extension is solvent
+            await $.expectExtSolvent();
+          });
+
+          // given there are net inflows before the yield is distributed
+          // it unwraps the amount of M tokens from the M vault token account to the user's M token account
+          // it unwraps the correct amount of ext tokens from the user's ext token account
+          // the extension is solvent
+          test("Unwrap - extension has inflows - success", async () => {
+            // Mint and wrap additional tokens prior to claim
+            const inflows = new BN(
+              randomInt(100, wrappedAmount.toNumber() + 1)
+            );
+            await $.mintM($.admin.publicKey, inflows);
+            await $.wrap($.admin, inflows);
+
+            // Mint yield to the m vault for the new index
+            await $.mClaimFor(
+              $.getMVault(),
+              await $.getTokenBalance(vaultMTokenAccount)
+            );
+            await $.mCompleteClaims();
+
+            // Cache initial balances
+            const vaultMTokenAccountBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+            const toMTokenAccountBalance = await $.getTokenBalance(
+              toMTokenAccount
+            );
+            const fromExtTokenAccountBalance =
+              variant === Variant.ScaledUiAmount
+                ? await $.getTokenUiBalance(fromExtTokenAccount, newMultiplier)
+                : await $.getTokenBalance(fromExtTokenAccount);
+
+            const unwrapAmount = new BN(
+              randomInt(1, fromExtTokenAccountBalance.toNumber() + 1)
+            );
+
+            // Send the instruction
+            await $.ext.methods
+              .unwrap(unwrapAmount)
+              .accounts({
+                signer: $.wrapAuthority.publicKey,
+                fromExtTokenAccount,
+                toMTokenAccount,
+              })
+              .signers([$.wrapAuthority])
+              .rpc();
+
+            // Confirm updated balances
+            await $.expectTokenBalance(
+              toMTokenAccount,
+              toMTokenAccountBalance.add(unwrapAmount)
+            );
+            await $.expectTokenBalance(
+              vaultMTokenAccount,
+              vaultMTokenAccountBalance.sub(unwrapAmount)
+            );
+            variant === Variant.ScaledUiAmount
+              ? await $.expectTokenUiBalance(
+                  fromExtTokenAccount,
+                  fromExtTokenAccountBalance.sub(unwrapAmount),
+                  Comparison.LessThanOrEqual,
+                  new BN(2)
+                )
+              : await $.expectTokenBalance(
+                  fromExtTokenAccount,
+                  fromExtTokenAccountBalance.sub(unwrapAmount)
+                );
+
+            // Confirm the extension is solvent
+            await $.expectExtSolvent();
+          });
+
+          // given there are net outflows before the yield is distributed
+          // it unwraps the amount of M tokens from the M vault token account to the user's M token account
+          // it unwraps the correct amount of ext tokens from the user's ext token account
+          // the extension is solvent
+          test("Unwrap - extension has outflows - success", async () => {
+            // Unwrap tokens prior to claim
+            const outflows = new BN(
+              randomInt(100, initialWrappedAmount.toNumber() + 1)
+            );
+            await $.unwrap($.admin, outflows);
+
+            // Mint yield to the m vault for the new index
+            await $.mClaimFor(
+              $.getMVault(),
+              await $.getTokenBalance(vaultMTokenAccount)
+            );
+            await $.mCompleteClaims();
+
+            // Cache initial balances
+            const vaultMTokenAccountBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+            const toMTokenAccountBalance = await $.getTokenBalance(
+              toMTokenAccount
+            );
+            const fromExtTokenAccountBalance =
+              variant === Variant.ScaledUiAmount
+                ? await $.getTokenUiBalance(fromExtTokenAccount, newMultiplier)
+                : await $.getTokenBalance(fromExtTokenAccount);
+
+            const unwrapAmount = new BN(
+              randomInt(1, fromExtTokenAccountBalance.toNumber() + 1)
+            );
+
+            // Send the instruction
+            await $.ext.methods
+              .unwrap(unwrapAmount)
+              .accounts({
+                signer: $.wrapAuthority.publicKey,
+                fromExtTokenAccount,
+                toMTokenAccount,
+              })
+              .signers([$.wrapAuthority])
+              .rpc();
+
+            // Confirm updated balances
+            await $.expectTokenBalance(
+              toMTokenAccount,
+              toMTokenAccountBalance.add(unwrapAmount)
+            );
+            await $.expectTokenBalance(
+              vaultMTokenAccount,
+              vaultMTokenAccountBalance.sub(unwrapAmount)
+            );
+            variant === Variant.ScaledUiAmount
+              ? await $.expectTokenUiBalance(
+                  fromExtTokenAccount,
+                  fromExtTokenAccountBalance.sub(unwrapAmount),
+                  Comparison.LessThanOrEqual,
+                  new BN(2)
+                )
+              : await $.expectTokenBalance(
+                  fromExtTokenAccount,
+                  fromExtTokenAccountBalance.sub(unwrapAmount)
+                );
+
+            // Confirm the extension is solvent
+            await $.expectExtSolvent();
           });
         });
       });
@@ -2782,6 +3346,7 @@ for (const variant of VARIANTS) {
 
           // given the multiplier is already up to date
           // it remains the same
+          // the extension is solvent
           test("Multiplier is already up to date - success", async () => {
             // Sync the multiplier to the start index
             await $.sync();
@@ -2801,10 +3366,13 @@ for (const variant of VARIANTS) {
               $.extMint.publicKey,
               scaledUiAmountConfig
             );
+
+            await $.expectExtSolvent();
           });
 
           // given the m vault has received yield to match the latest M index
           // it updates the scaled ui config on the ext mint to match the m index
+          // the extension is solvent
           test("M vault has had yield claimed for the latest M index - success", async () => {
             // Cache the scaled ui amount config
             const scaledUiAmountConfig = await $.getScaledUiAmountConfig(
@@ -2825,6 +3393,8 @@ for (const variant of VARIANTS) {
                 $.currentTime().toString()
               ),
             });
+
+            await $.expectExtSolvent();
           });
         });
       });
