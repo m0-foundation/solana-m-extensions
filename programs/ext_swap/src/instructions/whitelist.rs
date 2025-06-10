@@ -148,7 +148,7 @@ pub struct RemoveWhitelistedUnwrapper<'info> {
 impl RemoveWhitelistedUnwrapper<'_> {
     fn validate(&self, authority: &Pubkey) -> Result<()> {
         if !self.swap_global.whitelisted_unwrappers.contains(authority) {
-            return err!(SwapError::InvalidExtension);
+            return err!(SwapError::UnauthorizedUnwrapper);
         }
 
         Ok(())
