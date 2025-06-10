@@ -692,6 +692,39 @@ describe("extension swap tests", () => {
       );
     });
   });
+
+  describe("remove extension", () => {
+    it("remove from ext whitelist", async () => {
+      await sendTransaction(
+        program.methods
+          .removeWhitelistedExtension(extProgramA.publicKey)
+          .accounts({})
+          .transaction(),
+        [admin]
+      );
+    });
+
+    it("swap to extension that was removed", async () => {
+      await sendTransaction(
+        program.methods
+          .swap(new BN(1e3), 0)
+          .accounts({
+            signer: swapper.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromExtProgram: extProgramB.publicKey,
+            toExtProgram: extProgramA.publicKey,
+            fromMint: mintB.publicKey,
+            toMint: mintA.publicKey,
+            fromTokenAccount: accounts.ataB,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper],
+        /Error Message: Extension is not whitelisted/
+      );
+    });
+  });
 });
 
 async function buildMintTxn(
@@ -775,7 +808,7 @@ function loadKeypairs() {
       "YPIMBm2ykzl4I7GHdQyWqKwR9RJjiwNhDyOyWTHBjqdoLoa322EZkMKDzwDeycwd0vq3KrIs1ga19ecjWSJS0g=="
     ),
     mintC: key(
-      //  H6V2ShFqjRaHyewiqaHN6E6ok1XRH2xv4Zwy3JpL8Cxb
+      // H6V2ShFqjRaHyewiqaHN6E6ok1XRH2xv4Zwy3JpL8Cxb
       "m+OGOQSbwMu+Io83qHWOFdPZsWxnFhaz0zwzFS6C0TDvIpUrxJFh8CBFOCAHmTJpK+I/1Zv1FOeqsykz2BPgDA=="
     ),
   };
