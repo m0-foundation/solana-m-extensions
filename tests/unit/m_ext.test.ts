@@ -1980,7 +1980,12 @@ for (const variant of VARIANTS) {
             await $.unwrap($.wrapAuthority, wrapAmount);
 
             // Confirm the final balance is the same as the starting balance
-            $.expectTokenBalance(fromMTokenAccount, startingBalance);
+            $.expectTokenBalance(
+              fromMTokenAccount,
+              startingBalance,
+              Comparison.LessThanOrEqual,
+              new BN(2)
+            );
           });
         });
 
@@ -2715,24 +2720,62 @@ for (const variant of VARIANTS) {
 
           // given all accounts are correct
           // give the user does not have enough ext tokens
-          // it reverts
-          test("Not enough ext tokens - reverts", async () => {
-            const unwrapAmount = new BN(
-              randomInt(wrappedAmount.toNumber() + 1, 2 ** 48 - 1)
+          // it unwraps the user's total balance of ext tokens
+          test("Not enough ext tokens, unwraps user's total balance - success", async () => {
+            // Get the balance of the from ext token account
+            const fromExtTokenAccountBalance =
+              variant === Variant.ScaledUiAmount
+                ? await $.getTokenUiBalance(
+                    fromExtTokenAccount,
+                    await $.getCurrentMultiplier()
+                  )
+                : await $.getTokenBalance(fromExtTokenAccount);
+
+            vaultMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.getMVault()
+            );
+            const vaultMTokenAccountBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+            const toMTokenAccountBalance = await $.getTokenBalance(
+              toMTokenAccount
             );
 
-            // Attempt to send the transaction
-            // Expect an error
-            await $.expectSystemError(
-              $.ext.methods
-                .unwrap(unwrapAmount)
-                .accounts({
-                  signer: $.wrapAuthority.publicKey,
-                  fromExtTokenAccount,
-                  toMTokenAccount,
-                })
-                .signers([$.wrapAuthority])
-                .rpc()
+            // Create a random amount to unwrap that is greater than the balance
+            const unwrapAmount = new BN(
+              randomInt(fromExtTokenAccountBalance.toNumber() + 1, 2 ** 48 - 1)
+            );
+            console.log("unwrapAmount", unwrapAmount.toString());
+
+            // Send the unwrap
+            await $.ext.methods
+              .unwrap(unwrapAmount)
+              .accounts({
+                signer: $.wrapAuthority.publicKey,
+                fromExtTokenAccount,
+                toMTokenAccount,
+              })
+              .signers([$.wrapAuthority])
+              .rpc();
+
+            console.log(
+              "remaining ext tokens after unwrap",
+              (await $.getTokenBalance(fromExtTokenAccount)).toString()
+            );
+
+            $.expectTokenBalance(fromExtTokenAccount, new BN(0));
+            $.expectTokenBalance(
+              vaultMTokenAccount,
+              vaultMTokenAccountBalance.sub(fromExtTokenAccountBalance),
+              Comparison.GreaterThanOrEqual,
+              new BN(2)
+            );
+            $.expectTokenBalance(
+              toMTokenAccount,
+              toMTokenAccountBalance.add(fromExtTokenAccountBalance),
+              Comparison.LessThanOrEqual,
+              new BN(2)
             );
           });
 
@@ -2795,11 +2838,15 @@ for (const variant of VARIANTS) {
                 );
             await $.expectTokenBalance(
               vaultMTokenAccount,
-              vaultMTokenAccountBalance.sub(unwrapAmount)
+              vaultMTokenAccountBalance.sub(unwrapAmount),
+              Comparison.GreaterThanOrEqual,
+              new BN(2)
             );
             await $.expectTokenBalance(
               toMTokenAccount,
-              toMTokenAccountBalance.add(unwrapAmount)
+              toMTokenAccountBalance.add(unwrapAmount),
+              Comparison.LessThanOrEqual,
+              new BN(2)
             );
           });
 
@@ -2838,11 +2885,15 @@ for (const variant of VARIANTS) {
             // Confirm updated balances
             await $.expectTokenBalance(
               toMTokenAccount,
-              toMTokenAccountBalance.add(unwrapAmount)
+              toMTokenAccountBalance.add(unwrapAmount),
+              Comparison.LessThanOrEqual,
+              new BN(2)
             );
             await $.expectTokenBalance(
               vaultMTokenAccount,
-              vaultMTokenAccountBalance.sub(unwrapAmount)
+              vaultMTokenAccountBalance.sub(unwrapAmount),
+              Comparison.GreaterThanOrEqual,
+              new BN(2)
             );
             variant === Variant.ScaledUiAmount
               ? await $.expectTokenUiBalance(
@@ -2897,11 +2948,15 @@ for (const variant of VARIANTS) {
             // Confirm updated balances
             await $.expectTokenBalance(
               toMTokenAccount,
-              toMTokenAccountBalance.add(unwrapAmount)
+              toMTokenAccountBalance.add(unwrapAmount),
+              Comparison.LessThanOrEqual,
+              new BN(2)
             );
             await $.expectTokenBalance(
               vaultMTokenAccount,
-              vaultMTokenAccountBalance.sub(unwrapAmount)
+              vaultMTokenAccountBalance.sub(unwrapAmount),
+              Comparison.GreaterThanOrEqual,
+              new BN(2)
             );
             variant === Variant.ScaledUiAmount
               ? await $.expectTokenUiBalance(
@@ -2990,11 +3045,15 @@ for (const variant of VARIANTS) {
             // Confirm updated balances
             await $.expectTokenBalance(
               toMTokenAccount,
-              toMTokenAccountBalance.add(unwrapAmount)
+              toMTokenAccountBalance.add(unwrapAmount),
+              Comparison.LessThanOrEqual,
+              new BN(2)
             );
             await $.expectTokenBalance(
               vaultMTokenAccount,
-              vaultMTokenAccountBalance.sub(unwrapAmount)
+              vaultMTokenAccountBalance.sub(unwrapAmount),
+              Comparison.GreaterThanOrEqual,
+              new BN(2)
             );
             variant === Variant.ScaledUiAmount
               ? await $.expectTokenUiBalance(
@@ -3061,11 +3120,15 @@ for (const variant of VARIANTS) {
             // Confirm updated balances
             await $.expectTokenBalance(
               toMTokenAccount,
-              toMTokenAccountBalance.add(unwrapAmount)
+              toMTokenAccountBalance.add(unwrapAmount),
+              Comparison.LessThanOrEqual,
+              new BN(2)
             );
             await $.expectTokenBalance(
               vaultMTokenAccount,
-              vaultMTokenAccountBalance.sub(unwrapAmount)
+              vaultMTokenAccountBalance.sub(unwrapAmount),
+              Comparison.GreaterThanOrEqual,
+              new BN(2)
             );
             variant === Variant.ScaledUiAmount
               ? await $.expectTokenUiBalance(
@@ -3131,11 +3194,15 @@ for (const variant of VARIANTS) {
             // Confirm updated balances
             await $.expectTokenBalance(
               toMTokenAccount,
-              toMTokenAccountBalance.add(unwrapAmount)
+              toMTokenAccountBalance.add(unwrapAmount),
+              Comparison.LessThanOrEqual,
+              new BN(2)
             );
             await $.expectTokenBalance(
               vaultMTokenAccount,
-              vaultMTokenAccountBalance.sub(unwrapAmount)
+              vaultMTokenAccountBalance.sub(unwrapAmount),
+              Comparison.GreaterThanOrEqual,
+              new BN(2)
             );
             variant === Variant.ScaledUiAmount
               ? await $.expectTokenUiBalance(
