@@ -197,7 +197,9 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   // Helper functions for token operations and checks on the SVM instance
   public async expectTokenBalance(
     tokenAccount: PublicKey,
-    expectedBalance: BN
+    expectedBalance: BN,
+    op: Comparison = Comparison.Equal,
+    tolerance?: BN
   ) {
     const balance = (
       await getAccount(
@@ -208,7 +210,54 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       )
     ).amount;
 
-    expect(balance.toString()).toEqual(expectedBalance.toString());
+    switch (op) {
+      case Comparison.GreaterThan:
+        expect(balance).toBeGreaterThan(BigInt(expectedBalance.toString()));
+        if (tolerance) {
+          expect(balance).toBeLessThanOrEqual(
+            BigInt(expectedBalance.add(tolerance).toString())
+          );
+        }
+        break;
+      case Comparison.GreaterThanOrEqual:
+        expect(balance).toBeGreaterThanOrEqual(
+          BigInt(expectedBalance.toString())
+        );
+        if (tolerance) {
+          expect(balance).toBeLessThanOrEqual(
+            BigInt(expectedBalance.add(tolerance).toString())
+          );
+        }
+        break;
+      case Comparison.LessThan:
+        expect(balance).toBeLessThan(BigInt(expectedBalance.toString()));
+        if (tolerance) {
+          expect(balance).toBeGreaterThanOrEqual(
+            BigInt(expectedBalance.sub(tolerance).toString())
+          );
+        }
+        break;
+      case Comparison.LessThanOrEqual:
+        expect(balance).toBeLessThanOrEqual(BigInt(expectedBalance.toString()));
+        if (tolerance) {
+          expect(balance).toBeGreaterThanOrEqual(
+            BigInt(expectedBalance.sub(tolerance).toString())
+          );
+        }
+        break;
+      default:
+        if (tolerance) {
+          expect(balance).toBeGreaterThanOrEqual(
+            BigInt(expectedBalance.sub(tolerance).toString())
+          );
+          expect(balance).toBeLessThanOrEqual(
+            BigInt(expectedBalance.add(tolerance).toString())
+          );
+        } else {
+          expect(balance).toEqual(BigInt(expectedBalance.toString()));
+        }
+        break;
+    }
   }
 
   public async expectTokenUiBalance(

@@ -5,7 +5,7 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{amount_to_principal_up, sync_multiplier},
+        conversion::{amount_to_principal_up, principal_to_amount_down, sync_multiplier},
         token::{burn_tokens, transfer_tokens_from_program},
     },
 };
@@ -101,7 +101,7 @@ impl Unwrap<'_> {
     }
 
     #[access_control(ctx.accounts.validate())]
-    pub fn handler(ctx: Context<Self>, amount: u64) -> Result<()> {
+    pub fn handler(ctx: Context<Self>, mut amount: u64) -> Result<()> {
         let authority_seeds: &[&[&[u8]]] = &[&[
             MINT_AUTHORITY_SEED,
             &[ctx.accounts.global_account.ext_mint_authority_bump],
@@ -124,6 +124,7 @@ impl Unwrap<'_> {
         let mut principal = amount_to_principal_up(amount, multiplier)?;
         if principal > ctx.accounts.from_ext_token_account.amount {
             principal = ctx.accounts.from_ext_token_account.amount;
+            amount = principal_to_amount_down(principal, multiplier)?;
         }
 
         // Burn the amount of ext tokens from the user
