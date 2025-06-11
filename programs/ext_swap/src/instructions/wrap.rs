@@ -127,7 +127,7 @@ impl<'info> Wrap<'info> {
                 ctx.accounts.to_ext_program.to_account_info(),
                 ExtWrap {
                     token_authority: ctx.accounts.signer.to_account_info(),
-                    program_authority: Some(ctx.accounts.swap_global.to_account_info()),
+                    wrap_authority: Some(ctx.accounts.swap_global.to_account_info()),
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.to_mint.to_account_info(),
                     global_account: ctx.accounts.to_global.to_account_info(),

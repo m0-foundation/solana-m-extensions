@@ -135,7 +135,7 @@ impl<'info> Unwrap<'info> {
                 ctx.accounts.from_ext_program.to_account_info(),
                 ExtUnwrap {
                     token_authority: ctx.accounts.signer.to_account_info(),
-                    program_authority: Some(ctx.accounts.swap_global.to_account_info()),
+                    unwrap_authority: Some(ctx.accounts.swap_global.to_account_info()),
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.from_mint.to_account_info(),
                     global_account: ctx.accounts.from_global.to_account_info(),
