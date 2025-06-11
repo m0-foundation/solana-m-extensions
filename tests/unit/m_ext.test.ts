@@ -1565,19 +1565,34 @@ for (const variant of VARIANTS) {
           //   [X] it reverts with a ConstraintTokenMint error
           // [X] given the to ext token account is for the wrong mint
           //   [X] it reverts with a ConstraintTokenMint error
-          // [X] given the signer is not in the wrap authorities list
-          //   [X] it reverts with a ConstraintAuthority error
-          // [X] given all the accounts are correct
-          //   [X] given the user does not have enough M tokens
-          //     [X] it reverts with a ? error
-          //   [X] given the user has enough M tokens
-          //     [X] given the signer is not the owner of the from M token account, but is delegated
-          //       [X] it transfers the amount of M tokens from the user's M token account to the M vault token account
-          //     [X] given the signer is the owner of the from M token account
-          //       [X] it transfers the amount of M tokens from the user's M token account to the M vault token account
-          //     [X] it mints the amount of ext tokens to the user's ext token account
-          //     [X] given the user wraps and then unwraps (roundtrip)
-          //       [X] the starting balance and ending balance of the user's M token account are the same
+          // [X] given a wrap authority is not provided
+          //   [X] given the token authority is not in the wrap authorities list
+          //     [X] it reverts with a NotAuthorized error
+          //   [X] given the token authority is on the wrap authorities list
+          //     [X] given the user does not have enough M tokens
+          //       [X] it reverts with a ? error
+          //     [X] given the user has enough M tokens
+          //       [X] given the token authority is not the owner of the from M token account, but is delegated
+          //         [X] it transfers the amount of M tokens from the user's M token account to the M vault token account
+          //       [X] given the token authority is the owner of the from M token account
+          //         [X] it transfers the amount of M tokens from the user's M token account to the M vault token account
+          //       [X] it mints the amount of ext tokens to the user's ext token account
+          //       [X] given the user wraps and then unwraps (roundtrip)
+          //         [X] the starting balance and ending balance of the user's M token account are the same (within rounding error)
+          // [X] given a wrap authority is provided
+          //   [X] given the wrap authority is not in the wrap authorities list
+          //     [X] it reverts with a NotAuthorized error
+          //   [X] given the wrap authority is in the wrap authorities list
+          //     [X] given the user does not have enough M tokens
+          //       [X] it reverts with a ? error
+          //     [X] given the user has enough M tokens
+          //       [X] given the token authority is not the owner of the from M token account, but is delegated
+          //         [X] it transfers the amount of M tokens from the user's M token account to the M vault token account
+          //       [X] given the token authority is the owner of the from M token account
+          //         [X] it transfers the amount of M tokens from the user's M token account to the M vault token account
+          //       [X] it mints the amount of ext tokens to the user's ext token account
+          //       [X] given the user wraps and then unwraps (roundtrip)
+          //         [X] the starting balance and ending balance of the user's M token account are the same (within rounding error)
 
           // given the m mint account does not match the one stored in the global account
           // it reverts with an InvalidAccount error
@@ -1741,9 +1756,10 @@ for (const variant of VARIANTS) {
             );
           });
 
-          // given the signer is not in the wrap authorities list
+          // given a wrap authority is not provided
+          // given the token authority is not in the wrap authorities list
           // it reverts with a NotAuthorized error
-          test("Signer is not in the wrap authorities list - reverts", async () => {
+          test("Token authority is not in the wrap authorities list - reverts", async () => {
             fromMTokenAccount = await $.getATA(
               $.mMint.publicKey,
               $.nonWrapAuthority.publicKey
@@ -1770,8 +1786,9 @@ for (const variant of VARIANTS) {
             );
           });
 
-          // given all accounts are correct
-          // give the user does not have enough M tokens
+          // given a wrap authority is not provided
+          // given the token authority is on the wrap authorities list
+          // given the user does not have enough M tokens
           // it reverts
           test("Not enough M - reverts", async () => {
             const wrapAmount = new BN(
@@ -1794,9 +1811,10 @@ for (const variant of VARIANTS) {
             );
           });
 
-          // given all accounts are correct
+          // given a wrap authority is not provided
+          // given the token authority is on the wrap authorities list
           // given the from token account has enough M tokens
-          // given the signer is not the owner of the from M token account, but is delegated
+          // given the token authority is not the owner of the from M token account, but is delegated
           // it transfers the amount of M tokens from the user's M token account to the M vault token account
           // it mints the amount of ext tokens to the to ext token account
           test("Wrap with delegated authority - success", async () => {
@@ -1862,8 +1880,10 @@ for (const variant of VARIANTS) {
                 );
           });
 
-          // given all accounts are correct
-          // given the user has enough M tokens
+          // given a wrap authority is not provided
+          // given the token authority is on the wrap authorities list
+          // given the from token account has enough M tokens
+          // given the token authority is the owner of the from M token account
           // it transfers the amount of M tokens from the user's M token account to the M vault token account
           // it mints the amount of wM tokens to the user's wM token account
           test("Wrap to wrap authority account - success", async () => {
@@ -1915,8 +1935,10 @@ for (const variant of VARIANTS) {
                 );
           });
 
-          // given all accounts are correct
-          // given the user has enough M tokens
+          // given a wrap authority is not provided
+          // given the token authority is on the wrap authorities list
+          // given the from token account has enough M tokens
+          // given the token authority is the owner of the from M token account
           // given the signer does not own the to ext token account
           // it transfers the amount of M tokens from the user's M token account to the M vault token account
           // it mints the amount of wM tokens to the user's wM token account
@@ -1974,8 +1996,10 @@ for (const variant of VARIANTS) {
                 );
           });
 
-          // given all accounts are correct
-          // given the user has enough M tokens
+          // given a wrap authority is not provided
+          // given the token authority is on the wrap authorities list
+          // given the from token account enough M tokens
+          // given the token authority is the owner of the from token account
           // round-trip (wrap / unwrap)
           test("Wrap / unwrap roundtrip - success", async () => {
             // Cache the starting balance of M
@@ -1989,6 +2013,213 @@ for (const variant of VARIANTS) {
 
             // Unwrap the same amount
             await $.unwrap($.wrapAuthority, wrapAmount);
+
+            // Confirm the final balance is the same as the starting balance
+            $.expectTokenBalance(
+              fromMTokenAccount,
+              startingBalance,
+              Comparison.LessThanOrEqual,
+              new BN(2)
+            );
+          });
+
+          // given a wrap authority is provided
+          // given the wrap authority is not in the wrap authorities list
+          // it reverts with a NotAuthorized error
+          test("Wrap authority is not in the wrap authorities list - reverts", async () => {
+            // Attempt to send the transaction
+            // Expect revert with a NotAuthorized error
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrap(mintAmount)
+                .accounts({
+                  tokenAuthority: $.nonWrapAuthority.publicKey,
+                  wrapAuthority: $.nonWrapAuthority.publicKey,
+                  fromMTokenAccount,
+                  toExtTokenAccount,
+                })
+                .signers([$.nonWrapAuthority])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given a wrap authority is provided
+          // given the wrap authority is in the wrap authorities list
+          // given the from token account does not have enough M tokens
+          // it reverts with a ? error
+          test("Not enough M - wrap authority - reverts", async () => {
+            const wrapAmount = new BN(
+              randomInt(mintAmount.toNumber() + 1, 2 ** 48 - 1)
+            );
+
+            // Attempt to send the transaction
+            // Expect an error
+            await $.expectSystemError(
+              $.ext.methods
+                .wrap(wrapAmount)
+                .accounts({
+                  tokenAuthority: $.nonWrapAuthority.publicKey,
+                  wrapAuthority: $.wrapAuthority.publicKey,
+                  fromMTokenAccount,
+                  toExtTokenAccount,
+                })
+                .signers([$.nonWrapAuthority, $.wrapAuthority])
+                .rpc()
+            );
+          });
+
+          // given a wrap authority is provided
+          // given the wrap authority is in the wrap authorities list
+          // given the from token account has enough M tokens
+          // given the token authority is not the owner of the from M token account, but is delegated
+          // it transfers the amount of M tokens from the user's M token account to the M vault token account
+          // it mints the amount of ext tokens to the user's ext token account
+          test("Wrap with delegated authority - wrap authority - success", async () => {
+            const wrapAmount = new BN(randomInt(1, mintAmount.toNumber() + 1));
+
+            // Approve (delegate) the wrap authority to spend the non-wrap authority's M tokens
+            const { sourceATA: fromMTokenAccount } = await $.approve(
+              $.nonWrapAuthority,
+              $.nonAdmin.publicKey,
+              $.mMint.publicKey,
+              wrapAmount
+            );
+
+            // Setup the instruction
+            const toExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.nonWrapAuthority.publicKey
+            );
+
+            // Cache initial balances
+            const fromMTokenAccountBalance = await $.getTokenBalance(
+              fromMTokenAccount
+            );
+            const vaultMTokenAccountBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+            const toExtTokenAccountBalance =
+              variant === Variant.ScaledUiAmount
+                ? await $.getTokenUiBalance(toExtTokenAccount)
+                : await $.getTokenBalance(toExtTokenAccount);
+
+            // Send the instruction
+            await $.ext.methods
+              .wrap(wrapAmount)
+              .accounts({
+                tokenAuthority: $.nonAdmin.publicKey,
+                wrapAuthority: $.wrapAuthority.publicKey,
+                fromMTokenAccount,
+                toExtTokenAccount,
+              })
+              .signers([$.nonAdmin, $.wrapAuthority])
+              .rpc();
+
+            // Confirm updated balances
+            await $.expectTokenBalance(
+              fromMTokenAccount,
+              fromMTokenAccountBalance.sub(wrapAmount)
+            );
+            await $.expectTokenBalance(
+              vaultMTokenAccount,
+              vaultMTokenAccountBalance.add(wrapAmount)
+            );
+            variant === Variant.ScaledUiAmount
+              ? await $.expectTokenUiBalance(
+                  toExtTokenAccount,
+                  toExtTokenAccountBalance.add(wrapAmount),
+                  Comparison.LessThanOrEqual,
+                  new BN(2)
+                )
+              : await $.expectTokenBalance(
+                  toExtTokenAccount,
+                  toExtTokenAccountBalance.add(wrapAmount)
+                );
+          });
+
+          // given a wrap authority is provided
+          // given the wrap authority is in the wrap authorities list
+          // given the from token account has enough M tokens
+          // given the token authority is the owner of the from M token account
+          // it transfers the amount of M tokens from the user's M token account to the M vault token account
+          // it mints the amount of ext tokens to the user's ext token account
+          test("Wrap to differenct account - wrap authority - success", async () => {
+            fromMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.nonWrapAuthority.publicKey
+            );
+
+            toExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.nonAdmin.publicKey
+            );
+
+            // Cache initial balances
+            const fromMTokenAccountBalance = await $.getTokenBalance(
+              fromMTokenAccount
+            );
+            const vaultMTokenAccountBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+            const toExtTokenAccountBalance =
+              variant === Variant.ScaledUiAmount
+                ? await $.getTokenUiBalance(toExtTokenAccount)
+                : await $.getTokenBalance(toExtTokenAccount);
+
+            const wrapAmount = new BN(randomInt(1, mintAmount.toNumber() + 1));
+
+            // Send the instruction
+            await $.ext.methods
+              .wrap(wrapAmount)
+              .accountsPartial({
+                tokenAuthority: $.nonWrapAuthority.publicKey,
+                wrapAuthority: $.wrapAuthority.publicKey,
+                fromMTokenAccount,
+                toExtTokenAccount,
+              })
+              .signers([$.nonWrapAuthority, $.wrapAuthority])
+              .rpc();
+
+            // Confirm updated balances
+            await $.expectTokenBalance(
+              fromMTokenAccount,
+              fromMTokenAccountBalance.sub(wrapAmount)
+            );
+            await $.expectTokenBalance(
+              vaultMTokenAccount,
+              vaultMTokenAccountBalance.add(wrapAmount)
+            );
+            variant === Variant.ScaledUiAmount
+              ? await $.expectTokenUiBalance(
+                  toExtTokenAccount,
+                  toExtTokenAccountBalance.add(wrapAmount),
+                  Comparison.LessThanOrEqual,
+                  new BN(2)
+                )
+              : await $.expectTokenBalance(
+                  toExtTokenAccount,
+                  toExtTokenAccountBalance.add(wrapAmount)
+                );
+          });
+
+          // given a wrap authority is provided
+          // given the wrap authority is in the wrap authorities list
+          // given the from token account has enough M tokens
+          // given the token authority is the owner of the from M token account
+          // round-trip (wrap / unwrap)
+          test("Wrap / unwrap roundtrip - wrap authority - success", async () => {
+            // Cache the starting balance of M
+            const startingBalance = await $.getTokenBalance(fromMTokenAccount);
+
+            // Wrap some tokens
+            const wrapAmount = new BN(
+              randomInt(1, startingBalance.toNumber() + 1)
+            );
+            await $.wrap($.nonWrapAuthority, wrapAmount, $.wrapAuthority);
+
+            // Unwrap the same amount
+            await $.unwrap($.nonWrapAuthority, wrapAmount, $.wrapAuthority);
 
             // Confirm the final balance is the same as the starting balance
             $.expectTokenBalance(
@@ -2521,7 +2752,7 @@ for (const variant of VARIANTS) {
           //   [X] it reverts with an InvalidAccount error
           // [X] given the ext mint account does not match the one stored in the global account
           //   [X] it reverts with an InvalidAccount error
-          // [X] given the signer is not the authority on the from ext token account and is not delegated by the owner
+          // [X] given the token authority is not the authority on the from ext token account and is not delegated by the owner
           //   [X] it reverts with a Token program error
           // [X] given the vault M token account is not the M Vaults ATA for the M token mint
           //   [X] it reverts with a ConstraintAssociated error
@@ -2529,17 +2760,32 @@ for (const variant of VARIANTS) {
           //   [X] it reverts with a ConstraintTokenMint error
           // [X] given the from ext token account is for the wrong mint
           //   [X] it reverts with a ConstraintTokenMint error
-          // [X] given the signer is not in the wrap authorities list
-          //   [X] it reverts with a ConstraintAuthority error
-          // [X] given all the accounts are correct
-          //   [X] given the user does not have enough ext tokens
+          // [X] given a wrap authority is not provided
+          //   [X] given the token authority is not in the wrap authorities list
+          //     [X] it reverts with a NotAuthorized error
+          //   [X] given the token authority is in the wrap authorities list
+          //     [X] given the from token account does not have enough ext tokens
+          //       [X] it unwraps the from token accounts whole balance
+          //     [X] given the from token account has enough ext tokens
+          //       [X] given the token authority is not the owner of the from ext token account, but is delegated
+          //         [X] it burns the amount of ext tokens from the from's ext token account
+          //       [X] given the token authority is the owner of the from ext token account
+          //         [X] it burns the amount of ext tokens from the from's ext token account
+          //       [X] it transfers the amount of M tokens from the M vault token account to the to's M token account
+          // [X] given a wrap authority is provided
+          //   [X] given the wrap authority does not sign the transaction
           //     [X] it reverts
-          //   [X] given the user has enough ext tokens
-          //     [X] given the signer is not the owner of the from ext token account, but is delegated
-          //       [X] it burns the amount of ext tokens from the from's ext token account
-          //     [X] given the signer is the owner of the from ext token account
-          //       [X] it burns the amount of ext tokens from the user's ext token account
-          //     [X] it transfers the amount of M tokens from the M vault token account to the to's M token account
+          //   [X] given the wrap authority is not on the wrap authorities list
+          //     [X] it reverts with a NotAuthorized error
+          //   [X] given the wrap authority is on the wrap authorities list
+          //     [X] given the from token account does not have enough ext tokens
+          //       [X] it reverts
+          //     [X] given the from token account has enough ext tokens
+          //       [X] given the token authority is not the owner of the from ext token account, but is delegated
+          //         [X] it burns the amount of ext tokens from the from's ext token account
+          //       [X] given the token authority is the owner of the from ext token account
+          //         [X] it burns the amount of ext tokens from the from's ext token account
+          //       [X] it transfers the amount of M tokens from the M vault token account to the to's M token account
 
           // given the m mint account does not match the one stored in the global account
           // it reverts with an InvalidAccount error
@@ -2606,9 +2852,9 @@ for (const variant of VARIANTS) {
             );
           });
 
-          // given the signer is not the authority on the user ext token account and not delegated
+          // given the token authority is not the authority on the from ext token account and not delegated
           // it reverts with a ConstraintTokenOwner error
-          test("Signer is not the authority on the from Ext token account and not delegated - reverts", async () => {
+          test("Token authority is not the authority on the from Ext token account and not delegated - reverts", async () => {
             // Get the ATA for another user
             fromExtTokenAccount = await $.getATA(
               $.extMint.publicKey,
@@ -2709,10 +2955,10 @@ for (const variant of VARIANTS) {
               "ConstraintTokenMint"
             );
           });
-
-          // given the signer is not in the wrap authorities list
+          // given a wrap authority is not provided
+          // given the token authority is not in the wrap authorities list
           // it reverts with a NotAuthorized error
-          test("Signer is not in the wrap authorities list - reverts", async () => {
+          test("Token authority is not in the wrap authorities list - reverts", async () => {
             fromExtTokenAccount = await $.getATA(
               $.extMint.publicKey,
               $.nonWrapAuthority.publicKey
@@ -2738,9 +2984,10 @@ for (const variant of VARIANTS) {
             );
           });
 
-          // given all accounts are correct
-          // give the user does not have enough ext tokens
-          // it unwraps the user's total balance of ext tokens
+          // given a wrap authority is not provided
+          // given the token authority is in the wrap authorities list
+          // give the from token account does not have enough ext tokens
+          // it unwraps the from token account's total balance of ext tokens
           test("Not enough ext tokens, unwraps user's total balance - success", async () => {
             // Get the balance of the from ext token account
             const fromExtTokenAccountBalance =
@@ -2794,9 +3041,10 @@ for (const variant of VARIANTS) {
             );
           });
 
-          // given all accounts are correct
+          // given a wrap authority is not provided
+          // given the token authority is in the wrap authorities list
           // given the from token account has enough ext tokens
-          // given the signer is not the owner of the from ext token account, but is delegated
+          // given the token authority is not the owner of the from ext token account, but is delegated
           // it burns the amount of ext tokens from the from's ext token account
           // it transfers the amount of M tokens from the M vault token account to the to's M token account
           test("Unwrap with delegated authority - success", async () => {
@@ -2866,8 +3114,9 @@ for (const variant of VARIANTS) {
             );
           });
 
-          // given all accounts are correct
-          // given the user has enough ext tokens
+          // given a wrap authority is not provided
+          // given the token authority is in the wrap authorities list
+          // given the from token account has enough ext tokens
           // it transfers the amount of M tokens from the M vault token account to the user's M token account
           // it burns the amount of ext tokens from the user's ext token account
           test("Unwrap to wrap authority account - success", async () => {
@@ -2925,10 +3174,11 @@ for (const variant of VARIANTS) {
                 );
           });
 
-          // given all accounts are correct
-          // given the user has enough ext tokens
-          // it transfers the amount of M tokens from the M vault token account to the user's M token account
-          // it burns the amount of ext tokens from the user's ext token account
+          // given a wrap authority is not provided
+          // given the token authority is in the wrap authorities list
+          // given the from token account has enough ext tokens
+          // it transfers the amount of M tokens from the M vault token account to the to M token account
+          // it burns the amount of ext tokens from the from ext token account
           test("Unwrap to different account - success", async () => {
             toMTokenAccount = await $.getATA(
               $.mMint.publicKey,
@@ -2961,6 +3211,256 @@ for (const variant of VARIANTS) {
                 toMTokenAccount,
               })
               .signers([$.wrapAuthority])
+              .rpc();
+
+            // Confirm updated balances
+            await $.expectTokenBalance(
+              toMTokenAccount,
+              toMTokenAccountBalance.add(unwrapAmount),
+              Comparison.LessThanOrEqual,
+              new BN(2)
+            );
+            await $.expectTokenBalance(
+              vaultMTokenAccount,
+              vaultMTokenAccountBalance.sub(unwrapAmount),
+              Comparison.GreaterThanOrEqual,
+              new BN(2)
+            );
+            variant === Variant.ScaledUiAmount
+              ? await $.expectTokenUiBalance(
+                  fromExtTokenAccount,
+                  fromExtTokenAccountBalance.sub(unwrapAmount),
+                  Comparison.LessThanOrEqual,
+                  new BN(2)
+                )
+              : await $.expectTokenBalance(
+                  fromExtTokenAccount,
+                  fromExtTokenAccountBalance.sub(unwrapAmount)
+                );
+          });
+
+          // given a wrap authority is provided
+          // given the wrap authority does not sign the transaction
+          // it reverts
+          test("Wrap authority does not sign - reverts", async () => {
+            fromExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.nonWrapAuthority.publicKey
+            );
+            toMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.nonWrapAuthority.publicKey
+            );
+
+            // Attempt to send the transaction
+            // Expect revert
+            await $.expectSystemError(
+              $.ext.methods
+                .unwrap(wrappedAmount)
+                .accounts({
+                  tokenAuthority: $.nonWrapAuthority.publicKey,
+                  wrapAuthority: $.wrapAuthority.publicKey,
+                  fromExtTokenAccount,
+                  toMTokenAccount,
+                })
+                .signers([$.nonWrapAuthority])
+                .rpc()
+            );
+          });
+
+          // given a wrap authority is provided
+          // given the wrap authority is not on the wrap authorities list
+          // it reverts with a NotAuthorized error
+          test("Wrap authority not on wrap authorities list - reverts", async () => {
+            fromExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.nonWrapAuthority.publicKey
+            );
+            toMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.nonWrapAuthority.publicKey
+            );
+
+            // Attempt to send the transaction
+            // Expect revert with a NotAuthorized error
+            await $.expectAnchorError(
+              $.ext.methods
+                .unwrap(wrappedAmount)
+                .accounts({
+                  tokenAuthority: $.nonWrapAuthority.publicKey,
+                  wrapAuthority: $.nonAdmin.publicKey,
+                  fromExtTokenAccount,
+                  toMTokenAccount,
+                })
+                .signers([$.nonWrapAuthority, $.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given a wrap authority is provided
+          // given the wrap authority is on the wrap authorities list
+          // given the from token account does not have enough ext tokens
+          // it unwraps the from token account's total balance of ext tokens
+          test("Not enough ext tokens, unwraps user's total balance - wrap authority - success", async () => {
+            fromExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.nonWrapAuthority.publicKey
+            );
+            toMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.nonWrapAuthority.publicKey
+            );
+            vaultMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.getMVault()
+            );
+
+            // Get the balance of the from ext token account
+            const fromExtTokenAccountBalance =
+              variant === Variant.ScaledUiAmount
+                ? await $.getTokenUiBalance(
+                    fromExtTokenAccount,
+                    await $.getCurrentMultiplier()
+                  )
+                : await $.getTokenBalance(fromExtTokenAccount);
+            const vaultMTokenAccountBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+            const toMTokenAccountBalance = await $.getTokenBalance(
+              toMTokenAccount
+            );
+
+            const unwrapAmount = new BN(
+              randomInt(fromExtTokenAccountBalance.toNumber() + 1, 2 ** 48 - 1)
+            );
+
+            // Send the unwrap
+            await $.ext.methods
+              .unwrap(unwrapAmount)
+              .accounts({
+                tokenAuthority: $.nonWrapAuthority.publicKey,
+                wrapAuthority: $.wrapAuthority.publicKey,
+                fromExtTokenAccount,
+                toMTokenAccount,
+              })
+              .signers([$.nonWrapAuthority, $.wrapAuthority])
+              .rpc();
+
+            $.expectTokenBalance(fromExtTokenAccount, new BN(0));
+            $.expectTokenBalance(
+              vaultMTokenAccount,
+              vaultMTokenAccountBalance.sub(fromExtTokenAccountBalance),
+              Comparison.GreaterThanOrEqual,
+              new BN(2)
+            );
+            $.expectTokenBalance(
+              toMTokenAccount,
+              toMTokenAccountBalance.add(fromExtTokenAccountBalance),
+              Comparison.LessThanOrEqual,
+              new BN(2)
+            );
+          });
+
+          // given a wrap authority is provided
+          // given the wrap authority is on the wrap authorities list
+          // given the from token account has enough ext tokens
+          // given the token authority is not the owner of the from ext token account, but is delegated
+          // it burns the amount of ext tokens from the from's ext token account
+          // it transfers the amount of M tokens from the M vault token account to the to's M token account
+          test("Unwrap with delegated authority - wrap authority - success", async () => {
+            vaultMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.getMVault()
+            );
+            toMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.nonWrapAuthority.publicKey
+            );
+
+            // Approve (delegate) the nonAdmin to spend the non-wrap authority's ext tokens
+            const { sourceATA: fromExtTokenAccount } = await $.approve(
+              $.nonWrapAuthority,
+              $.nonAdmin.publicKey,
+              $.extMint.publicKey,
+              wrappedAmount
+            );
+
+            // Cache initial balances
+            const fromExtTokenAccountBalance =
+              variant === Variant.ScaledUiAmount
+                ? await $.getTokenUiBalance(fromExtTokenAccount)
+                : await $.getTokenBalance(fromExtTokenAccount);
+            const vaultMTokenAccountBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+            const toMTokenAccountBalance = await $.getTokenBalance(
+              toMTokenAccount
+            );
+
+            const unwrapAmount = new BN(
+              randomInt(1, wrappedAmount.toNumber() + 1)
+            );
+
+            // Send the instruction
+            await $.ext.methods
+              .unwrap(unwrapAmount)
+              .accounts({
+                tokenAuthority: $.nonAdmin.publicKey,
+                wrapAuthority: $.wrapAuthority.publicKey,
+                fromExtTokenAccount,
+                toMTokenAccount,
+              })
+              .signers([$.nonAdmin, $.wrapAuthority])
+              .rpc();
+          });
+
+          // given a wrap authority is provided
+          // given the wrap authority is on the wrap authorities list
+          // given the from token account has enough ext tokens
+          // given the token authority is the owner of the from ext token account
+          // it burns the amount of ext tokens from the from's ext token account
+          // it transfers the amount of M tokens from the M vault token account to the to's M token account
+          test("Unwrap with owner authority - wrap authority - success", async () => {
+            fromExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.nonWrapAuthority.publicKey
+            );
+            toMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.nonWrapAuthority.publicKey
+            );
+            vaultMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.getMVault()
+            );
+
+            // Cache initial balances
+            const fromExtTokenAccountBalance =
+              variant === Variant.ScaledUiAmount
+                ? await $.getTokenUiBalance(fromExtTokenAccount)
+                : await $.getTokenBalance(fromExtTokenAccount);
+            const vaultMTokenAccountBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+            const toMTokenAccountBalance = await $.getTokenBalance(
+              toMTokenAccount
+            );
+
+            const unwrapAmount = new BN(
+              randomInt(1, wrappedAmount.toNumber() + 1)
+            );
+
+            // Send the instruction
+            await $.ext.methods
+              .unwrap(unwrapAmount)
+              .accounts({
+                tokenAuthority: $.nonWrapAuthority.publicKey,
+                wrapAuthority: $.wrapAuthority.publicKey,
+                fromExtTokenAccount,
+                toMTokenAccount,
+              })
+              .signers([$.nonWrapAuthority, $.wrapAuthority])
               .rpc();
 
             // Confirm updated balances
