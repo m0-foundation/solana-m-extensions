@@ -1571,8 +1571,8 @@ for (const variant of VARIANTS) {
           //   [X] given the user does not have enough M tokens
           //     [X] it reverts with a ? error
           //   [X] given the user has enough M tokens
-          //     [ ] given the signer is not the owner of the from M token account, but is delegated
-          //       [ ] it transfers the amount of M tokens from the user's M token account to the M vault token account
+          //     [X] given the signer is not the owner of the from M token account, but is delegated
+          //       [X] it transfers the amount of M tokens from the user's M token account to the M vault token account
           //     [X] given the signer is the owner of the from M token account
           //       [X] it transfers the amount of M tokens from the user's M token account to the M vault token account
           //     [X] it mints the amount of ext tokens to the user's ext token account
@@ -1600,7 +1600,8 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .wrap(mintAmount)
                 .accountsPartial({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   mMint: wrongMint.publicKey,
                   fromMTokenAccount,
                   toExtTokenAccount,
@@ -1629,7 +1630,8 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .wrap(mintAmount)
                 .accountsPartial({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   extMint: wrongMint.publicKey,
                   fromMTokenAccount,
                   toExtTokenAccount,
@@ -1642,7 +1644,7 @@ for (const variant of VARIANTS) {
 
           // given the signer is not the authority on the user M token account and is not delegated
           // it reverts with a ConstraintTokenOwner error
-          test("Signer is not the authority on the from M token account and is not delegated - reverts", async () => {
+          test("Token authority is not the authority on the from M token account and is not delegated - reverts", async () => {
             // Get the ATA for another user
             fromMTokenAccount = await $.getATA(
               $.mMint.publicKey,
@@ -1655,7 +1657,8 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .wrap(mintAmount)
                 .accounts({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
                 })
@@ -1685,7 +1688,8 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .wrap(mintAmount)
                 .accountsPartial({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
                   vaultMTokenAccount,
@@ -1706,7 +1710,8 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .wrap(mintAmount)
                 .accounts({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   fromMTokenAccount: toExtTokenAccount,
                   toExtTokenAccount,
                 })
@@ -1725,7 +1730,8 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .wrap(mintAmount)
                 .accounts({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   toExtTokenAccount: fromMTokenAccount,
                   fromMTokenAccount,
                 })
@@ -1753,7 +1759,8 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .wrap(mintAmount)
                 .accounts({
-                  signer: $.nonWrapAuthority.publicKey,
+                  tokenAuthority: $.nonWrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
                 })
@@ -1777,7 +1784,8 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .wrap(wrapAmount)
                 .accounts({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
                 })
@@ -1824,7 +1832,8 @@ for (const variant of VARIANTS) {
             await $.ext.methods
               .wrap(wrapAmount)
               .accounts({
-                signer: $.wrapAuthority.publicKey,
+                tokenAuthority: $.wrapAuthority.publicKey,
+                wrapAuthority: $.ext.programId,
                 fromMTokenAccount,
                 toExtTokenAccount,
               })
@@ -1876,7 +1885,8 @@ for (const variant of VARIANTS) {
             await $.ext.methods
               .wrap(wrapAmount)
               .accountsPartial({
-                signer: $.wrapAuthority.publicKey,
+                tokenAuthority: $.wrapAuthority.publicKey,
+                wrapAuthority: $.ext.programId,
                 fromMTokenAccount,
                 toExtTokenAccount,
               })
@@ -1934,7 +1944,8 @@ for (const variant of VARIANTS) {
             await $.ext.methods
               .wrap(wrapAmount)
               .accountsPartial({
-                signer: $.wrapAuthority.publicKey,
+                tokenAuthority: $.wrapAuthority.publicKey,
+                wrapAuthority: $.ext.programId,
                 fromMTokenAccount,
                 toExtTokenAccount,
               })
@@ -2063,7 +2074,8 @@ for (const variant of VARIANTS) {
               await $.ext.methods
                 .wrap(wrapAmount)
                 .accounts({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
                 })
@@ -2131,7 +2143,8 @@ for (const variant of VARIANTS) {
               await $.ext.methods
                 .wrap(wrapAmount)
                 .accounts({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
                 })
@@ -2199,7 +2212,8 @@ for (const variant of VARIANTS) {
               await $.ext.methods
                 .wrap(wrapAmount)
                 .accounts({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
                 })
@@ -2276,7 +2290,8 @@ for (const variant of VARIANTS) {
               await $.ext.methods
                 .wrap(wrapAmount)
                 .accounts({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
                 })
@@ -2356,7 +2371,8 @@ for (const variant of VARIANTS) {
               await $.ext.methods
                 .wrap(wrapAmount)
                 .accounts({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
                 })
@@ -2436,7 +2452,8 @@ for (const variant of VARIANTS) {
               await $.ext.methods
                 .wrap(wrapAmount)
                 .accounts({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
                 })
@@ -2496,11 +2513,7 @@ for (const variant of VARIANTS) {
 
           // Wrap tokens for the users so we can test unwrapping
           await $.wrap($.wrapAuthority, wrappedAmount);
-          await $.wrap(
-            $.wrapAuthority,
-            wrappedAmount,
-            $.nonWrapAuthority.publicKey
-          );
+          await $.wrap($.nonWrapAuthority, wrappedAmount, $.wrapAuthority);
         });
         describe("index same as start", () => {
           // test cases
@@ -2550,7 +2563,8 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .unwrap(wrappedAmount)
                 .accountsPartial({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   mMint: wrongMint.publicKey,
                   fromExtTokenAccount,
                   toMTokenAccount,
@@ -2580,7 +2594,8 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .unwrap(wrappedAmount)
                 .accountsPartial({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   extMint: wrongMint.publicKey,
                   fromExtTokenAccount,
                   toMTokenAccount,
@@ -2606,7 +2621,8 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .unwrap(wrappedAmount)
                 .accounts({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   fromExtTokenAccount,
                   toMTokenAccount,
                 })
@@ -2641,7 +2657,8 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .unwrap(wrappedAmount)
                 .accountsPartial({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   fromExtTokenAccount,
                   toMTokenAccount,
                   vaultMTokenAccount,
@@ -2662,7 +2679,8 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .unwrap(wrappedAmount)
                 .accounts({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   toMTokenAccount: fromExtTokenAccount,
                   fromExtTokenAccount,
                 })
@@ -2681,7 +2699,8 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .unwrap(wrappedAmount)
                 .accounts({
-                  signer: $.wrapAuthority.publicKey,
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   fromExtTokenAccount: toMTokenAccount,
                   toMTokenAccount,
                 })
@@ -2708,7 +2727,8 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .unwrap(wrappedAmount)
                 .accounts({
-                  signer: $.nonWrapAuthority.publicKey,
+                  tokenAuthority: $.nonWrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
                   fromExtTokenAccount,
                   toMTokenAccount,
                 })
@@ -2746,23 +2766,18 @@ for (const variant of VARIANTS) {
             const unwrapAmount = new BN(
               randomInt(fromExtTokenAccountBalance.toNumber() + 1, 2 ** 48 - 1)
             );
-            console.log("unwrapAmount", unwrapAmount.toString());
 
             // Send the unwrap
             await $.ext.methods
               .unwrap(unwrapAmount)
               .accounts({
-                signer: $.wrapAuthority.publicKey,
+                tokenAuthority: $.wrapAuthority.publicKey,
+                wrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
               .signers([$.wrapAuthority])
               .rpc();
-
-            console.log(
-              "remaining ext tokens after unwrap",
-              (await $.getTokenBalance(fromExtTokenAccount)).toString()
-            );
 
             $.expectTokenBalance(fromExtTokenAccount, new BN(0));
             $.expectTokenBalance(
@@ -2817,7 +2832,8 @@ for (const variant of VARIANTS) {
             await $.ext.methods
               .unwrap(unwrapAmount)
               .accounts({
-                signer: $.wrapAuthority.publicKey,
+                tokenAuthority: $.wrapAuthority.publicKey,
+                wrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
@@ -2875,7 +2891,8 @@ for (const variant of VARIANTS) {
             await $.ext.methods
               .unwrap(unwrapAmount)
               .accountsPartial({
-                signer: $.wrapAuthority.publicKey,
+                tokenAuthority: $.wrapAuthority.publicKey,
+                wrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
@@ -2938,7 +2955,8 @@ for (const variant of VARIANTS) {
             await $.ext.methods
               .unwrap(unwrapAmount)
               .accounts({
-                signer: $.wrapAuthority.publicKey,
+                tokenAuthority: $.wrapAuthority.publicKey,
+                wrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
@@ -3035,7 +3053,8 @@ for (const variant of VARIANTS) {
             await $.ext.methods
               .unwrap(unwrapAmount)
               .accounts({
-                signer: $.wrapAuthority.publicKey,
+                tokenAuthority: $.wrapAuthority.publicKey,
+                wrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
@@ -3110,7 +3129,8 @@ for (const variant of VARIANTS) {
             await $.ext.methods
               .unwrap(unwrapAmount)
               .accounts({
-                signer: $.wrapAuthority.publicKey,
+                tokenAuthority: $.wrapAuthority.publicKey,
+                wrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
@@ -3184,7 +3204,8 @@ for (const variant of VARIANTS) {
             await $.ext.methods
               .unwrap(unwrapAmount)
               .accounts({
-                signer: $.wrapAuthority.publicKey,
+                tokenAuthority: $.wrapAuthority.publicKey,
+                wrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
