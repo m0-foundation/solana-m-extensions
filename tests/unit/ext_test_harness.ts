@@ -1243,7 +1243,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   }
 
   public async prepWrap(
-    from: Keypair,
+    from: PublicKey,
     to?: PublicKey,
     fromMTokenAccount?: PublicKey,
     toExtTokenAccount?: PublicKey,
@@ -1258,11 +1258,10 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
 
     // Create accounts if needed
     fromMTokenAccount =
-      fromMTokenAccount ??
-      (await this.getATA(this.mMint.publicKey, from.publicKey));
+      fromMTokenAccount ?? (await this.getATA(this.mMint.publicKey, from));
     toExtTokenAccount =
       toExtTokenAccount ??
-      (await this.getATA(this.extMint.publicKey, to ?? from.publicKey));
+      (await this.getATA(this.extMint.publicKey, to ?? from));
     vaultMTokenAccount =
       vaultMTokenAccount ?? (await this.getATA(this.mMint.publicKey, mVault));
 
@@ -1274,8 +1273,10 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   }
 
   public async wrap(
-    from: Keypair,
+    tokenAuthority: Keypair,
     amount: BN,
+    wrapAuthority?: Keypair | null,
+    from?: PublicKey,
     to?: PublicKey
   ): Promise<{
     vaultMTokenAccount: PublicKey;
@@ -1284,24 +1285,29 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   }> {
     // Setup the instruction
     const { vaultMTokenAccount, fromMTokenAccount, toExtTokenAccount } =
-      await this.prepWrap(from, to);
+      await this.prepWrap(from ?? tokenAuthority.publicKey, to);
 
     // Send the instruction
     await this.ext.methods
       .wrap(amount)
       .accounts({
-        signer: from.publicKey,
+        tokenAuthority: tokenAuthority.publicKey,
+        wrapAuthority: wrapAuthority
+          ? wrapAuthority.publicKey
+          : this.ext.programId,
         fromMTokenAccount,
         toExtTokenAccount,
       })
-      .signers([from])
+      .signers(
+        wrapAuthority ? [tokenAuthority, wrapAuthority] : [tokenAuthority]
+      )
       .rpc();
 
     return { vaultMTokenAccount, fromMTokenAccount, toExtTokenAccount };
   }
 
   public async prepUnwrap(
-    from: Keypair,
+    from: PublicKey,
     to?: PublicKey,
     toMTokenAccount?: PublicKey,
     fromExtTokenAccount?: PublicKey,
@@ -1315,11 +1321,9 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     const mVault = this.getMVault();
 
     toMTokenAccount =
-      toMTokenAccount ??
-      (await this.getATA(this.mMint.publicKey, to ?? from.publicKey));
+      toMTokenAccount ?? (await this.getATA(this.mMint.publicKey, to ?? from));
     fromExtTokenAccount =
-      fromExtTokenAccount ??
-      (await this.getATA(this.extMint.publicKey, from.publicKey));
+      fromExtTokenAccount ?? (await this.getATA(this.extMint.publicKey, from));
     vaultMTokenAccount =
       vaultMTokenAccount ?? (await this.getATA(this.mMint.publicKey, mVault));
 
@@ -1331,8 +1335,10 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   }
 
   public async unwrap(
-    from: Keypair,
+    tokenAuthority: Keypair,
     amount: BN,
+    wrapAuthority?: Keypair | null,
+    from?: PublicKey,
     to?: PublicKey
   ): Promise<{
     vaultMTokenAccount: PublicKey;
@@ -1341,17 +1347,22 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   }> {
     // Setup the instruction
     const { vaultMTokenAccount, toMTokenAccount, fromExtTokenAccount } =
-      await this.prepUnwrap(from, to);
+      await this.prepUnwrap(from ?? tokenAuthority.publicKey, to);
 
     // Send the instruction
     await this.ext.methods
       .unwrap(amount)
       .accounts({
-        signer: from.publicKey,
+        tokenAuthority: tokenAuthority.publicKey,
+        wrapAuthority: wrapAuthority
+          ? wrapAuthority.publicKey
+          : this.ext.programId,
         toMTokenAccount,
         fromExtTokenAccount,
       })
-      .signers([from])
+      .signers(
+        wrapAuthority ? [tokenAuthority, wrapAuthority] : [tokenAuthority]
+      )
       .rpc();
 
     return { vaultMTokenAccount, toMTokenAccount, fromExtTokenAccount };
