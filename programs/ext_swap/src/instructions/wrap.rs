@@ -13,6 +13,9 @@ pub struct Wrap<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
 
+    // Required if the swap program is not whitelisted on the extension
+    pub wrap_authority: Option<Signer<'info>>,
+
     /*
      * Program globals
      */
@@ -122,12 +125,18 @@ impl<'info> Wrap<'info> {
 
     #[access_control(ctx.accounts.validate())]
     pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, amount: u64) -> Result<()> {
+        // Set swap program as authority if none provided
+        let wrap_authority = match &ctx.accounts.wrap_authority {
+            Some(auth) => auth.to_account_info(),
+            None => ctx.accounts.swap_global.to_account_info(),
+        };
+
         m_ext::cpi::wrap(
             CpiContext::new_with_signer(
                 ctx.accounts.to_ext_program.to_account_info(),
                 ExtWrap {
                     token_authority: ctx.accounts.signer.to_account_info(),
-                    wrap_authority: Some(ctx.accounts.swap_global.to_account_info()),
+                    wrap_authority: Some(wrap_authority),
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.to_mint.to_account_info(),
                     global_account: ctx.accounts.to_global.to_account_info(),
