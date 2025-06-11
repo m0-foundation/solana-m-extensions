@@ -1233,10 +1233,19 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       .rpc();
   }
 
-  public async updateWrapAuthority(index: number, newWrapAuthority: PublicKey) {
+  public async addWrapAuthority(newWrapAuthority: PublicKey) {
     // Send the instruction
     await this.ext.methods
-      .updateWrapAuthority(index, newWrapAuthority)
+      .addWrapAuthority(newWrapAuthority)
+      .accounts({})
+      .signers([this.admin])
+      .rpc();
+  }
+
+  public async removeWrapAuthority(oldWrapAuthority: PublicKey) {
+    // Send the instruction
+    await this.ext.methods
+      .removeWrapAuthority(oldWrapAuthority)
       .accounts({})
       .signers([this.admin])
       .rpc();

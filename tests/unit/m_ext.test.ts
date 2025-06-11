@@ -51,12 +51,8 @@ for (const variant of VARIANTS) {
         //   [X] it reverts with a SeedsConstraint error
         // [X] given the ext_mint_authority is not the required PDA
         //   [X] it reverts with a SeedsConstraint error
-        // [ ] given the ext_mint does not have a freeze authority
-        //   [ ] it reverts with a InvalidMint error
-        // [X] given more than 10 wrap authorities are provided
-        //   [X] it reverts with an InvalidParam error
-        // [X] given wrap authorities includes the system program id (default public key)
-        //   [X] it reverts with an InvalidParam error
+        // [X] given the ext_mint does not have a freeze authority
+        //   [X] it reverts with a InvalidMint error
         // [X] given the wrap authorities are not unique
         //   [X] it reverts with an InvalidParam error
 
@@ -248,56 +244,9 @@ for (const variant of VARIANTS) {
           );
         });
 
-        // given more than 10 wrap authorities are provided
-        // it reverts with an InvalidParam error
-        test("more than 10 wrap authorities provided - reverts", async () => {
-          // Change the wrap authorities
-          const wrapAuthorities: PublicKey[] = $.createUniqueKeyArray(11);
-
-          // Attempt to send transaction
-          await $.expectAnchorError(
-            (variant === Variant.NoYield
-              ? $.ext.methods.initialize(wrapAuthorities)
-              : $.ext.methods.initialize(wrapAuthorities, new BN(0))
-            )
-              .accounts({
-                admin: $.nonAdmin.publicKey,
-                mMint: $.mMint.publicKey,
-                extMint: $.extMint.publicKey,
-              })
-              .signers([$.nonAdmin])
-              .rpc(),
-            "InvalidParam"
-          );
-        });
-
-        // given wrap authorities includes the system program id (default public key)
-        // it reverts with an InvalidParam error
-        test("wrap authorities includes the system program id - reverts", async () => {
-          // Change the wrap authorities
-          const wrapAuthorities: PublicKey[] = $.createUniqueKeyArray(10);
-          wrapAuthorities[0] = SystemProgram.programId;
-
-          // Attempt to send transaction
-          await $.expectAnchorError(
-            (variant === Variant.NoYield
-              ? $.ext.methods.initialize(wrapAuthorities)
-              : $.ext.methods.initialize(wrapAuthorities, new BN(0))
-            )
-              .accounts({
-                admin: $.nonAdmin.publicKey,
-                mMint: $.mMint.publicKey,
-                extMint: $.extMint.publicKey,
-              })
-              .signers([$.nonAdmin])
-              .rpc(),
-            "InvalidParam"
-          );
-        });
-
         // given wrap authorities includes a duplicate, non-default public key
         // it reverts with an InvalidParam error
-        test("wrap authorities includes a duplicate, non-default public key - reverts", async () => {
+        test("wrap authorities includes a duplicate public key - reverts", async () => {
           // Change the wrap authorities
           const wrapAuthorities: PublicKey[] = $.createUniqueKeyArray(10);
           wrapAuthorities[0] = wrapAuthorities[1];
@@ -344,7 +293,6 @@ for (const variant of VARIANTS) {
             const numWrapAuthorities = randomInt(10);
             const wrapAuthorities: PublicKey[] =
               $.createUniqueKeyArray(numWrapAuthorities);
-            const paddedWrapAuthorities = padKeyArray(wrapAuthorities, 10);
 
             // Derive PDA bumps
             const [, bump] = PublicKey.findProgramAddressSync(
@@ -384,9 +332,16 @@ for (const variant of VARIANTS) {
               bump,
               mVaultBump,
               extMintAuthorityBump,
-              wrapAuthorities: paddedWrapAuthorities,
               yieldConfig: {},
+              wrapAuthorities,
             });
+
+            // Confirm the size of the global account based on the number of wrap authorities
+            const expectedSize = 143 + wrapAuthorities.length * 32; // 143 bytes base size + 4 bytes for vector length + 32 bytes per wrap authority
+            const extGlobalSize = await $.provider.connection
+              .getAccountInfo(globalAccount)
+              .then((info) => info?.data.length || 0);
+            expect(extGlobalSize).toEqual(expectedSize);
           });
         }
 
@@ -465,7 +420,6 @@ for (const variant of VARIANTS) {
             const numWrapAuthorities = randomInt(10);
             const wrapAuthorities: PublicKey[] =
               $.createUniqueKeyArray(numWrapAuthorities);
-            const paddedWrapAuthorities = padKeyArray(wrapAuthorities, 10);
 
             // Derive PDA bumps
             const [, bump] = PublicKey.findProgramAddressSync(
@@ -508,13 +462,20 @@ for (const variant of VARIANTS) {
               bump,
               mVaultBump,
               extMintAuthorityBump,
-              wrapAuthorities: paddedWrapAuthorities,
+              wrapAuthorities,
               yieldConfig: {
                 feeBps,
                 lastMIndex: initialIndex,
                 lastExtIndex: new BN(1e12),
               },
             });
+
+            // Check the size of the global account based on the number of wrap authorities
+            const expectedSize = 143 + 24 + wrapAuthorities.length * 32; // 143 bytes base size + 24 yield config size + 32 bytes per wrap authority
+            const extGlobalSize = await $.provider.connection
+              .getAccountInfo(globalAccount)
+              .then((info) => info?.data.length || 0);
+            expect(extGlobalSize).toEqual(expectedSize);
 
             // Check the state of the mint
             await $.expectScaledUiAmountConfig($.extMint.publicKey, {
@@ -826,13 +787,11 @@ for (const variant of VARIANTS) {
         });
       });
 
-      describe("update_wrap_authority unit tests", () => {
+      describe("add_wrap_authority unit tests", () => {
         let wrapAuthorities: PublicKey[];
-        let paddedWrapAuthorities: PublicKey[];
 
         beforeEach(async () => {
           wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
-          paddedWrapAuthorities = padKeyArray(wrapAuthorities, 10);
 
           const feeBps =
             variant === Variant.NoYield ? new BN(0) : new BN(randomInt(10000));
@@ -844,14 +803,11 @@ for (const variant of VARIANTS) {
         // [X] given the admin does not sign the transaction
         //   [X] it reverts with a NotAuthorized error
         // [X] given the admin signs the transaction
-        //   [X] given the index is out of bounds
+        //   [X] given the new wrap authority is already in the list
         //     [X] it reverts with a InvalidParam error
-        //   [X] given the new wrap authority is already in the list (and not the default public key)
-        //     [X] it reverts with a InvalidParam error
-        //   [X] given the new wrap authority is the default public key
-        //     [X] it removes the wrap authority at the given index
-        //   [X] given the new wrap authority is not the default public key and not in the list
-        //     [X] it adds the new wrap authority to the list at the provided index
+        //   [X] given the new wrap authority is not in the list
+        //     [X] it adds the new wrap authority to the list
+        //     [X] it resizes the ext global account to accommodate the new wrap authority
 
         // given the admin does not sign the transaction
         // it reverts with a NotAuthorized error
@@ -859,7 +815,7 @@ for (const variant of VARIANTS) {
           // Attempt to send the transaction
           await $.expectAnchorError(
             $.ext.methods
-              .updateWrapAuthority(0, $.nonWrapAuthority.publicKey)
+              .addWrapAuthority($.nonWrapAuthority.publicKey)
               .accounts({
                 admin: $.nonAdmin.publicKey,
               })
@@ -870,30 +826,13 @@ for (const variant of VARIANTS) {
         });
 
         // given the admin signs the transaction
-        // given the index is out of bounds
-        // it reverts with a InvalidParam error
-        test("index out of bounds - reverts", async () => {
-          const index = randomInt(11, 256);
-
-          // Attempt to send the transaction
-          await $.expectAnchorError(
-            $.ext.methods
-              .updateWrapAuthority(index, $.nonWrapAuthority.publicKey)
-              .accounts({ admin: $.admin.publicKey })
-              .signers([$.admin])
-              .rpc(),
-            "InvalidParam"
-          );
-        });
-
-        // given the admin signs the transaction
-        // given the new wrap authority is already in the list (and not the default public key)
+        // given the new wrap authority is already in the list
         // it reverts with a InvalidParam error
         test("new wrap authority already in the list - reverts", async () => {
           // Attempt to send the transaction
           await $.expectAnchorError(
             $.ext.methods
-              .updateWrapAuthority(0, $.wrapAuthority.publicKey)
+              .addWrapAuthority($.wrapAuthority.publicKey)
               .accounts({ admin: $.admin.publicKey })
               .signers([$.admin])
               .rpc(),
@@ -902,34 +841,19 @@ for (const variant of VARIANTS) {
         });
 
         // given the admin signs the transaction
-        // given the new wrap authority is the default public key
-        // it removes the wrap authority at the given index
-        test("new wrap authority is the default public key - success", async () => {
+        // given the new wrap authority is not in the list
+        // it adds the new wrap authority to the list
+        // it resizes the ext global account to accommodate the new wrap authority
+        test("new wrap authority is not in the list - success", async () => {
+          // Cache the size of the ext global account
+          const extGlobalAccount = $.getExtGlobalAccount();
+          const extGlobalSize = await $.provider.connection
+            .getAccountInfo(extGlobalAccount)
+            .then((info) => info?.data.length || 0);
+
           // Send the transaction
           await $.ext.methods
-            .updateWrapAuthority(0, SystemProgram.programId)
-            .accounts({
-              admin: $.admin.publicKey,
-            })
-            .signers([$.admin])
-            .rpc();
-
-          // Check that the wrap authority was removed
-          const updatedWrapAuthorities = paddedWrapAuthorities.slice(0);
-          updatedWrapAuthorities[0] = SystemProgram.programId;
-
-          await $.expectExtGlobalState({
-            wrapAuthorities: updatedWrapAuthorities,
-          });
-        });
-
-        // given the admin signs the transaction
-        // given the new wrap authority is not the default public key and not in the list
-        // it adds the new wrap authority to the list at the provided index
-        test("new wrap authority is not the default public key and not in the list - success", async () => {
-          // Send the transaction
-          await $.ext.methods
-            .updateWrapAuthority(2, $.nonWrapAuthority.publicKey)
+            .addWrapAuthority($.nonWrapAuthority.publicKey)
             .accounts({
               admin: $.admin.publicKey,
             })
@@ -937,12 +861,105 @@ for (const variant of VARIANTS) {
             .rpc();
 
           // Check that the wrap authority was added
-          const updatedWrapAuthorities = paddedWrapAuthorities.slice(0);
-          updatedWrapAuthorities[2] = $.nonWrapAuthority.publicKey;
+          wrapAuthorities.push($.nonWrapAuthority.publicKey);
 
           await $.expectExtGlobalState({
-            wrapAuthorities: updatedWrapAuthorities,
+            wrapAuthorities,
           });
+
+          // Check that the ext global account was resized
+          const newExtGlobalSize = await $.provider.connection
+            .getAccountInfo(extGlobalAccount)
+            .then((info) => info?.data.length || 0);
+          expect(newExtGlobalSize).toEqual(extGlobalSize + 32); // 32 bytes for the new wrap authority
+        });
+      });
+
+      describe("remove_wrap_authority unit tests", () => {
+        let wrapAuthorities: PublicKey[];
+
+        beforeEach(async () => {
+          wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
+
+          const feeBps =
+            variant === Variant.NoYield ? new BN(0) : new BN(randomInt(10000));
+          // Initialize the extension program
+          await $.initializeExt(wrapAuthorities, feeBps);
+        });
+
+        // test cases
+        // [X] given the admin does not sign the transaction
+        //   [X] it reverts with a NotAuthorized error
+        // [X] given the admin signs the transaction
+        //   [X] given the wrap authority is not in the list
+        //     [X] it reverts with a InvalidParam error
+        //   [X] given the wrap authority is in the list
+        //     [X] it removes the wrap authority from the list
+        //     [X] it resizes the ext global account down to accommodate the removed wrap authority
+
+        // given the admin does not sign the transaction
+        // it reverts with a NotAuthorized error
+        test("admin does not sign - reverts", async () => {
+          // Attempt to send the transaction
+          await $.expectAnchorError(
+            $.ext.methods
+              .removeWrapAuthority($.wrapAuthority.publicKey)
+              .accounts({
+                admin: $.nonAdmin.publicKey,
+              })
+              .signers([$.nonAdmin])
+              .rpc(),
+            "NotAuthorized"
+          );
+        });
+
+        // given the admin signs the transaction
+        // given the wrap authority is not in the list
+        // it reverts with a InvalidParam error
+        test("wrap authority not in the list - reverts", async () => {
+          // Attempt to send the transaction
+          await $.expectAnchorError(
+            $.ext.methods
+              .removeWrapAuthority($.nonWrapAuthority.publicKey)
+              .accounts({ admin: $.admin.publicKey })
+              .signers([$.admin])
+              .rpc(),
+            "InvalidParam"
+          );
+        });
+
+        // given the admin signs the transaction
+        // given the wrap authority is in the list
+        // it removes the wrap authority from the list
+        // it resizes the ext global account down to accommodate the removed wrap authority
+        test("wrap authority is in the list - success", async () => {
+          // Cache the size of the ext global account
+          const extGlobalAccount = $.getExtGlobalAccount();
+          const extGlobalSize = await $.provider.connection
+            .getAccountInfo(extGlobalAccount)
+            .then((info) => info?.data.length || 0);
+
+          // Send the transaction
+          await $.ext.methods
+            .removeWrapAuthority($.wrapAuthority.publicKey)
+            .accounts({
+              admin: $.admin.publicKey,
+            })
+            .signers([$.admin])
+            .rpc();
+
+          // Check that the wrap authority was added
+          wrapAuthorities.pop();
+
+          await $.expectExtGlobalState({
+            wrapAuthorities,
+          });
+
+          // Check that the ext global account was resized
+          const newExtGlobalSize = await $.provider.connection
+            .getAccountInfo(extGlobalAccount)
+            .then((info) => info?.data.length || 0);
+          expect(newExtGlobalSize).toEqual(extGlobalSize - 32); // remove 32 bytes
         });
       });
 

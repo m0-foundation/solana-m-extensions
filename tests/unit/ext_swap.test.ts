@@ -459,7 +459,7 @@ describe("extension swap tests", () => {
         );
 
         await sendTransaction(
-          p.methods.updateWrapAuthority(0, global).accounts({}).transaction(),
+          p.methods.addWrapAuthority(global).accounts({}).transaction(),
           [admin]
         );
       }
