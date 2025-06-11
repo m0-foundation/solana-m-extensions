@@ -18,8 +18,9 @@ use earn::{
 pub struct Unwrap<'info> {
     pub token_authority: Signer<'info>,
 
-    // Will be set if called by a program on the whitelist
-    pub program_authority: Option<Signer<'info>>,
+    // Allow an optional second signer that is separate from the token authority.
+    // If provided, this signer is the one which will be checked against the wrap authorities.
+    pub wrap_authority: Option<Signer<'info>>,
 
     #[account(mint::token_program = m_token_program)]
     pub m_mint: InterfaceAccount<'info, Mint>,
@@ -90,7 +91,7 @@ pub struct Unwrap<'info> {
 
 impl Unwrap<'_> {
     pub fn validate(&self) -> Result<()> {
-        let auth = match &self.program_authority {
+        let auth = match &self.wrap_authority {
             Some(auth) => auth.key,
             None => self.token_authority.key,
         };
