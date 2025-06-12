@@ -15,6 +15,10 @@ pub struct Swap<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
 
+    // Required if the swap program is not whitelisted on the extension
+    pub wrap_authority: Option<Signer<'info>>,
+    pub unwrap_authority: Option<Signer<'info>>,
+
     /*
      * Program globals
      */
@@ -193,12 +197,18 @@ impl<'info> Swap<'info> {
         let (unwrap_remaining_accounts, wrap_remaining_accounts) =
             remaining_accounts.split_at(remaining_accounts_split_idx);
 
+        // Set swap program as authority if none provided
+        let unwrap_authority = match &ctx.accounts.unwrap_authority {
+            Some(auth) => auth.to_account_info(),
+            None => ctx.accounts.swap_global.to_account_info(),
+        };
+
         m_ext::cpi::unwrap(
             CpiContext::new_with_signer(
                 ctx.accounts.from_ext_program.to_account_info(),
                 Unwrap {
                     token_authority: ctx.accounts.signer.to_account_info(),
-                    wrap_authority: Some(ctx.accounts.swap_global.to_account_info()),
+                    unwrap_authority: Some(unwrap_authority),
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.from_mint.to_account_info(),
                     global_account: ctx.accounts.from_global.to_account_info(),
@@ -221,12 +231,18 @@ impl<'info> Swap<'info> {
         ctx.accounts.intermediate_m_account.reload()?;
         let m_delta = ctx.accounts.intermediate_m_account.amount - m_pre_balance;
 
+        // Set swap program as authority if none provided
+        let wrap_authority = match &ctx.accounts.wrap_authority {
+            Some(auth) => auth.to_account_info(),
+            None => ctx.accounts.swap_global.to_account_info(),
+        };
+
         m_ext::cpi::wrap(
             CpiContext::new_with_signer(
                 ctx.accounts.to_ext_program.to_account_info(),
                 Wrap {
                     token_authority: ctx.accounts.signer.to_account_info(),
-                    wrap_authority: Some(ctx.accounts.swap_global.to_account_info()),
+                    wrap_authority: Some(wrap_authority),
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.to_mint.to_account_info(),
                     global_account: ctx.accounts.to_global.to_account_info(),

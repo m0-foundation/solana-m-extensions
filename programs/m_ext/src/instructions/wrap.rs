@@ -18,8 +18,7 @@ use earn::{
 pub struct Wrap<'info> {
     pub token_authority: Signer<'info>,
 
-    // Allow an optional second signer that is separate from the token authority.
-    // If provided, this signer is the one which will be checked against the wrap authorities.
+    // Will be set if a whitelisted authority is signing for a user
     pub wrap_authority: Option<Signer<'info>>,
 
     #[account(mint::token_program = m_token_program)]

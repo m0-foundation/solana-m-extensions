@@ -413,6 +413,7 @@ describe("extension swap tests", () => {
           .wrap(new BN(1e2))
           .accounts({
             signer: swapper.publicKey,
+            wrapAuthority: program.programId,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             toExtProgram: extProgramA.publicKey,
             toMint: mintA.publicKey,
@@ -441,6 +442,7 @@ describe("extension swap tests", () => {
           .wrap(new BN(1e3))
           .accounts({
             signer: swapper.publicKey,
+            wrapAuthority: program.programId,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             toExtProgram: extProgramA.publicKey,
             toMint: mintA.publicKey,
@@ -471,6 +473,7 @@ describe("extension swap tests", () => {
           .wrap(new BN(1e4))
           .accounts({
             signer: swapper.publicKey,
+            wrapAuthority: program.programId,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             toExtProgram: extProgramA.publicKey,
             toMint: mintA.publicKey,
@@ -491,6 +494,7 @@ describe("extension swap tests", () => {
           .unwrap(new BN(1e1))
           .accounts({
             signer: swapper.publicKey,
+            unwrapAuthority: program.programId,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             fromMint: mintA.publicKey,
@@ -517,6 +521,7 @@ describe("extension swap tests", () => {
           .unwrap(new BN(1e3))
           .accounts({
             signer: swapper.publicKey,
+            unwrapAuthority: program.programId,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             fromMint: mintA.publicKey,
@@ -537,6 +542,8 @@ describe("extension swap tests", () => {
           .swap(new BN(1e3), 0)
           .accounts({
             signer: swapper.publicKey,
+            unwrapAuthority: program.programId,
+            wrapAuthority: program.programId,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             toExtProgram: extProgramB.publicKey,
@@ -564,6 +571,8 @@ describe("extension swap tests", () => {
           .swap(new BN(1e2), 1)
           .accounts({
             signer: swapper.publicKey,
+            unwrapAuthority: program.programId,
+            wrapAuthority: program.programId,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             toExtProgram: extProgramB.publicKey,
@@ -585,6 +594,8 @@ describe("extension swap tests", () => {
           .swap(new BN(1e3), 1)
           .accounts({
             signer: swapper.publicKey,
+            unwrapAuthority: program.programId,
+            wrapAuthority: program.programId,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             toExtProgram: extProgramB.publicKey,
@@ -622,6 +633,8 @@ describe("extension swap tests", () => {
           .swap(new BN(1e3), 0)
           .accounts({
             signer: swapper.publicKey,
+            unwrapAuthority: program.programId,
+            wrapAuthority: program.programId,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             toExtProgram: extProgramC.publicKey,
@@ -643,6 +656,8 @@ describe("extension swap tests", () => {
           .swap(new BN(1e3), 0)
           .accounts({
             signer: swapper.publicKey,
+            unwrapAuthority: program.programId,
+            wrapAuthority: program.programId,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             toExtProgram: extProgramC.publicKey,
@@ -671,6 +686,8 @@ describe("extension swap tests", () => {
           .swap(new BN(1e3), 0)
           .accounts({
             signer: swapper.publicKey,
+            unwrapAuthority: program.programId,
+            wrapAuthority: program.programId,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             toExtProgram: extProgramC.publicKey,
@@ -697,7 +714,7 @@ describe("extension swap tests", () => {
     it("remove from ext whitelist", async () => {
       await sendTransaction(
         program.methods
-          .removeWhitelistedExtension(extProgramA.publicKey)
+          .removeWhitelistedExtension(extProgramC.publicKey)
           .accounts({})
           .transaction(),
         [admin]
@@ -710,6 +727,106 @@ describe("extension swap tests", () => {
           .swap(new BN(1e3), 0)
           .accounts({
             signer: swapper.publicKey,
+            unwrapAuthority: program.programId,
+            wrapAuthority: program.programId,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromExtProgram: extProgramB.publicKey,
+            toExtProgram: extProgramC.publicKey,
+            fromMint: mintB.publicKey,
+            toMint: mintC.publicKey,
+            fromTokenAccount: accounts.ataB,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper],
+        /Error Message: Extension is not whitelisted/
+      );
+    });
+  });
+
+  describe("swap program not whitelisted", () => {
+    it("attempt wrap without authority", async () => {
+      // Remove swap program as wrap authority
+      await sendTransaction(
+        extensionA.methods
+          .updateWrapAuthority(0, PublicKey.default)
+          .accounts({})
+          .transaction(),
+        [admin]
+      );
+
+      // Try to wrap
+      await sendTransaction(
+        program.methods
+          .wrap(new BN(1e1))
+          .accounts({
+            signer: swapper.publicKey,
+            wrapAuthority: program.programId,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            toExtProgram: extProgramA.publicKey,
+            toMint: mintA.publicKey,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper],
+        /Error Message: Invalid signer/
+      );
+    });
+
+    it("attempt wrap with invalid authority", async () => {
+      // Try to wrap
+      await sendTransaction(
+        program.methods
+          .wrap(new BN(1e1))
+          .accounts({
+            signer: swapper.publicKey,
+            wrapAuthority: admin.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            toExtProgram: extProgramA.publicKey,
+            toMint: mintA.publicKey,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper, admin],
+        /Error Message: Invalid signer/
+      );
+    });
+
+    it("wrap with wrap authority", async () => {
+      // add wrap authority
+      await sendTransaction(
+        extensionA.methods
+          .updateWrapAuthority(0, admin.publicKey)
+          .accounts({})
+          .transaction(),
+        [admin]
+      );
+
+      await sendTransaction(
+        program.methods
+          .wrap(new BN(1e2))
+          .accounts({
+            signer: swapper.publicKey,
+            wrapAuthority: admin.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            toExtProgram: extProgramA.publicKey,
+            toMint: mintA.publicKey,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper, admin]
+      );
+    });
+
+    it("unwrap authority set instead of wrap", async () => {
+      await sendTransaction(
+        program.methods
+          .swap(new BN(15), 0)
+          .accounts({
+            signer: swapper.publicKey,
+            wrapAuthority: program.programId,
+            unwrapAuthority: admin.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramB.publicKey,
             toExtProgram: extProgramA.publicKey,
@@ -720,8 +837,30 @@ describe("extension swap tests", () => {
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
           .transaction(),
-        [swapper],
-        /Error Message: Extension is not whitelisted/
+        [swapper, admin],
+        /Error Message: Invalid signer/
+      );
+    });
+
+    it("swap with wrap authority", async () => {
+      await sendTransaction(
+        program.methods
+          .swap(new BN(15), 0)
+          .accounts({
+            signer: swapper.publicKey,
+            unwrapAuthority: program.programId,
+            wrapAuthority: admin.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromExtProgram: extProgramB.publicKey,
+            toExtProgram: extProgramA.publicKey,
+            fromMint: mintB.publicKey,
+            toMint: mintA.publicKey,
+            fromTokenAccount: accounts.ataB,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper, admin]
       );
     });
   });
