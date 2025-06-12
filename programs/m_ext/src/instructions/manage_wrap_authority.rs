@@ -88,21 +88,11 @@ impl RemoveWrapAuthority<'_> {
 
     #[access_control(ctx.accounts.validate(wrap_authority))]
     pub fn handler(ctx: Context<Self>, wrap_authority: Pubkey) -> Result<()> {
-        msg!(
-            "current length: {}",
-            ctx.accounts.global_account.wrap_authorities.len()
-        );
-
         // Remove the specified wrap authority
         ctx.accounts
             .global_account
             .wrap_authorities
             .retain(|&x| !x.eq(&wrap_authority));
-
-        msg!(
-            "new length: {}",
-            ctx.accounts.global_account.wrap_authorities.len()
-        );
 
         // Reallocate the account to remove the empty space without erasing the other data
         let new_size = ExtGlobal::size(ctx.accounts.global_account.wrap_authorities.len());
