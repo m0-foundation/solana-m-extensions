@@ -65,12 +65,18 @@ pub mod m_ext {
         SetMMint::handler(ctx)
     }
 
-    pub fn update_wrap_authority(
-        ctx: Context<UpdateWrapAuthority>,
-        index: u8,
+    pub fn add_wrap_authority(
+        ctx: Context<AddWrapAuthority>,
         new_wrap_authority: Pubkey,
     ) -> Result<()> {
-        UpdateWrapAuthority::handler(ctx, index, new_wrap_authority)
+        AddWrapAuthority::handler(ctx, new_wrap_authority)
+    }
+
+    pub fn remove_wrap_authority(
+        ctx: Context<RemoveWrapAuthority>,
+        wrap_authority: Pubkey,
+    ) -> Result<()> {
+        RemoveWrapAuthority::handler(ctx, wrap_authority)
     }
 
     pub fn claim_fees(ctx: Context<ClaimFees>) -> Result<()> {

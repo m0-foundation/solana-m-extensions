@@ -6,10 +6,10 @@ use earn::{
     state::{Earner, Global as EarnGlobal, EARNER_SEED, GLOBAL_SEED as EARN_GLOBAL_SEED},
     ID as EARN_PROGRAM,
 };
+use std::collections::HashSet;
 
 // local dependencies
 use crate::{
-    constants::ANCHOR_DISCRIMINATOR_SIZE,
     errors::ExtError,
     state::{ExtGlobal, YieldConfig, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
 };
@@ -27,6 +27,7 @@ cfg_if! {
 }
 
 #[derive(Accounts)]
+#[instruction(wrap_authorities: Vec<Pubkey>)]
 pub struct Initialize<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
@@ -34,7 +35,9 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = admin,
-        space = ANCHOR_DISCRIMINATOR_SIZE + ExtGlobal::INIT_SPACE,
+        space = ExtGlobal::size(
+            wrap_authorities.len()
+        ),
         seeds = [EXT_GLOBAL_SEED],
         bump
     )]
@@ -103,7 +106,7 @@ impl Initialize<'_> {
     // The ext_mint must have a supply of 0 to start.
     // The wrap authorities are validated and stored in the global account.
     // The fee_bps is validated to be within the allowed range.
-    fn validate(&self, wrap_authorities: &[Pubkey], _fee_bps: u64) -> Result<()> {
+    fn validate(&self, _fee_bps: u64) -> Result<()> {
         // Validate the ext_mint_authority PDA is the mint authority for the ext mint
         let ext_mint_authority = self.ext_mint_authority.key();
         if self.ext_mint.mint_authority.unwrap_or_default() != ext_mint_authority {
@@ -113,11 +116,6 @@ impl Initialize<'_> {
         // Validate that the ext mint has a freeze authority
         if self.ext_mint.freeze_authority.is_none() {
             return err!(ExtError::InvalidMint);
-        }
-
-        // Validate and create the wrap authorities array
-        if wrap_authorities.len() > 10 {
-            return err!(ExtError::InvalidParam);
         }
 
         cfg_if! {
@@ -145,20 +143,19 @@ impl Initialize<'_> {
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(&wrap_authorities, fee_bps))]
+    #[access_control(ctx.accounts.validate(fee_bps))]
     pub fn handler(
         ctx: Context<Initialize>,
         wrap_authorities: Vec<Pubkey>,
         fee_bps: u64,
     ) -> Result<()> {
-        let mut wrap_authorities_array = [Pubkey::default(); 10];
-        for (i, authority) in wrap_authorities.iter().enumerate() {
-            if wrap_authorities_array.contains(authority) {
-                return err!(ExtError::InvalidParam);
-            }
-            wrap_authorities_array[i] = *authority;
+        // Create hash set from wrap_authorities to ensure uniqueness
+        let wrap_auth_set: HashSet<Pubkey> = wrap_authorities.clone().into_iter().collect();
+        if wrap_auth_set.len() < wrap_authorities.len() {
+            return err!(ExtError::InvalidParam);
         }
 
+        // Create the yield config
         let yield_config: YieldConfig;
         cfg_if! {
             if #[cfg(feature = "scaled-ui")] {
@@ -181,8 +178,8 @@ impl Initialize<'_> {
             bump: ctx.bumps.global_account,
             m_vault_bump: ctx.bumps.m_vault,
             ext_mint_authority_bump: ctx.bumps.ext_mint_authority,
-            wrap_authorities: wrap_authorities_array,
             yield_config,
+            wrap_authorities,
         });
 
         // Set the ScaledUi multiplier to 1.0
