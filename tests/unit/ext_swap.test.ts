@@ -748,9 +748,14 @@ describe("extension swap tests", () => {
   describe("swap program not whitelisted", () => {
     it("attempt wrap without authority", async () => {
       // Remove swap program as wrap authority
+      const [global] = PublicKey.findProgramAddressSync(
+        [Buffer.from("global")],
+        program.programId
+      );
+
       await sendTransaction(
         extensionA.methods
-          .updateWrapAuthority(0, PublicKey.default)
+          .removeWrapAuthority(global)
           .accounts({})
           .transaction(),
         [admin]
@@ -797,7 +802,7 @@ describe("extension swap tests", () => {
       // add wrap authority
       await sendTransaction(
         extensionA.methods
-          .updateWrapAuthority(0, admin.publicKey)
+          .addWrapAuthority(admin.publicKey)
           .accounts({})
           .transaction(),
         [admin]

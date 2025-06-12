@@ -2827,7 +2827,7 @@ for (const variant of VARIANTS) {
                 .unwrap(wrappedAmount)
                 .accountsPartial({
                   tokenAuthority: $.wrapAuthority.publicKey,
-                  wrapAuthority: $.ext.programId,
+                  unwrapAuthority: $.ext.programId,
                   mMint: wrongMint.publicKey,
                   fromExtTokenAccount,
                   toMTokenAccount,
@@ -2858,7 +2858,7 @@ for (const variant of VARIANTS) {
                 .unwrap(wrappedAmount)
                 .accountsPartial({
                   tokenAuthority: $.wrapAuthority.publicKey,
-                  wrapAuthority: $.ext.programId,
+                  unwrapAuthority: $.ext.programId,
                   extMint: wrongMint.publicKey,
                   fromExtTokenAccount,
                   toMTokenAccount,
@@ -2885,7 +2885,7 @@ for (const variant of VARIANTS) {
                 .unwrap(wrappedAmount)
                 .accounts({
                   tokenAuthority: $.wrapAuthority.publicKey,
-                  wrapAuthority: $.ext.programId,
+                  unwrapAuthority: $.ext.programId,
                   fromExtTokenAccount,
                   toMTokenAccount,
                 })
@@ -2921,7 +2921,7 @@ for (const variant of VARIANTS) {
                 .unwrap(wrappedAmount)
                 .accountsPartial({
                   tokenAuthority: $.wrapAuthority.publicKey,
-                  wrapAuthority: $.ext.programId,
+                  unwrapAuthority: $.ext.programId,
                   fromExtTokenAccount,
                   toMTokenAccount,
                   vaultMTokenAccount,
@@ -2943,7 +2943,7 @@ for (const variant of VARIANTS) {
                 .unwrap(wrappedAmount)
                 .accounts({
                   tokenAuthority: $.wrapAuthority.publicKey,
-                  wrapAuthority: $.ext.programId,
+                  unwrapAuthority: $.ext.programId,
                   toMTokenAccount: fromExtTokenAccount,
                   fromExtTokenAccount,
                 })
@@ -2963,7 +2963,7 @@ for (const variant of VARIANTS) {
                 .unwrap(wrappedAmount)
                 .accounts({
                   tokenAuthority: $.wrapAuthority.publicKey,
-                  wrapAuthority: $.ext.programId,
+                  unwrapAuthority: $.ext.programId,
                   fromExtTokenAccount: toMTokenAccount,
                   toMTokenAccount,
                 })
@@ -2991,7 +2991,7 @@ for (const variant of VARIANTS) {
                 .unwrap(wrappedAmount)
                 .accounts({
                   tokenAuthority: $.nonWrapAuthority.publicKey,
-                  wrapAuthority: $.ext.programId,
+                  unwrapAuthority: $.ext.programId,
                   fromExtTokenAccount,
                   toMTokenAccount,
                 })
@@ -3036,7 +3036,7 @@ for (const variant of VARIANTS) {
               .unwrap(unwrapAmount)
               .accounts({
                 tokenAuthority: $.wrapAuthority.publicKey,
-                wrapAuthority: $.ext.programId,
+                unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
@@ -3098,7 +3098,7 @@ for (const variant of VARIANTS) {
               .unwrap(unwrapAmount)
               .accounts({
                 tokenAuthority: $.wrapAuthority.publicKey,
-                wrapAuthority: $.ext.programId,
+                unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
@@ -3158,7 +3158,7 @@ for (const variant of VARIANTS) {
               .unwrap(unwrapAmount)
               .accountsPartial({
                 tokenAuthority: $.wrapAuthority.publicKey,
-                wrapAuthority: $.ext.programId,
+                unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
@@ -3223,7 +3223,7 @@ for (const variant of VARIANTS) {
               .unwrap(unwrapAmount)
               .accounts({
                 tokenAuthority: $.wrapAuthority.publicKey,
-                wrapAuthority: $.ext.programId,
+                unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
@@ -3276,7 +3276,7 @@ for (const variant of VARIANTS) {
                 .unwrap(wrappedAmount)
                 .accounts({
                   tokenAuthority: $.nonWrapAuthority.publicKey,
-                  wrapAuthority: $.wrapAuthority.publicKey,
+                  unwrapAuthority: $.wrapAuthority.publicKey,
                   fromExtTokenAccount,
                   toMTokenAccount,
                 })
@@ -3305,7 +3305,7 @@ for (const variant of VARIANTS) {
                 .unwrap(wrappedAmount)
                 .accounts({
                   tokenAuthority: $.nonWrapAuthority.publicKey,
-                  wrapAuthority: $.nonAdmin.publicKey,
+                  unwrapAuthority: $.nonAdmin.publicKey,
                   fromExtTokenAccount,
                   toMTokenAccount,
                 })
@@ -3357,7 +3357,7 @@ for (const variant of VARIANTS) {
               .unwrap(unwrapAmount)
               .accounts({
                 tokenAuthority: $.nonWrapAuthority.publicKey,
-                wrapAuthority: $.wrapAuthority.publicKey,
+                unwrapAuthority: $.wrapAuthority.publicKey,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
@@ -3424,7 +3424,7 @@ for (const variant of VARIANTS) {
               .unwrap(unwrapAmount)
               .accounts({
                 tokenAuthority: $.nonAdmin.publicKey,
-                wrapAuthority: $.wrapAuthority.publicKey,
+                unwrapAuthority: $.wrapAuthority.publicKey,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
@@ -3473,7 +3473,7 @@ for (const variant of VARIANTS) {
               .unwrap(unwrapAmount)
               .accounts({
                 tokenAuthority: $.nonWrapAuthority.publicKey,
-                wrapAuthority: $.wrapAuthority.publicKey,
+                unwrapAuthority: $.wrapAuthority.publicKey,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
@@ -3571,7 +3571,7 @@ for (const variant of VARIANTS) {
               .unwrap(unwrapAmount)
               .accounts({
                 tokenAuthority: $.wrapAuthority.publicKey,
-                wrapAuthority: $.ext.programId,
+                unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
@@ -3647,7 +3647,7 @@ for (const variant of VARIANTS) {
               .unwrap(unwrapAmount)
               .accounts({
                 tokenAuthority: $.wrapAuthority.publicKey,
-                wrapAuthority: $.ext.programId,
+                unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })
@@ -3722,7 +3722,7 @@ for (const variant of VARIANTS) {
               .unwrap(unwrapAmount)
               .accounts({
                 tokenAuthority: $.wrapAuthority.publicKey,
-                wrapAuthority: $.ext.programId,
+                unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
               })

@@ -1363,7 +1363,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       .unwrap(amount)
       .accounts({
         tokenAuthority: tokenAuthority.publicKey,
-        wrapAuthority: wrapAuthority
+        unwrapAuthority: wrapAuthority
           ? wrapAuthority.publicKey
           : this.ext.programId,
         toMTokenAccount,
