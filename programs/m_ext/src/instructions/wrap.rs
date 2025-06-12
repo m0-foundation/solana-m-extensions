@@ -9,11 +9,17 @@ use crate::{
         token::{mint_tokens, transfer_tokens},
     },
 };
-use earn::state::Global as EarnGlobal;
+use earn::{
+    state::{Earner, EARNER_SEED},
+    ID as EARN_PROGRAM,
+};
 
 #[derive(Accounts)]
 pub struct Wrap<'info> {
-    pub signer: Signer<'info>,
+    pub token_authority: Signer<'info>,
+
+    // Will be set if a whitelisted authority is signing for a user
+    pub wrap_authority: Option<Signer<'info>>,
 
     #[account(mint::token_program = m_token_program)]
     pub m_mint: InterfaceAccount<'info, Mint>,
@@ -27,11 +33,15 @@ pub struct Wrap<'info> {
         bump = global_account.bump,
         has_one = m_mint @ ExtError::InvalidAccount,
         has_one = ext_mint @ ExtError::InvalidAccount,
-        has_one = m_earn_global_account @ ExtError::InvalidAccount,
     )]
     pub global_account: Account<'info, ExtGlobal>,
 
-    pub m_earn_global_account: Account<'info, EarnGlobal>,
+    #[account(
+        seeds = [EARNER_SEED, vault_m_token_account.key().as_ref()],
+        seeds::program = EARN_PROGRAM,
+        bump = m_earner_account.bump,
+    )]
+    pub m_earner_account: Account<'info, Earner>,
 
     /// CHECK: This account is validated by the seed, it stores no data
     #[account(
@@ -80,13 +90,13 @@ pub struct Wrap<'info> {
 
 impl Wrap<'_> {
     pub fn validate(&self) -> Result<()> {
-        // Ensure the signer is authorized to wrap
-        if self.signer.key() == Pubkey::default() || // probably don't need to check this, but it's included for completeness
-            !self
-            .global_account
-            .wrap_authorities
-            .contains(&self.signer.key())
-        {
+        let auth = match &self.wrap_authority {
+            Some(auth) => auth.key,
+            None => self.token_authority.key,
+        };
+
+        // Ensure the caller is authorized to wrap
+        if !self.global_account.wrap_authorities.contains(auth) {
             return err!(ExtError::NotAuthorized);
         }
 
@@ -100,13 +110,12 @@ impl Wrap<'_> {
             &[ctx.accounts.global_account.ext_mint_authority_bump],
         ]];
 
-        // Update the scaled UI multiplier with the current M index
-        // before wrapping new tokens
-        // If multiplier up to date, just reads the current value
+        // If necessary, sync the multiplier between M and Ext tokens
+        // Return the current value to use for conversions
         let multiplier = sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
-            &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.m_earner_account,
             &ctx.accounts.vault_m_token_account,
             &ctx.accounts.ext_mint_authority,
             authority_seeds,
@@ -115,16 +124,17 @@ impl Wrap<'_> {
 
         // Transfer the amount of m tokens from the user to the m vault
         transfer_tokens(
-            &ctx.accounts.from_m_token_account,     // from
-            &ctx.accounts.vault_m_token_account,    // to
-            amount,                                 // amount
-            &ctx.accounts.m_mint,                   // mint
-            &ctx.accounts.signer.to_account_info(), // authority
-            &ctx.accounts.m_token_program,          // token program
+            &ctx.accounts.from_m_token_account,              // from
+            &ctx.accounts.vault_m_token_account,             // to
+            amount,                                          // amount
+            &ctx.accounts.m_mint,                            // mint
+            &ctx.accounts.token_authority.to_account_info(), // authority
+            &ctx.accounts.m_token_program,                   // token program
         )?;
 
         // Calculate the amount of ext tokens to mint based
         // on the amount of m tokens wrapped
+        // If multiplier is 1.0, the amount remains the same
         let principal = amount_to_principal_down(amount, multiplier)?;
 
         // Mint the amount of ext tokens to the user

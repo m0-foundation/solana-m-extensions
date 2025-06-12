@@ -1,0 +1,29 @@
+[package]
+name = "m_ext"
+version = "0.1.0"
+description = "M extension program with various yield distribution options chosen at compile time"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "m_ext"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = ["no-yield"]
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+# yield features
+scaled-ui = []
+no-yield = []
+
+[dependencies]
+anchor-lang.workspace = true
+anchor-spl.workspace = true
+spl-token-2022.workspace = true
+cfg-if.workspace = true
+solana-security-txt.workspace = true
+earn.workspace = true

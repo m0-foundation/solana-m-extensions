@@ -1,7 +1,10 @@
 // external dependencies
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
-use earn::state::Global as EarnGlobal;
+use earn::{
+    state::{Earner, EARNER_SEED},
+    ID as EARN_PROGRAM,
+};
 
 // local dependencies
 use crate::{
@@ -21,14 +24,18 @@ pub struct ClaimFees<'info> {
         mut,
         seeds = [EXT_GLOBAL_SEED],
         has_one = admin @ ExtError::NotAuthorized,
-        has_one = m_earn_global_account @ ExtError::InvalidAccount,
         has_one = m_mint @ ExtError::InvalidMint,
         has_one = ext_mint @ ExtError::InvalidMint,
         bump = global_account.bump,
     )]
     pub global_account: Account<'info, ExtGlobal>,
 
-    pub m_earn_global_account: Account<'info, EarnGlobal>,
+    #[account(
+        seeds = [EARNER_SEED, vault_m_token_account.key().as_ref()],
+        seeds::program = EARN_PROGRAM,
+        bump = m_earner_account.bump,
+    )]
+    pub m_earner_account: Account<'info, Earner>,
 
     #[account(mint::token_program = m_token_program)]
     pub m_mint: InterfaceAccount<'info, Mint>,
@@ -78,7 +85,7 @@ impl ClaimFees<'_> {
         let multiplier: f64 = sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
-            &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.m_earner_account,
             &ctx.accounts.vault_m_token_account,
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[signer_bump]]],

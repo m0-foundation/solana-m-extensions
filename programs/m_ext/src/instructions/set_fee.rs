@@ -27,7 +27,6 @@ impl SetFee<'_> {
     // If the fee is set to 0, it effectively disables the fee.
     // If the fee is set to 100, it means the entire amount is taken as a fee.
     // Any value above 100 bps will result in an error.
-
     fn validate(&self, fee_bps: u64) -> Result<()> {
         // Validate that the fee is between 0 and 100 bps
         if fee_bps > ONE_HUNDRED_PERCENT_U64 {
@@ -39,7 +38,7 @@ impl SetFee<'_> {
     #[access_control(ctx.accounts.validate(fee_bps))]
     pub fn handler(ctx: Context<Self>, fee_bps: u64) -> Result<()> {
         // Set the new fee
-        ctx.accounts.global_account.fee_bps = fee_bps;
+        ctx.accounts.global_account.yield_config.fee_bps = fee_bps;
 
         Ok(())
     }

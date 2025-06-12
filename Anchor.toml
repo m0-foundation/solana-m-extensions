@@ -8,7 +8,8 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-scaled_ui_ext = "3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da"
+m_ext = "3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da"
+ext_swap = "MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH"
 
 [registry]
 url = "https://api.apr.dev"

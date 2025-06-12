@@ -1,0 +1,68 @@
+use anchor_lang::prelude::*;
+use cfg_if::cfg_if;
+
+#[constant]
+pub const EXT_GLOBAL_SEED: &[u8] = b"global";
+
+#[account]
+pub struct ExtGlobal {
+    pub admin: Pubkey, // can update config values
+    pub ext_mint: Pubkey,
+    pub m_mint: Pubkey,
+    pub m_earn_global_account: Pubkey,
+    pub bump: u8,
+    pub m_vault_bump: u8,
+    pub ext_mint_authority_bump: u8,
+    pub yield_config: YieldConfig,     // variant specific state
+    pub wrap_authorities: Vec<Pubkey>, // accounts permissioned to wrap/unwrap the ext_mint
+}
+
+impl ExtGlobal {
+    pub fn size(wrap_authorities: usize) -> usize {
+        8 + // discriminator
+        32 + // admin
+        32 + // ext_mint
+        32 + // m_mint
+        32 + // m_earn_global_account
+        1 + // bump
+        1 + // m_vault_bump
+        1 + // ext_mint_authority_bump
+        YieldConfig::space() + // yield_config
+        4 + // length of wrap_authorities vector
+        wrap_authorities * 32 // each Pubkey is 32 bytes
+    }
+}
+
+#[constant]
+pub const MINT_AUTHORITY_SEED: &[u8] = b"mint_authority";
+
+#[constant]
+pub const M_VAULT_SEED: &[u8] = b"m_vault";
+
+cfg_if! {
+    if #[cfg(feature = "scaled-ui")] {
+        #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+        pub struct YieldConfig {
+            pub fee_bps: u64, // fee in basis points
+            pub last_m_index: u64, // last m index
+            pub last_ext_index: u64, // last ext index
+        }
+
+        impl YieldConfig {
+            pub fn space() -> usize {
+                8 + // fee_bps
+                8 + // last_m_index
+                8 // last_ext_index
+            }
+        }
+    } else {
+        #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+        pub struct YieldConfig {}
+
+        impl YieldConfig {
+            pub fn space() -> usize {
+                0 // no space needed for yield config in no-yield mode
+            }
+        }
+    }
+}

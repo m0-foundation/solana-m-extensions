@@ -830,7 +830,7 @@ dependencies = [
 [[package]]
 name = "earn"
 version = "0.1.0"
-source = "git+https://github.com/m0-foundation/solana-m?branch=solana-2.1.0#58c8bac1e5130baa1f227982ba638180fabd8034"
+source = "git+https://github.com/m0-foundation/solana-m?branch=develop#fb96d0521d4a187b33874936b21b22bb16505fec"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
@@ -886,6 +886,17 @@ name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
+
+[[package]]
+name = "ext_swap"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "earn",
+ "m_ext",
+ "solana-security-txt",
+]
 
 [[package]]
 name = "feature-probe"
@@ -1154,6 +1165,18 @@ name = "log"
 version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
+
+[[package]]
+name = "m_ext"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "cfg-if",
+ "earn",
+ "solana-security-txt",
+ "spl-token-2022 7.0.0",
+]
 
 [[package]]
 name = "memchr"
@@ -1502,19 +1525,6 @@ name = "ryu"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
-
-[[package]]
-name = "scaled_ui_ext"
-version = "0.1.0"
-dependencies = [
- "anchor-lang",
- "anchor-spl",
- "cfg-if",
- "earn",
- "solana-program",
- "solana-security-txt",
- "spl-token-2022 7.0.0",
-]
 
 [[package]]
 name = "scopeguard"

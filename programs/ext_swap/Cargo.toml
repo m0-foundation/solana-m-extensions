@@ -1,26 +1,25 @@
 [package]
-name = "scaled_ui_ext"
+name = "ext_swap"
 version = "0.1.0"
 description = "Created with Anchor"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "scaled_ui_ext"
+name = "ext_swap"
 
 [features]
+default = []
+cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
-cpi = ["no-entrypoint"]
-default = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
 
 [dependencies]
 anchor-lang.workspace = true
 anchor-spl.workspace = true
-spl-token-2022.workspace = true
-cfg-if.workspace = true
-solana-security-txt.workspace = true
-solana-program.workspace = true
 earn.workspace = true
+solana-security-txt.workspace = true
+m_ext = {path = "../m_ext", features = ["cpi"]}

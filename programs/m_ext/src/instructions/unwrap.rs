@@ -5,15 +5,21 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{amount_to_principal_up, sync_multiplier},
+        conversion::{amount_to_principal_up, principal_to_amount_down, sync_multiplier},
         token::{burn_tokens, transfer_tokens_from_program},
     },
 };
-use earn::state::Global as EarnGlobal;
+use earn::{
+    state::{Earner, EARNER_SEED},
+    ID as EARN_PROGRAM,
+};
 
 #[derive(Accounts)]
 pub struct Unwrap<'info> {
-    pub signer: Signer<'info>,
+    pub token_authority: Signer<'info>,
+
+    // Will be set if a whitelisted authority is signing for a user
+    pub unwrap_authority: Option<Signer<'info>>,
 
     #[account(mint::token_program = m_token_program)]
     pub m_mint: InterfaceAccount<'info, Mint>,
@@ -27,11 +33,15 @@ pub struct Unwrap<'info> {
         bump = global_account.bump,
         has_one = m_mint @ ExtError::InvalidAccount,
         has_one = ext_mint @ ExtError::InvalidAccount,
-        has_one = m_earn_global_account @ ExtError::InvalidAccount,
     )]
     pub global_account: Account<'info, ExtGlobal>,
 
-    pub m_earn_global_account: Account<'info, EarnGlobal>,
+    #[account(
+        seeds = [EARNER_SEED, vault_m_token_account.key().as_ref()],
+        seeds::program = EARN_PROGRAM,
+        bump = m_earner_account.bump,
+    )]
+    pub m_earner_account: Account<'info, Earner>,
 
     /// CHECK: This account is validated by the seed, it stores no data
     #[account(
@@ -80,13 +90,13 @@ pub struct Unwrap<'info> {
 
 impl Unwrap<'_> {
     pub fn validate(&self) -> Result<()> {
-        // Ensure the signer is authorized to unwrap
-        if self.signer.key() == Pubkey::default() || // probably don't need to check this, but it's included for completeness
-            !self
-            .global_account
-            .wrap_authorities
-            .contains(&self.signer.key())
-        {
+        let auth = match &self.unwrap_authority {
+            Some(auth) => auth.key,
+            None => self.token_authority.key,
+        };
+
+        // Ensure the caller is authorized to wrap
+        if !self.global_account.wrap_authorities.contains(auth) {
             return err!(ExtError::NotAuthorized);
         }
 
@@ -94,19 +104,18 @@ impl Unwrap<'_> {
     }
 
     #[access_control(ctx.accounts.validate())]
-    pub fn handler(ctx: Context<Self>, amount: u64) -> Result<()> {
+    pub fn handler(ctx: Context<Self>, mut amount: u64) -> Result<()> {
         let authority_seeds: &[&[&[u8]]] = &[&[
             MINT_AUTHORITY_SEED,
             &[ctx.accounts.global_account.ext_mint_authority_bump],
         ]];
 
-        // Update the scaled UI multiplier with the current M index
-        // before unwrapping tokens
-        // If multiplier up to date, just reads the current value
+        // If necessary, sync the multiplier between M and Ext tokens
+        // Return the current value to use for conversions
         let multiplier = sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
-            &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.m_earner_account,
             &ctx.accounts.vault_m_token_account,
             &ctx.accounts.ext_mint_authority,
             authority_seeds,
@@ -118,15 +127,16 @@ impl Unwrap<'_> {
         let mut principal = amount_to_principal_up(amount, multiplier)?;
         if principal > ctx.accounts.from_ext_token_account.amount {
             principal = ctx.accounts.from_ext_token_account.amount;
+            amount = principal_to_amount_down(principal, multiplier)?;
         }
 
         // Burn the amount of ext tokens from the user
         burn_tokens(
-            &ctx.accounts.from_ext_token_account,   // from
-            principal,                              // amount
-            &ctx.accounts.ext_mint,                 // mint
-            &ctx.accounts.signer.to_account_info(), // authority
-            &ctx.accounts.ext_token_program,        // token program
+            &ctx.accounts.from_ext_token_account,            // from
+            principal,                                       // amount
+            &ctx.accounts.ext_mint,                          // mint
+            &ctx.accounts.token_authority.to_account_info(), // authority
+            &ctx.accounts.ext_token_program,                 // token program
         )?;
 
         // Transfer the amount of m tokens from the m vault to the user
