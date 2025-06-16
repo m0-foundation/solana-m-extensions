@@ -1,3 +1,22 @@
+packages:
+  - services/**/*
+  - tests
+
+catalog:
+  '@types/bn.js': ^5.1.2
+  '@types/bs58': ^4.0.1
+  '@coral-xyz/anchor': ^0.31.1
+  '@m0-foundation/solana-m-sdk': https://gitpkg.vercel.app/m0-foundation/solana-m/sdk?0991eb829a52f6ba5969fd47d3100ef6871f0a6d&scripts.postinstall=yarn%20build
+  '@solana-developers/helpers': ^2.7.0
+  '@solana/buffer-layout': ^4.0.1
+  '@solana/buffer-layout-utils': ^0.2.0
+  '@solana/spl-token': ^0.4.13
+  '@solana/web3.js': ^1.98
+  bn.js: ~5.2.1
+  fastestsmallesttextencoderdecoder: 1.0.22
+  prettier: ~2.6.2
+  typescript: ^5.8.3
+
 onlyBuiltDependencies:
   - '@m0-foundation/solana-m-sdk'
   - bigint-buffer

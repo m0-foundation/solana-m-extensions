@@ -1,10 +1,5 @@
 import { BN } from "@coral-xyz/anchor";
-import {
-  PublicKey,
-  Keypair,
-  Transaction,
-  SystemProgram,
-} from "@solana/web3.js";
+import { PublicKey, Keypair, Transaction } from "@solana/web3.js";
 import {
   TOKEN_2022_PROGRAM_ID,
   createMintToCheckedInstruction,
@@ -13,7 +8,6 @@ import {
 import { randomInt } from "crypto";
 
 import { Comparison, ExtensionTest, Variant } from "./ext_test_harness";
-import { padKeyArray } from "../test-utils";
 
 // Unit tests for ext earn program
 
