@@ -1,0 +1,5 @@
+onlyBuiltDependencies:
+  - '@m0-foundation/solana-m-sdk'
+  - bigint-buffer
+  - bufferutil
+  - utf-8-validate

@@ -10,7 +10,7 @@ build-programs:
 	@cp target/types/m_ext.ts target/types/no_yield.ts
 
 test-programs:
-	@yarn run jest --preset ts-jest --verbose tests/unit/**.test.ts
+	@pnpm jest --preset ts-jest --verbose tests/unit/**.test.ts
 	@cargo test
 
 define update-program-id
