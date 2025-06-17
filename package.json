@@ -3,7 +3,10 @@
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
     "test": "make test-programs",
-    "build": "make build-programs"
+    "build": "make build-programs",
+    "cli:dev": "op run --account mzerolabs.1password.com --env-file='.env.dev' -- ts-node services/cli/main.ts",
+    "cli:prod": "op run --account mzerolabs.1password.com --env-file='.env.prod' -- ts-node services/cli/main.ts",
+    "make:dev": "source .env.dev && make"
   },
   "devDependencies": {
     "@coral-xyz/anchor": "catalog:",

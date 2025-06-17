@@ -12,6 +12,12 @@ catalogs:
     '@m0-foundation/solana-m-sdk':
       specifier: https://gitpkg.vercel.app/m0-foundation/solana-m/sdk?0991eb829a52f6ba5969fd47d3100ef6871f0a6d&scripts.postinstall=yarn%20build
       version: 0.1.6
+    '@solana/buffer-layout':
+      specifier: ^4.0.1
+      version: 4.0.1
+    '@solana/buffer-layout-utils':
+      specifier: ^0.2.0
+      version: 0.2.0
     '@solana/spl-token':
       specifier: ^0.4.13
       version: 0.4.13
@@ -101,6 +107,12 @@ importers:
       '@m0-foundation/solana-m-sdk':
         specifier: 'catalog:'
         version: https://gitpkg.vercel.app/m0-foundation/solana-m/sdk?0991eb829a52f6ba5969fd47d3100ef6871f0a6d&scripts.postinstall=yarn%20build(bufferutil@4.0.9)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.8.3)(utf-8-validate@5.0.10)
+      '@solana/buffer-layout':
+        specifier: 'catalog:'
+        version: 4.0.1
+      '@solana/buffer-layout-utils':
+        specifier: 'catalog:'
+        version: 0.2.0(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)
       '@solana/spl-token':
         specifier: 'catalog:'
         version: 0.4.13(@solana/web3.js@1.98.2(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10))(bufferutil@4.0.9)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.8.3)(utf-8-validate@5.0.10)

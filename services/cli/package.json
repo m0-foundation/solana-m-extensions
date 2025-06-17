@@ -1,0 +1,14 @@
+{
+  "name": "cli",
+  "dependencies": {
+    "@coral-xyz/anchor": "catalog:",
+    "@m0-foundation/solana-m-sdk": "catalog:",
+    "@solana/buffer-layout": "catalog:",
+    "@solana/buffer-layout-utils": "catalog:",
+    "@solana/spl-token": "catalog:",
+    "@solana/spl-token-metadata": "~0.1.6",
+    "@solana/web3.js": "catalog:",
+    "bn.js": "catalog:",
+    "commander": "13.1.0"
+  }
+}
