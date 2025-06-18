@@ -41,15 +41,13 @@ import {
 import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 
 import { ExtSwap } from "../../target/types/ext_swap";
-import { MExt as ScaledUiExt } from "../../target/types/scaled_ui";
-import { MExt as NoYieldExt } from "../../target/types/no_yield";
 
 const EXT_SWAP_IDL = require("../../target/idl/ext_swap.json");
 const NO_YIELD_EXT_IDL = require("../../target/idl/no_yield.json");
 const SCALED_UI_EXT_IDL = require("../../target/idl/scaled_ui.json");
 
 const M_MINT: PublicKey =
-  process.env.network === "devnet"
+  process.env.NETWORK === "devnet"
     ? new PublicKey("mzeroZRGCah3j5xEWp2Nih3GDejSBbH1rbHoxDg8By6")
     : new PublicKey("mzerokyEX9TNDoK4o2YZQBDmMzjokAeN6M2g2S3pLJo");
 const EXT_SWAP: PublicKey = new PublicKey(
@@ -155,6 +153,59 @@ async function main() {
     );
 
   program
+    .command("create-vault-m-ata")
+    .description(
+      "Creates an associated token account for the M mint for the extension program's vault PDA."
+    )
+    .action(async ({}) => {
+      const [owner, extProgram] = keysFromEnv([
+        "PAYER_KEYPAIR",
+        "EXT_PROGRAM_KEYPAIR",
+      ]);
+
+      // Create the vault ATA for the ext program if it doesn't exist
+      const vault = PublicKey.findProgramAddressSync(
+        [Buffer.from("m_vault")],
+        extProgram.publicKey
+      )[0];
+      console.log("Vault PDA:", vault.toBase58());
+      const vaultAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        owner,
+        M_MINT,
+        vault,
+        true,
+        "confirmed",
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+      console.log("Vault ATA:", vaultAta.address.toBase58());
+    });
+
+  program
+    .command("create-ata")
+    .description(
+      "Creates an associated token account for the provided account on the provided mint"
+    )
+    .option("-m, --mint <pubkey>", "Mint public key")
+    .option("-a, --account <pubkey>", "Account public key")
+    .action(async ({ mint, account }) => {
+      const [owner] = keysFromEnv(["PAYER_KEYPAIR"]);
+
+      const ata = await getOrCreateAssociatedTokenAccount(
+        connection,
+        owner,
+        new PublicKey(mint),
+        new PublicKey(account),
+        true,
+        "confirmed",
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+      console.log("ATA:", ata.address.toBase58());
+    });
+
+  program
     .command("initialize-ext")
     .description("Initialize the extension program")
     .option("-v, --variant <string>", "Program variant")
@@ -165,23 +216,6 @@ async function main() {
         "EXT_MINT_KEYPAIR",
         "EXT_PROGRAM_KEYPAIR",
       ]);
-
-      // Create the vault ATA for the ext program if it doesn't exist
-      const vault = PublicKey.findProgramAddressSync(
-        [Buffer.from("m_vault")],
-        program.publicKey
-      )[0];
-      const vaultAta = getOrCreateAssociatedTokenAccount(
-        connection,
-        owner,
-        M_MINT,
-        vault,
-        true,
-        undefined,
-        undefined,
-        undefined,
-        TOKEN_2022_PROGRAM_ID
-      );
 
       // Setup wrap authorities list
       const swapGlobalSigner = PublicKey.findProgramAddressSync(
@@ -505,25 +539,27 @@ async function createToken2022Mint(
     }
   }
 
-  instructions.concat([
-    createInitializeMintInstruction(
-      mint.publicKey,
-      6,
-      payer.publicKey, // will transfer on last instruction
-      freezeAuthority, // if null, there is no freeze authority
-      TOKEN_2022_PROGRAM_ID
-    ),
-    createInitializeInstruction({
-      programId: TOKEN_2022_PROGRAM_ID,
-      metadata: mint.publicKey,
-      updateAuthority: payer.publicKey,
-      mint: mint.publicKey,
-      mintAuthority: payer.publicKey,
-      name: metaData.name,
-      symbol: metaData.symbol,
-      uri: metaData.uri,
-    }),
-  ]);
+  instructions.push(
+    ...[
+      createInitializeMintInstruction(
+        mint.publicKey,
+        6,
+        payer.publicKey, // will transfer on last instruction
+        freezeAuthority, // if null, there is no freeze authority
+        TOKEN_2022_PROGRAM_ID
+      ),
+      createInitializeInstruction({
+        programId: TOKEN_2022_PROGRAM_ID,
+        metadata: mint.publicKey,
+        updateAuthority: payer.publicKey,
+        mint: mint.publicKey,
+        mintAuthority: payer.publicKey,
+        name: metaData.name,
+        symbol: metaData.symbol,
+        uri: metaData.uri,
+      }),
+    ]
+  );
 
   if (evmTokenAddress) {
     instructions.push(
@@ -537,23 +573,25 @@ async function createToken2022Mint(
     );
   }
 
-  instructions.concat([
-    // transfer metadata and mint authorities
-    createUpdateAuthorityInstruction({
-      programId: TOKEN_2022_PROGRAM_ID,
-      metadata: mint.publicKey,
-      oldAuthority: payer.publicKey,
-      newAuthority: owner,
-    }),
-    createSetAuthorityInstruction(
-      mint.publicKey,
-      payer.publicKey,
-      AuthorityType.MintTokens,
-      mintAuthority,
-      undefined,
-      TOKEN_2022_PROGRAM_ID
-    ),
-  ]);
+  instructions.push(
+    ...[
+      // transfer metadata and mint authorities
+      createUpdateAuthorityInstruction({
+        programId: TOKEN_2022_PROGRAM_ID,
+        metadata: mint.publicKey,
+        oldAuthority: payer.publicKey,
+        newAuthority: owner,
+      }),
+      createSetAuthorityInstruction(
+        mint.publicKey,
+        payer.publicKey,
+        AuthorityType.MintTokens,
+        mintAuthority,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      ),
+    ]
+  );
 
   const blockhash = await connection.getLatestBlockhash();
   const messageV0 = new TransactionMessage({

@@ -1,5 +1,4 @@
-sign-in:
-	@op signin --account mzerolabs.1password.com
+
 
 build-programs:
 	anchor build -p ext_swap
@@ -40,18 +39,31 @@ build-test-programs:
 COMPUTE_UNIT_PRICE := 300000
 MAX_SIGN_ATTEMPTS := 5
 
-# define build-verified-ext
-# 	@echo "Building verified $(1) ext program...\n"
-# 	solana-verify build --library-name m_ext -- --features $(1) --no-default-features
-# endef
+sign-in:
+	@op signin --account mzerolabs.1password.com
 
-define deploy-ext-program
+define prep-ext-program
 	@echo "\Building $(1) ext program for the provided keypair..."
 	@op read "$(PAYER_KEYPAIR)" > temp-payer-keypair.json
 	@op read "$(EXT_PROGRAM_KEYPAIR)" > temp-ext-program-keypair.json
 	$(call update-program-id,$(shell solana address -k temp-ext-program-keypair.json))
 	anchor build -p m_ext -- --features $(1) --no-default-features
 	@mv target/deploy/m_ext.so target/deploy/temp.so
+	@mv target/idl/m_ext.json target/idl/temp.json
+endef
+	
+define clean-up-ext-program
+	@echo "\nCleaning up temporary files..."
+	@$(call update-program-id,3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da) 
+	@rm temp-payer-keypair.json temp-ext-program-keypair.json target/deploy/temp.so target/idl/temp.json
+endef
+
+# define build-verified-ext
+# 	@echo "Building verified $(1) ext program...\n"
+# 	solana-verify build --library-name m_ext -- --features $(1) --no-default-features
+# endef
+
+define deploy-ext-program
 	@echo "\nDeploying $(1) ext program..."
 	solana program deploy \
 		--url $(shell op read "$(RPC_URL)") \
@@ -60,43 +72,33 @@ define deploy-ext-program
 		--max-sign-attempts $(MAX_SIGN_ATTEMPTS) \
 		--program-id temp-ext-program-keypair.json \
 		target/deploy/temp.so
-	$(call update-program-id,3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da)
-	@rm temp-payer-keypair.json temp-ext-program-keypair.json target/deploy/temp.so
 endef
 
 define verify-idl
 	@echo "\nVerifying the $(1) ext program IDL..."
-	@op read "$(PAYER_KEYPAIR)" > temp-payer-keypair.json
-	@op read "$(EXT_PROGRAM_KEYPAIR)" > temp-ext-program-keypair.json
-	$(call update-program-id,$(shell solana address -k temp-ext-program-keypair.json))
-	anchor build -p m_ext -- --features $(1) --no-default-features
-	@mv target/idl/m_ext.json target/idl/temp.json
 	anchor idl init \
 		-f target/idl/temp.json \
 		--provider.cluster $(shell op read "$(RPC_URL)") \
 		--provider.wallet temp-payer-keypair.json \
 		$(shell solana address -k temp-ext-program-keypair.json)
-	$(call update-program-id,3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da)
-	@rm temp-payer-keypair.json temp-ext-program-keypair.json target/idl/temp.json
 endef
 
 define upgrade-ext-program
 	@solana-keygen new --no-bip39-passphrase --force -s --outfile=temp-buffer.json
 	@echo "\nWriting buffer for $(1) ext program..."
-	@op read "$(PAYER_KEYPAIR)" > temp-payer-keypair.json
 	@solana program write-buffer \
 	    --url $(shell op read "$(RPC_URL)") \
 		--with-compute-unit-price $(COMPUTE_UNIT_PRICE) \
 		--keypair temp-payer-keypair.json \
 		--max-sign-attempts $(MAX_SIGN_ATTEMPTS) \
 		--buffer temp-buffer.json \
-		target/deploy/$(1).so 
-	@echo "Upgrading program with buffer $$(solana address --keypair temp-buffer.json)" 
+		target/deploy/temp.so
+	@echo "Upgrading program with buffer $(shell solana address --keypair temp-buffer.json)" 
 	@solana program upgrade \
+		--url $(shell op read "$(RPC_URL)") \
 		--keypair temp-payer-keypair.json \
-		$$(solana address --keypair temp-buffer.json) \
-		$(2)  
-	@rm temp-buffer.json temp-payer-keypair.json
+		$(shell solana address -k temp-buffer.json) \
+		$(shell solana address -k temp-ext-program-keypair.json)
 endef
 
 # build-verified-no-yield-ext:
@@ -105,14 +107,32 @@ endef
 # build-verified-scaled-ui-ext:
 # 	$(call build-verified-ext,scaled-ui)
 
-deploy-scaled-ui-ext: sign-in
-	$(call deploy-ext-program,scaled-ui)
-
 deploy-no-yield-ext: sign-in
+	$(call prep-ext-program,no-yield)
 	$(call deploy-ext-program,no-yield)
+	$(call clean-up-ext-program)
 
-verify-idl-scaled-ui-ext: sign-in
-	$(call verify-idl,scaled-ui)
+deploy-scaled-ui-ext: sign-in
+	$(call prep-ext-program,scaled-ui)
+	$(call deploy-ext-program,scaled-ui)
+	$(call clean-up-ext-program)
 
 verify-idl-no-yield-ext: sign-in
+	$(call prep-ext-program,no-yield)
 	$(call verify-idl,no-yield)
+	$(call clean-up-ext-program)
+
+verify-idl-scaled-ui-ext: sign-in
+	$(call prep-ext-program,scaled-ui)
+	$(call verify-idl,scaled-ui)
+	$(call clean-up-ext-program)
+
+upgrade-no-yield-ext: sign-in
+	$(call prep-ext-program,no-yield)
+	$(call upgrade-ext-program,no-yield)
+	$(call clean-up-ext-program)
+
+upgrade-scaled-ui-ext: sign-in
+	$(call prep-ext-program,scaled-ui)
+	$(call upgrade-ext-program,scaled-ui)
+	$(call clean-up-ext-program)
