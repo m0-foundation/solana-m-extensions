@@ -53,7 +53,7 @@ runs:
         key: node-modules-${{ inputs.node-version }}
 
     - name: Install Node Dependencies
-      run: npm i -g yarn typescript tsup && yarn install
+      run: npm i -g pnpm typescript tsup && pnpm install
       shell: bash
 
     - name: Install Anchor CLI
