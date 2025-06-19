@@ -278,6 +278,53 @@ async function main() {
       }
     });
 
+  program
+    .command("initialize-ext-swap")
+    .description("Initialize the Extension Swap Facility")
+    .action(async () => {
+      const [owner] = keysFromEnv(["PAYER_KEYPAIR"]);
+
+      const extSwap = new Program<ExtSwap>(
+        EXT_SWAP_IDL,
+        anchorProvider(connection, owner)
+      );
+
+      const tx = await extSwap.methods
+        .initializeGlobal(M_MINT)
+        .accounts({
+          admin: owner.publicKey,
+        })
+        .signers([owner])
+        .rpc();
+
+      console.log(`Initialized Extension Swap Facility: ${tx}`);
+    });
+
+  program
+    .command("whitelist-extension")
+    .description(
+      "Whitelist an extension program on the Extension Swap Facility"
+    )
+    .argument("<extProgramId>", "Extension program ID to whitelist")
+    .action(async (extProgramId) => {
+      const [owner] = keysFromEnv(["EXT_OWNER"]);
+
+      const extSwap = new Program<ExtSwap>(
+        EXT_SWAP_IDL,
+        anchorProvider(connection, owner)
+      );
+
+      const tx = await extSwap.methods
+        .whitelistExtension(new PublicKey(extProgramId))
+        .accounts({
+          admin: owner.publicKey,
+        })
+        .signers([owner])
+        .rpc();
+
+      console.log(`Whitelisted extension: ${tx}`);
+    });
+
   //   program
   //     .command("update-earn-lut")
   //     .description("Create or update the LUT for common addresses")
