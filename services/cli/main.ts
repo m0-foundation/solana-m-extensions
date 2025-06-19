@@ -38,7 +38,7 @@ import {
   createInitializeConfidentialTransferMintInstruction,
   createInitializeScaledUiAmountConfigInstruction,
 } from "./token-extensions";
-import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
+import { AnchorProvider, Program, Wallet, BN } from "@coral-xyz/anchor";
 
 import { ExtSwap } from "../../target/types/ext_swap";
 
@@ -208,7 +208,7 @@ async function main() {
   program
     .command("initialize-ext")
     .description("Initialize the extension program")
-    .option("-v, --variant <string>", "Program variant")
+    .option("-v, --variant <string>", "Program variant", process.env.VARIANT)
     .option("-f, --fee [number]", "Fee in bps", "0")
     .action(async ({ variant, fee }) => {
       const [owner, extMint, program] = keysFromEnv([
@@ -223,9 +223,9 @@ async function main() {
         EXT_SWAP
       )[0];
 
-      const wrapAuthorities = [swapGlobalSigner, owner.publicKey];
+      const wrapAuthorities: PublicKey[] = [swapGlobalSigner, owner.publicKey];
 
-      let extProgram;
+      let extProgram, tx;
 
       switch (variant) {
         case "no-yield":
@@ -237,7 +237,7 @@ async function main() {
             anchorProvider(connection, owner)
           );
 
-          extProgram.methods
+          tx = await extProgram.methods
             .initialize(wrapAuthorities)
             .accounts({
               admin: owner.publicKey,
@@ -246,6 +246,8 @@ async function main() {
             })
             .signers([owner])
             .rpc();
+
+          console.log(`Initialized no yield extension: ${tx}`);
 
           break;
 
@@ -258,8 +260,8 @@ async function main() {
             anchorProvider(connection, owner)
           );
 
-          extProgram.methods
-            .initialize(wrapAuthorities, fee)
+          tx = await extProgram.methods
+            .initialize(wrapAuthorities, new BN(fee))
             .accounts({
               admin: owner.publicKey,
               mMint: M_MINT,
@@ -267,6 +269,8 @@ async function main() {
             })
             .signers([owner])
             .rpc();
+
+          console.log(`Initialized scaled UI extension: ${tx}`);
 
           break;
         default:
