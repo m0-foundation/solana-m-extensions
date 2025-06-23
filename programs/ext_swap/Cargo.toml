@@ -15,6 +15,7 @@ no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+sdk = ["dep:jupiter-amm-interface"]
 
 
 [dependencies]
@@ -23,3 +24,4 @@ anchor-spl.workspace = true
 earn.workspace = true
 solana-security-txt.workspace = true
 m_ext = {path = "../m_ext", features = ["cpi"]}
+jupiter-amm-interface = { version = "0.5.1", optional = true}

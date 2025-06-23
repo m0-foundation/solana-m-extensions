@@ -4,6 +4,9 @@ pub mod errors;
 pub mod instructions;
 pub mod state;
 
+#[cfg(feature = "sdk")]
+pub mod sdk;
+
 use anchor_lang::prelude::*;
 use instructions::*;
 
