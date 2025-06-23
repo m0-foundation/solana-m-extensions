@@ -15,7 +15,7 @@ no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
-sdk = ["dep:jupiter-amm-interface"]
+sdk = ["dep:jupiter-amm-interface", "dep:spl-token-2022", "dep:anyhow", "dep:rust_decimal"]
 
 
 [dependencies]
@@ -25,3 +25,6 @@ earn.workspace = true
 solana-security-txt.workspace = true
 m_ext = {path = "../m_ext", features = ["cpi"]}
 jupiter-amm-interface = { version = "0.5.1", optional = true}
+spl-token-2022 = { workspace = true, optional = true }
+anyhow = { version = "1.0.98", optional = true }
+rust_decimal = { version = "1.37.2", optional = true }
