@@ -325,6 +325,35 @@ async function main() {
       console.log(`Whitelisted extension: ${tx}`);
     });
 
+  program
+    .command("add-wrap-authority")
+    .description("Add a wrap authority on the Extension program")
+    .argument("<wrapAuthority>", "Pubkey of wrap authority to whitelist")
+    .action(async (wrapAuthority) => {
+      const [owner, extProgram] = keysFromEnv([
+        "EXT_OWNER",
+        "EXT_PROGRAM_KEYPAIR",
+      ]);
+
+      // Insert the program ID into the IDL so we can interact with it
+      NO_YIELD_EXT_IDL.address = extProgram.publicKey.toBase58();
+
+      const ext = new Program(
+        NO_YIELD_EXT_IDL,
+        anchorProvider(connection, owner)
+      );
+
+      const tx = await ext.methods
+        .addWrapAuthority(new PublicKey(wrapAuthority))
+        .accounts({
+          admin: owner.publicKey,
+        })
+        .signers([owner])
+        .rpc();
+
+      console.log(`Added wrap authority: ${tx}`);
+    });
+
   //   program
   //     .command("update-earn-lut")
   //     .description("Create or update the LUT for common addresses")
