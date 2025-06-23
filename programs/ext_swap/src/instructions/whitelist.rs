@@ -12,6 +12,7 @@ pub struct WhitelistExt<'info> {
 
     #[account(
         mut,
+        has_one = admin @ SwapError::NotAuthorized,
         seeds = [GLOBAL_SEED],
         bump = swap_global.bump,
         realloc = SwapGlobal::size(
@@ -57,6 +58,7 @@ pub struct WhitelistUnwrapper<'info> {
 
     #[account(
         mut,
+        has_one = admin @ SwapError::NotAuthorized,
         seeds = [GLOBAL_SEED],
         bump = swap_global.bump,
         realloc = SwapGlobal::size(
@@ -98,6 +100,7 @@ pub struct RemoveWhitelistedExt<'info> {
 
     #[account(
         mut,
+        has_one = admin @ SwapError::NotAuthorized,
         seeds = [GLOBAL_SEED],
         bump = swap_global.bump,
     )]
@@ -137,6 +140,7 @@ pub struct RemoveWhitelistedUnwrapper<'info> {
 
     #[account(
         mut,
+        has_one = admin @ SwapError::NotAuthorized,
         seeds = [GLOBAL_SEED],
         bump = swap_global.bump,
     )]
