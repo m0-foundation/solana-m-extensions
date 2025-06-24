@@ -1,5 +1,10 @@
 // external dependencies
 use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
+use earn::{
+    state::{Earner, EARNER_SEED},
+    ID as EARN_PROGRAM,
+};
 
 // local dependencies
 use crate::{
@@ -7,12 +12,6 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::conversion::sync_multiplier,
-};
-use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
-use earn::{
-    state::{Earner, EARNER_SEED},
-    ID as EARN_PROGRAM,
 };
 
 #[derive(Accounts)]
@@ -23,6 +22,7 @@ pub struct SetFee<'info> {
         mut,
         seeds = [EXT_GLOBAL_SEED],
         has_one = admin @ ExtError::NotAuthorized,
+        has_one = ext_mint @ ExtError::InvalidMint,
         bump = global_account.bump,
     )]
     pub global_account: Account<'info, ExtGlobal>,
@@ -48,7 +48,10 @@ pub struct SetFee<'info> {
     )]
     pub m_earner_account: Account<'info, Earner>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        mint::token_program = ext_token_program,
+    )]
     pub ext_mint: InterfaceAccount<'info, Mint>,
 
     /// CHECK: This account is validated by the seed, it stores no data
