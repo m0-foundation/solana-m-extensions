@@ -102,8 +102,6 @@ pub struct RemoveWhitelistedExt<'info> {
         bump = swap_global.bump,
     )]
     pub swap_global: Account<'info, SwapGlobal>,
-
-    pub system_program: Program<'info, System>,
 }
 
 impl RemoveWhitelistedExt<'_> {
@@ -141,8 +139,6 @@ pub struct RemoveWhitelistedUnwrapper<'info> {
         bump = swap_global.bump,
     )]
     pub swap_global: Account<'info, SwapGlobal>,
-
-    pub system_program: Program<'info, System>,
 }
 
 impl RemoveWhitelistedUnwrapper<'_> {
