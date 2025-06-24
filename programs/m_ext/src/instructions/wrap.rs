@@ -10,7 +10,7 @@ use crate::{
     },
 };
 use earn::{
-    state::{Earner, EARNER_SEED},
+    state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
     ID as EARN_PROGRAM,
 };
 
@@ -37,11 +37,11 @@ pub struct Wrap<'info> {
     pub global_account: Account<'info, ExtGlobal>,
 
     #[account(
-        seeds = [EARNER_SEED, vault_m_token_account.key().as_ref()],
+        seeds = [EARN_GLOBAL_SEED],
         seeds::program = EARN_PROGRAM,
-        bump = m_earner_account.bump,
+        bump = m_earn_global_account.bump,
     )]
-    pub m_earner_account: Account<'info, Earner>,
+    pub m_earn_global_account: Account<'info, EarnGlobal>,
 
     /// CHECK: This account is validated by the seed, it stores no data
     #[account(
@@ -115,7 +115,7 @@ impl Wrap<'_> {
         let multiplier = sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
-            &ctx.accounts.m_earner_account,
+            &ctx.accounts.m_earn_global_account,
             &ctx.accounts.vault_m_token_account,
             &ctx.accounts.ext_mint_authority,
             authority_seeds,
