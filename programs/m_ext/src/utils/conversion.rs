@@ -65,28 +65,6 @@ pub fn sync_multiplier<'info>(
             ext_global_account.yield_config.last_m_index = m_earn_global_account.index;
             ext_global_account.yield_config.last_ext_index = (multiplier * INDEX_SCALE_F64).floor() as u64;
 
-            // Note: This check should not be required anymore because we are using the vault's last claim index
-            // however, we keep it here for now to continue testing
-            //
-            // Check solvency of the vault
-            // i.e. that it holds enough M for each extension UI amount
-            // after the multiplier has been updated
-            if ext_mint.supply > 0 {
-                // Calculate the amount of tokens in the vault
-                let vault_m = vault_m_token_account.amount;
-
-                // Calculate the amount of tokens needed to be solvent
-                // Reduce it by two to avoid rounding errors (there is an edge cases where the rounding error
-                // from one index (down) to the next (up) can cause the difference to be 2)
-                let mut required_m = principal_to_amount_down(ext_mint.supply, multiplier)?;
-                required_m -= std::cmp::min(2, required_m);
-
-                // Check if the vault has enough tokens
-                if vault_m < required_m {
-                    return err!(ExtError::InsufficientCollateral);
-                }
-            }
-
             return Ok(multiplier);
         } else {
             // Ext tokens are 1:1 with M tokens and we don't need to sync this
