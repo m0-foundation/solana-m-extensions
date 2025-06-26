@@ -122,6 +122,11 @@ impl Unwrap<'_> {
             &ctx.accounts.ext_token_program,
         )?;
 
+        // Skip if amount is zero
+        if amount == 0 {
+            return Ok(());
+        }
+
         // Calculate the principal amount of ext tokens to burn
         // from the amount of m tokens to unwrap
         let mut principal = amount_to_principal_up(amount, multiplier)?;
