@@ -255,7 +255,11 @@ cfg_if! {
             // and the ext multiplier is monotonically increasing.
             // While having the last ext multiplier <= last m multiplier isn't strictly necessary,
             // it arises naturally from our construction and provides a good sanity check.
-            if last_ext_multiplier < 1.0 || last_m_multiplier < last_ext_multiplier || new_m_multiplier < last_m_multiplier || fee_bps > 10000 {
+            if last_ext_multiplier < 1.0 ||
+               last_m_multiplier < last_ext_multiplier ||
+               new_m_multiplier < last_m_multiplier ||
+               new_m_multiplier > 100.0 || // we set a high, but finite upper bound on the multiplier to ensure it (or the other multipliers) don't lead to overflow.
+               fee_bps > 10000 {
                 return err!(ExtError::InvalidInput);
             }
 
