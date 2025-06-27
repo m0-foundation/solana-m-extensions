@@ -279,10 +279,7 @@ describe("extension swap tests", () => {
   describe("configure", () => {
     it("initialize config", async () => {
       await sendTransaction(
-        program.methods
-          .initializeGlobal(mMint.publicKey)
-          .accounts({})
-          .transaction(),
+        program.methods.initializeGlobal().accounts({}).transaction(),
         [admin]
       );
     });
@@ -290,7 +287,7 @@ describe("extension swap tests", () => {
     it("re-initialize config revert", async () => {
       await sendTransaction(
         program.methods
-          .initializeGlobal(mMint.publicKey)
+          .initializeGlobal()
           .accounts({ admin: swapper.publicKey })
           .transaction(),
         [swapper],
@@ -414,6 +411,7 @@ describe("extension swap tests", () => {
           .accounts({
             signer: swapper.publicKey,
             wrapAuthority: program.programId,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             toExtProgram: extProgramA.publicKey,
             toMint: mintA.publicKey,
@@ -443,6 +441,7 @@ describe("extension swap tests", () => {
           .accounts({
             signer: swapper.publicKey,
             wrapAuthority: program.programId,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             toExtProgram: extProgramA.publicKey,
             toMint: mintA.publicKey,
@@ -474,6 +473,7 @@ describe("extension swap tests", () => {
           .accounts({
             signer: swapper.publicKey,
             wrapAuthority: program.programId,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             toExtProgram: extProgramA.publicKey,
             toMint: mintA.publicKey,
@@ -495,6 +495,7 @@ describe("extension swap tests", () => {
           .accounts({
             signer: swapper.publicKey,
             unwrapAuthority: program.programId,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             fromMint: mintA.publicKey,
@@ -522,6 +523,7 @@ describe("extension swap tests", () => {
           .accounts({
             signer: swapper.publicKey,
             unwrapAuthority: program.programId,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             fromMint: mintA.publicKey,
@@ -544,6 +546,7 @@ describe("extension swap tests", () => {
             signer: swapper.publicKey,
             unwrapAuthority: program.programId,
             wrapAuthority: program.programId,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             toExtProgram: extProgramB.publicKey,
@@ -573,6 +576,7 @@ describe("extension swap tests", () => {
             signer: swapper.publicKey,
             unwrapAuthority: program.programId,
             wrapAuthority: program.programId,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             toExtProgram: extProgramB.publicKey,
@@ -596,6 +600,7 @@ describe("extension swap tests", () => {
             signer: swapper.publicKey,
             unwrapAuthority: program.programId,
             wrapAuthority: program.programId,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             toExtProgram: extProgramB.publicKey,
@@ -635,6 +640,7 @@ describe("extension swap tests", () => {
             signer: swapper.publicKey,
             unwrapAuthority: program.programId,
             wrapAuthority: program.programId,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             toExtProgram: extProgramC.publicKey,
@@ -658,6 +664,7 @@ describe("extension swap tests", () => {
             signer: swapper.publicKey,
             unwrapAuthority: program.programId,
             wrapAuthority: program.programId,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             toExtProgram: extProgramC.publicKey,
@@ -688,6 +695,7 @@ describe("extension swap tests", () => {
             signer: swapper.publicKey,
             unwrapAuthority: program.programId,
             wrapAuthority: program.programId,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             toExtProgram: extProgramC.publicKey,
@@ -729,6 +737,7 @@ describe("extension swap tests", () => {
             signer: swapper.publicKey,
             unwrapAuthority: program.programId,
             wrapAuthority: program.programId,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramB.publicKey,
             toExtProgram: extProgramC.publicKey,
@@ -768,6 +777,7 @@ describe("extension swap tests", () => {
           .accounts({
             signer: swapper.publicKey,
             wrapAuthority: program.programId,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             toExtProgram: extProgramA.publicKey,
             toMint: mintA.publicKey,
@@ -787,6 +797,7 @@ describe("extension swap tests", () => {
           .accounts({
             signer: swapper.publicKey,
             wrapAuthority: admin.publicKey,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             toExtProgram: extProgramA.publicKey,
             toMint: mintA.publicKey,
@@ -814,6 +825,7 @@ describe("extension swap tests", () => {
           .accounts({
             signer: swapper.publicKey,
             wrapAuthority: admin.publicKey,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             toExtProgram: extProgramA.publicKey,
             toMint: mintA.publicKey,
@@ -832,6 +844,7 @@ describe("extension swap tests", () => {
             signer: swapper.publicKey,
             wrapAuthority: program.programId,
             unwrapAuthority: admin.publicKey,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramB.publicKey,
             toExtProgram: extProgramA.publicKey,
@@ -855,6 +868,7 @@ describe("extension swap tests", () => {
             signer: swapper.publicKey,
             unwrapAuthority: program.programId,
             wrapAuthority: admin.publicKey,
+            mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramB.publicKey,
             toExtProgram: extProgramA.publicKey,
