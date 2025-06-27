@@ -24,27 +24,36 @@ pub struct WhitelistExt<'info> {
     pub swap_global: Account<'info, SwapGlobal>,
 
     pub system_program: Program<'info, System>,
+
+    /// CHECK: This account is validated in the `validate` function
+    pub ext_program: AccountInfo<'info>,
 }
 
 impl WhitelistExt<'_> {
-    fn validate(&self, ext_program: &Pubkey) -> Result<()> {
+    fn validate(&self) -> Result<()> {
+        // Check if the extension program is already whitelisted
         if self
             .swap_global
             .whitelisted_extensions
-            .contains(ext_program)
+            .contains(self.ext_program.key)
         {
             return err!(SwapError::AlreadyWhitelisted);
+        }
+
+        // Check that the extension program is a valid program
+        if !self.ext_program.executable {
+            return err!(SwapError::InvalidExtension);
         }
 
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(&ext_program))]
-    pub fn handler(ctx: Context<Self>, ext_program: Pubkey) -> Result<()> {
+    #[access_control(ctx.accounts.validate())]
+    pub fn handler(ctx: Context<Self>) -> Result<()> {
         ctx.accounts
             .swap_global
             .whitelisted_extensions
-            .push(ext_program);
+            .push(*ctx.accounts.ext_program.key);
 
         Ok(())
     }
