@@ -45,6 +45,10 @@ pub struct Unwrap<'info> {
      */
     #[account(mut)]
     pub from_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(
+        address = m_global.mint,
+        mint::token_program = m_token_program
+    )]
     pub m_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /*

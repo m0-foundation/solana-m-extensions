@@ -44,7 +44,6 @@ pub struct Swap<'info> {
     /// CHECK: CPI will validate the global account
     pub to_global: AccountInfo<'info>,
     #[account(
-        constraint = m_global.mint == m_mint.key(),
         seeds = [EARN_GLOBAL_SEED],
         seeds::program = earn::ID,
         bump = m_global.bump,
@@ -58,6 +57,10 @@ pub struct Swap<'info> {
     pub from_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut)]
     pub to_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(
+        address = m_global.mint,
+        mint::token_program = m_token_program
+    )]
     pub m_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /*
