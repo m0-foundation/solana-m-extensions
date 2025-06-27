@@ -24,8 +24,8 @@ declare_id!("MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH");
 pub mod ext_swap {
     use super::*;
 
-    pub fn initialize_global<'info>(ctx: Context<InitializeGlobal>, m_mint: Pubkey) -> Result<()> {
-        InitializeGlobal::handler(ctx, m_mint)
+    pub fn initialize_global<'info>(ctx: Context<InitializeGlobal>) -> Result<()> {
+        InitializeGlobal::handler(ctx)
     }
 
     pub fn whitelist_extension<'info>(

@@ -23,7 +23,6 @@ pub struct Swap<'info> {
      * Program globals
      */
     #[account(
-        has_one = m_mint,
         seeds = [GLOBAL_SEED],
         bump = swap_global.bump,
     )]
@@ -45,6 +44,7 @@ pub struct Swap<'info> {
     /// CHECK: CPI will validate the global account
     pub to_global: AccountInfo<'info>,
     #[account(
+        constraint = m_global.mint == m_mint.key(),
         seeds = [EARN_GLOBAL_SEED],
         seeds::program = earn::ID,
         bump = m_global.bump,
