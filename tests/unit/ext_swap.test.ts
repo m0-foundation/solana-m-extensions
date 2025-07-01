@@ -898,9 +898,10 @@ describe("extension swap tests", () => {
           .accounts({
             signer: swapper.publicKey,
             unwrapAuthority: cosigner.publicKey,
-            mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             fromMint: mintA.publicKey,
+            mMint: mMint.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
           .transaction(),
@@ -948,9 +949,10 @@ describe("extension swap tests", () => {
           .accounts({
             signer: swapper.publicKey,
             unwrapAuthority: cosigner.publicKey,
-            mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromExtProgram: extProgramA.publicKey,
             fromMint: mintA.publicKey,
+            mMint: mMint.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
           .transaction(),
