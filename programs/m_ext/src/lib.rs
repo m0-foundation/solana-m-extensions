@@ -61,10 +61,6 @@ pub mod m_ext {
         SetFee::handler(ctx, fee_bps)
     }
 
-    pub fn set_m_mint(ctx: Context<SetMMint>) -> Result<()> {
-        SetMMint::handler(ctx)
-    }
-
     pub fn add_wrap_authority(
         ctx: Context<AddWrapAuthority>,
         new_wrap_authority: Pubkey,
