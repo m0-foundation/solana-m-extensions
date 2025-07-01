@@ -15,7 +15,7 @@ solana_security_txt::security_txt! {
     policy: "https://github.com/m0-foundation/solana-m/blob/main/SECURITY.md",
     preferred_languages: "en",
     source_code: "https://github.com/m0-foundation/solana-extensions/tree/main/programs/ext_swap",
-    auditors: ""
+    auditors: "Asymmetric Research,Adevar Labs,OtterSec,Halborn"
 }
 
 declare_id!("MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH");
