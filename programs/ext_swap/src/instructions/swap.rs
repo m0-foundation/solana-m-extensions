@@ -186,6 +186,11 @@ impl<'info> Swap<'info> {
         amount: u64,
         remaining_accounts_split_idx: usize,
     ) -> Result<()> {
+        // Skip if amount is zero
+        if amount == 0 {
+            return Ok(());
+        }
+
         let m_pre_balance = ctx.accounts.intermediate_m_account.amount;
         let to_pre_balance = ctx.accounts.to_token_account.amount;
 

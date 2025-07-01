@@ -44,10 +44,8 @@ import {
   ScaledUiAmountConfig,
   ScaledUiAmountConfigLayout,
 } from "../test-utils";
-
 import { MExt as ScaledUIExt } from "../../target/types/scaled_ui";
 import { MExt as NoYieldExt } from "../../target/types/no_yield";
-import { token } from "@coral-xyz/anchor/dist/cjs/utils";
 
 export enum Comparison {
   Equal,
