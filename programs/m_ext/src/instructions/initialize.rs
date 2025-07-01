@@ -85,6 +85,9 @@ pub struct Initialize<'info> {
     )]
     pub m_earn_global_account: Account<'info, EarnGlobal>,
 
+    // This account isn't used, but requiring it means we enforce that the vault m token account
+    // is an M earner when the program is initialized. Therefore, we can be sure that the extension
+    // will be earning yield from the start.
     #[account(
         seeds = [EARNER_SEED, vault_m_token_account.key().as_ref()],
         seeds::program = EARN_PROGRAM,
@@ -190,7 +193,7 @@ impl Initialize<'_> {
         sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
-            &ctx.accounts.m_earner_account,
+            &ctx.accounts.m_earn_global_account,
             &ctx.accounts.vault_m_token_account,
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],

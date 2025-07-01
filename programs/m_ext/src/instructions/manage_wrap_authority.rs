@@ -101,6 +101,20 @@ impl RemoveWrapAuthority<'_> {
             .to_account_info()
             .realloc(new_size, false)?;
 
+        // Refund excess lamports to the admin
+        let current_lamports = ctx.accounts.global_account.to_account_info().lamports();
+        let required_lamports = Rent::get()?.minimum_balance(new_size);
+        let excess_lamports = current_lamports.saturating_sub(required_lamports);
+        if excess_lamports > 0 {
+            **ctx
+                .accounts
+                .global_account
+                .to_account_info()
+                .lamports
+                .borrow_mut() -= excess_lamports;
+            **ctx.accounts.admin.to_account_info().lamports.borrow_mut() += excess_lamports;
+        }
+
         Ok(())
     }
 }
