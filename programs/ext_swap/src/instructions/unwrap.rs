@@ -21,7 +21,6 @@ pub struct Unwrap<'info> {
      * Global and Earner accounts
      */
     #[account(
-        has_one = m_mint,
         seeds = [GLOBAL_SEED],
         bump = swap_global.bump,
     )]
@@ -35,6 +34,7 @@ pub struct Unwrap<'info> {
     /// CHECK: CPI will validate the global account
     pub from_global: AccountInfo<'info>,
     #[account(
+        constraint = m_global.mint == m_mint.key(),
         seeds = [EARN_GLOBAL_SEED],
         seeds::program = earn::ID,
         bump = m_global.bump,
@@ -47,6 +47,10 @@ pub struct Unwrap<'info> {
     #[account(mut)]
     /// Validated by unwrap on the extension program
     pub from_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(
+        address = m_global.mint,
+        mint::token_program = m_token_program
+    )]
     pub m_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /*

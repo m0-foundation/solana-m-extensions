@@ -20,11 +20,10 @@ pub struct InitializeGlobal<'info> {
 }
 
 impl InitializeGlobal<'_> {
-    pub fn handler(ctx: Context<Self>, m_mint: Pubkey) -> Result<()> {
+    pub fn handler(ctx: Context<Self>) -> Result<()> {
         ctx.accounts.swap_global.set_inner(SwapGlobal {
             bump: ctx.bumps.swap_global,
             admin: ctx.accounts.admin.key(),
-            m_mint: m_mint,
             whitelisted_unwrappers: vec![],
             whitelisted_extensions: vec![],
         });

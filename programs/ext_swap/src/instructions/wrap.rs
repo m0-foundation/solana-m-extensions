@@ -20,7 +20,6 @@ pub struct Wrap<'info> {
      * Program globals
      */
     #[account(
-        has_one = m_mint,
         seeds = [GLOBAL_SEED],
         bump = swap_global.bump,
     )]
@@ -46,6 +45,10 @@ pub struct Wrap<'info> {
     #[account(mut)]
     /// Validated by wrap on the extension program
     pub to_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(
+        address = m_global.mint,
+        mint::token_program = m_token_program
+    )]
     pub m_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /*
