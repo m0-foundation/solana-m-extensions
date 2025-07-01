@@ -38,7 +38,7 @@ if (!fs.existsSync("devnet-keypair.json")) {
     });
 
   program
-    .command("deploy-program")
+    .command("init-idl")
     .option("-t, --type", "Yield type", "scaled-ui")
     .option("-e, --extension", "Extension program ID", "KAST_USDK")
     .action(({ type, extension }) => {
@@ -64,6 +64,20 @@ if (!fs.existsSync("devnet-keypair.json")) {
       buildProgram(pubkey, type);
 
       updateProgram(pubkey, parseInt(computePrice));
+    });
+
+  program
+    .command("upgrade-swap-program")
+    .option("-c, --computePrice", "Compute price", "300000")
+    .option(
+      "-p, --pubkey",
+      "Swap program ID",
+      "MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH"
+    )
+    .action(({ computePrice, pubkey }) => {
+      console.log("Building swap program...");
+      shell.exec("anchor build -p ext_swap --verifiable", { silent: true });
+      updateProgram(pubkey, parseInt(computePrice), "ext_swap.so");
     });
 
   await program.parseAsync(process.argv);
@@ -117,7 +131,11 @@ function deployProgram(programKeypair: Keypair, computePrice: number) {
   shell.exec("rm pid.json");
 }
 
-function updateProgram(pid: string, computePrice: number) {
+function updateProgram(
+  pid: string,
+  computePrice: number,
+  buildFile = "m_ext.so"
+) {
   // create a temporary buffer to write the upgrade to
   shell.exec(
     "solana-keygen new --no-bip39-passphrase --force -s --outfile=buffer.json",
@@ -130,19 +148,23 @@ function updateProgram(pid: string, computePrice: number) {
 
   console.log(`Buffer address: ${bufferAddress}`);
 
-  shell.exec(
+  let result = shell.exec(
     `solana program write-buffer \
       --url ${process.env.RPC_URL} \
       --with-compute-unit-price ${computePrice} \
       --keypair devnet-keypair.json \
       --max-sign-attempts 3 \
       --buffer buffer.json \
-      target/deploy/m_ext.so`,
+      target/deploy/${buildFile}`,
     { silent: true }
   );
 
+  if (result.code !== 0) {
+    throw new Error(`Buffer write failed: ${result.stderr}`);
+  }
+
   // upgrade the program with the new buffer
-  shell.exec(
+  result = shell.exec(
     `solana program upgrade \
       --url ${process.env.RPC_URL} \
       --keypair devnet-keypair.json \
@@ -150,6 +172,12 @@ function updateProgram(pid: string, computePrice: number) {
       ${pid}`,
     { silent: true }
   );
+
+  if (result.code !== 0) {
+    throw new Error(`Upgrade failed: ${result.stderr}`);
+  }
+
+  console.log("Program updated");
 
   // delete the temporary buffer file
   shell.exec("rm buffer.json");
