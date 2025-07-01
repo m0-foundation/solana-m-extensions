@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
+use anchor_spl::token_interface::{Mint, Token2022};
 use cfg_if::cfg_if;
 use earn::state::Global as EarnGlobal;
 use spl_token_2022::extension::{BaseStateWithExtensions, StateWithExtensions};
@@ -23,7 +23,6 @@ pub fn sync_multiplier<'info>(
     ext_mint: &mut InterfaceAccount<'info, Mint>,
     ext_global_account: &mut Account<'info, ExtGlobal>,
     m_earn_global_account: &Account<'info, EarnGlobal>,
-    vault_m_token_account: &InterfaceAccount<'info, TokenAccount>,
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
     token_program: &Program<'info, Token2022>,
@@ -32,7 +31,7 @@ pub fn sync_multiplier<'info>(
         if #[cfg(feature = "scaled-ui")] {
             // Get the current index and timestamp from the m_earn_global_account and cached values
             let (multiplier, timestamp): (f64, i64) =
-                get_latest_multiplier_and_timestamp(ext_global_account, m_earn_global_account);
+                get_latest_multiplier_and_timestamp(ext_global_account, m_earn_global_account)?;
 
             // Compare against the current multiplier
             // If the multiplier is the same, we don't need to update
@@ -197,7 +196,7 @@ cfg_if! {
 
         fn get_latest_multiplier_and_timestamp<'info>(
             ext_global_account: &Account<'info, ExtGlobal>,
-            m_earn_global_account: &Account<'info, Earner>,
+            m_earn_global_account: &Account<'info, EarnGlobal>,
         ) -> Result<(f64, i64)> {
             let latest_m_multiplier = m_earn_global_account.index as f64 / INDEX_SCALE_F64;
             let cached_m_multiplier = ext_global_account.yield_config.last_m_index as f64 / INDEX_SCALE_F64;

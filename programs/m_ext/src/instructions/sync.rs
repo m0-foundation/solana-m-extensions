@@ -1,10 +1,10 @@
 use crate::{
     errors::ExtError,
-    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
+    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED},
     utils::conversion::sync_multiplier,
 };
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
+use anchor_spl::token_interface::{Mint, Token2022};
 use earn::{
     state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
     ID as EARN_PROGRAM,
@@ -19,20 +19,6 @@ pub struct Sync<'info> {
         has_one = ext_mint @ ExtError::InvalidMint,
     )]
     pub global_account: Account<'info, ExtGlobal>,
-
-    /// CHECK: This account is validated by the seed, it stores no data
-    #[account(
-        seeds = [M_VAULT_SEED],
-        bump = global_account.m_vault_bump,
-    )]
-    pub m_vault: AccountInfo<'info>,
-
-    #[account(
-        associated_token::mint = global_account.m_mint,
-        associated_token::authority = m_vault,
-        associated_token::token_program = Token2022::id(),
-    )]
-    pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         seeds = [EARN_GLOBAL_SEED],
@@ -67,7 +53,6 @@ impl Sync<'_> {
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
             &ctx.accounts.m_earn_global_account,
-            &ctx.accounts.vault_m_token_account,
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[signer_bump]]],
             &ctx.accounts.ext_token_program,
