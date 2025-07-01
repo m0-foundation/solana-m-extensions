@@ -1222,17 +1222,6 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     }
   }
 
-  public async setMMint(mint: PublicKey) {
-    // Send the instruction
-    await this.ext.methods
-      .setMMint()
-      .accounts({
-        newMMint: mint,
-      })
-      .signers([this.admin])
-      .rpc();
-  }
-
   public async addWrapAuthority(newWrapAuthority: PublicKey) {
     // Send the instruction
     await this.ext.methods
