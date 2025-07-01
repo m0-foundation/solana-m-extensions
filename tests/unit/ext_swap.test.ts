@@ -301,8 +301,10 @@ describe("extension swap tests", () => {
     it("add to ext whitelist", async () => {
       await sendTransaction(
         program.methods
-          .whitelistExtension(earn.programId)
-          .accounts({})
+          .whitelistExtension()
+          .accounts({
+            extProgram: earn.programId,
+          })
           .transaction(),
         [admin]
       );
@@ -428,8 +430,10 @@ describe("extension swap tests", () => {
       for (const pid of [extProgramA, extProgramB, extProgramC]) {
         await sendTransaction(
           program.methods
-            .whitelistExtension(pid.publicKey)
-            .accounts({})
+            .whitelistExtension()
+            .accounts({
+              extProgram: pid.publicKey,
+            })
             .transaction(),
           [admin]
         );
@@ -866,6 +870,77 @@ describe("extension swap tests", () => {
           })
           .transaction(),
         [swapper, admin]
+      );
+    });
+  });
+
+  describe("unwrapping permissions", () => {
+    const cosigner = Keypair.generate();
+
+    it("co-signer is not authorized", async () => {
+      await sendTransaction(
+        program.methods
+          .unwrap(new BN(1e2))
+          .accounts({
+            signer: swapper.publicKey,
+            unwrapAuthority: cosigner.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromExtProgram: extProgramA.publicKey,
+            fromMint: mintA.publicKey,
+            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper, cosigner],
+        /Error Message: Signer is not whitelisted/
+      );
+    });
+
+    it("whitelist co-signer", async () => {
+      await sendTransaction(
+        program.methods
+          .whitelistUnwrapper(cosigner.publicKey)
+          .accounts({ admin: admin.publicKey })
+          .transaction(),
+        [admin]
+      );
+
+      const { whitelistedUnwrappers } = await program.account.swapGlobal.fetch(
+        PublicKey.findProgramAddressSync(
+          [Buffer.from("global")],
+          program.programId
+        )[0]
+      );
+
+      // Validate the cosigner was added
+      expect(whitelistedUnwrappers).toHaveLength(2);
+      expect(whitelistedUnwrappers[1].toBase58()).toBe(
+        cosigner.publicKey.toBase58()
+      );
+
+      // Whitelist on extension program
+      await sendTransaction(
+        extensionA.methods
+          .addWrapAuthority(cosigner.publicKey)
+          .accounts({ admin: admin.publicKey })
+          .transaction(),
+        [admin]
+      );
+    });
+
+    it("co-signer is authorized", async () => {
+      await sendTransaction(
+        program.methods
+          .unwrap(new BN(1e3))
+          .accounts({
+            signer: swapper.publicKey,
+            unwrapAuthority: cosigner.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromExtProgram: extProgramA.publicKey,
+            fromMint: mintA.publicKey,
+            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper, cosigner]
       );
     });
   });

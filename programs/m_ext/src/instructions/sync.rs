@@ -41,7 +41,10 @@ pub struct Sync<'info> {
     )]
     pub m_earn_global_account: Account<'info, EarnGlobal>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        mint::token_program = ext_token_program,
+    )]
     pub ext_mint: InterfaceAccount<'info, Mint>,
 
     /// CHECK: This account is validated by the seed, it stores no data

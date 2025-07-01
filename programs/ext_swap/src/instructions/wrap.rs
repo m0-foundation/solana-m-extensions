@@ -44,6 +44,7 @@ pub struct Wrap<'info> {
      * Mints
      */
     #[account(mut)]
+    /// Validated by wrap on the extension program
     pub to_mint: Box<InterfaceAccount<'info, Mint>>,
     pub m_mint: Box<InterfaceAccount<'info, Mint>>,
 

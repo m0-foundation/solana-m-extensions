@@ -10,4 +10,6 @@ pub enum SwapError {
     InvalidIndex,
     #[msg("Signer is not whitelisted")]
     UnauthorizedUnwrapper,
+    #[msg("Signer is not authorized to perform this action")]
+    NotAuthorized,
 }
