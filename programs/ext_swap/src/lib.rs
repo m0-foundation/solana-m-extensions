@@ -15,7 +15,7 @@ solana_security_txt::security_txt! {
     policy: "https://github.com/m0-foundation/solana-m/blob/main/SECURITY.md",
     preferred_languages: "en",
     source_code: "https://github.com/m0-foundation/solana-extensions/tree/main/programs/ext_swap",
-    auditors: ""
+    auditors: "Asymmetric Research,Adevar Labs,OtterSec,Halborn"
 }
 
 declare_id!("MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH");
@@ -24,15 +24,12 @@ declare_id!("MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH");
 pub mod ext_swap {
     use super::*;
 
-    pub fn initialize_global<'info>(ctx: Context<InitializeGlobal>, m_mint: Pubkey) -> Result<()> {
-        InitializeGlobal::handler(ctx, m_mint)
+    pub fn initialize_global<'info>(ctx: Context<InitializeGlobal>) -> Result<()> {
+        InitializeGlobal::handler(ctx)
     }
 
-    pub fn whitelist_extension<'info>(
-        ctx: Context<WhitelistExt>,
-        ext_program: Pubkey,
-    ) -> Result<()> {
-        WhitelistExt::handler(ctx, ext_program)
+    pub fn whitelist_extension<'info>(ctx: Context<WhitelistExt>) -> Result<()> {
+        WhitelistExt::handler(ctx)
     }
 
     pub fn remove_whitelisted_extension<'info>(

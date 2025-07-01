@@ -22,4 +22,6 @@ pub enum ExtError {
     MathUnderflow,
     #[msg("Type conversion error.")]
     TypeConversionError,
+    #[msg("Invalid value provided for calculation")]
+    InvalidInput,
 }
