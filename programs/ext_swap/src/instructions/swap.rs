@@ -61,8 +61,10 @@ pub struct Swap<'info> {
      * Mints
      */
     #[account(mut)]
+    /// Validated by unwrap on the extension program
     pub from_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut)]
+    /// Validated by wrap on the extension program
     pub to_mint: Box<InterfaceAccount<'info, Mint>>,
     pub m_mint: Box<InterfaceAccount<'info, Mint>>,
 
@@ -155,6 +157,7 @@ pub struct Swap<'info> {
     /// CHECK: checked against whitelisted extensions
     pub from_ext_program: UncheckedAccount<'info>,
     /// CHECK: checked against whitelisted extensions
+    #[account(constraint = to_ext_program.key() != from_ext_program.key())]
     pub to_ext_program: UncheckedAccount<'info>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
