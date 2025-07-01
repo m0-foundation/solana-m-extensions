@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use cfg_if::cfg_if;
-use earn::state::Earner;
+use earn::state::Global as EarnGlobal;
 use spl_token_2022::extension::{BaseStateWithExtensions, StateWithExtensions};
 
 use crate::{
@@ -22,7 +22,7 @@ cfg_if! {
 pub fn sync_multiplier<'info>(
     ext_mint: &mut InterfaceAccount<'info, Mint>,
     ext_global_account: &mut Account<'info, ExtGlobal>,
-    m_earner_account: &Account<'info, Earner>,
+    m_earn_global_account: &Account<'info, EarnGlobal>,
     vault_m_token_account: &InterfaceAccount<'info, TokenAccount>,
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
@@ -32,7 +32,7 @@ pub fn sync_multiplier<'info>(
         if #[cfg(feature = "scaled-ui")] {
             // Get the current index and timestamp from the m_earn_global_account and cached values
             let (multiplier, timestamp): (f64, i64) =
-                get_latest_multiplier_and_timestamp(ext_global_account, m_earner_account);
+                get_latest_multiplier_and_timestamp(ext_global_account, m_earn_global_account);
 
             // Compare against the current multiplier
             // If the multiplier is the same, we don't need to update
@@ -62,30 +62,8 @@ pub fn sync_multiplier<'info>(
             ext_mint.reload()?;
 
             // Update the last m index and last ext index in the global account
-            ext_global_account.yield_config.last_m_index = m_earner_account.last_claim_index;
+            ext_global_account.yield_config.last_m_index = m_earn_global_account.index;
             ext_global_account.yield_config.last_ext_index = (multiplier * INDEX_SCALE_F64).floor() as u64;
-
-            // Note: This check should not be required anymore because we are using the vault's last claim index
-            // however, we keep it here for now to continue testing
-            //
-            // Check solvency of the vault
-            // i.e. that it holds enough M for each extension UI amount
-            // after the multiplier has been updated
-            if ext_mint.supply > 0 {
-                // Calculate the amount of tokens in the vault
-                let vault_m = vault_m_token_account.amount;
-
-                // Calculate the amount of tokens needed to be solvent
-                // Reduce it by two to avoid rounding errors (there is an edge cases where the rounding error
-                // from one index (down) to the next (up) can cause the difference to be 2)
-                let mut required_m = principal_to_amount_down(ext_mint.supply, multiplier)?;
-                required_m -= std::cmp::min(2, required_m);
-
-                // Check if the vault has enough tokens
-                if vault_m < required_m {
-                    return err!(ExtError::InsufficientCollateral);
-                }
-            }
 
             return Ok(multiplier);
         } else {
@@ -219,11 +197,11 @@ cfg_if! {
 
         fn get_latest_multiplier_and_timestamp<'info>(
             ext_global_account: &Account<'info, ExtGlobal>,
-            m_earner_account: &Account<'info, Earner>,
+            m_earn_global_account: &Account<'info, EarnGlobal>,
         ) -> (f64, i64) {
-            let latest_m_multiplier = m_earner_account.last_claim_index as f64 / INDEX_SCALE_F64;
+            let latest_m_multiplier = m_earn_global_account.index as f64 / INDEX_SCALE_F64;
             let cached_m_multiplier = ext_global_account.yield_config.last_m_index as f64 / INDEX_SCALE_F64;
-            let latest_timestamp: i64 = m_earner_account.last_claim_timestamp as i64;
+            let latest_timestamp: i64 = m_earn_global_account.timestamp as i64;
             let cached_ext_multiplier =
                 ext_global_account.yield_config.last_ext_index as f64 / INDEX_SCALE_F64;
 
