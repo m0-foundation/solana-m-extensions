@@ -14,6 +14,7 @@ pub struct Unwrap<'info> {
     pub signer: Signer<'info>,
 
     // Required if the swap program is not whitelisted on the extension
+    // or if the signer is not authorized to unwrap
     pub unwrap_authority: Option<Signer<'info>>,
 
     /*
@@ -120,10 +121,15 @@ impl<'info> Unwrap<'info> {
             return err!(SwapError::InvalidExtension);
         }
 
+        let unwrap_authority = match &self.unwrap_authority {
+            Some(auth) => auth.key,
+            None => self.signer.key,
+        };
+
         if !self
             .swap_global
             .whitelisted_unwrappers
-            .contains(self.signer.key)
+            .contains(unwrap_authority)
         {
             return err!(SwapError::UnauthorizedUnwrapper);
         }
