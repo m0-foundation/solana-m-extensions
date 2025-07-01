@@ -82,8 +82,8 @@ pub struct Unwrap<'info> {
     )]
     pub from_ext_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    // we have duplicate entries for the token2022 program since the interface needs to be consistent, and all extensions may not be token2022
-    // additionally, it allows us to change the m token program in the future without breaking the interface
+    // we have duplicate entries for the token2022 program since the interface needs to be consistent
+    // but we want to leave open the possibility that either may not have to be token2022 in the future
     pub m_token_program: Program<'info, Token2022>,
     pub ext_token_program: Program<'info, Token2022>,
 }

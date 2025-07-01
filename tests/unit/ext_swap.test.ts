@@ -301,8 +301,10 @@ describe("extension swap tests", () => {
     it("add to ext whitelist", async () => {
       await sendTransaction(
         program.methods
-          .whitelistExtension(earn.programId)
-          .accounts({})
+          .whitelistExtension()
+          .accounts({
+            extProgram: earn.programId,
+          })
           .transaction(),
         [admin]
       );
@@ -428,8 +430,10 @@ describe("extension swap tests", () => {
       for (const pid of [extProgramA, extProgramB, extProgramC]) {
         await sendTransaction(
           program.methods
-            .whitelistExtension(pid.publicKey)
-            .accounts({})
+            .whitelistExtension()
+            .accounts({
+              extProgram: pid.publicKey,
+            })
             .transaction(),
           [admin]
         );
