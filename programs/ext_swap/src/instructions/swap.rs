@@ -72,7 +72,7 @@ pub struct Swap<'info> {
     #[account(
         mut,
         token::mint = from_mint,
-        token::token_program = to_token_program,
+        token::token_program = from_token_program,
     )]
     pub from_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
