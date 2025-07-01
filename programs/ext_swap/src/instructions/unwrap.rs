@@ -45,6 +45,7 @@ pub struct Unwrap<'info> {
      * Mints
      */
     #[account(mut)]
+    /// Validated by unwrap on the extension program
     pub from_mint: Box<InterfaceAccount<'info, Mint>>,
     pub m_mint: Box<InterfaceAccount<'info, Mint>>,
 
