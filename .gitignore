@@ -1,4 +1,3 @@
-
 .anchor
 .DS_Store
 target
@@ -6,3 +5,4 @@ target
 node_modules
 test-ledger
 .yarn
+devnet-keypair.json

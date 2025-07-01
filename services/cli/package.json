@@ -9,6 +9,10 @@
     "@solana/spl-token-metadata": "~0.1.6",
     "@solana/web3.js": "catalog:",
     "bn.js": "catalog:",
-    "commander": "13.1.0"
+    "commander": "13.1.0",
+    "shelljs": "^0.10.0"
+  },
+  "devDependencies": {
+    "@types/shelljs": "^0.8.16"
   }
 }

@@ -1,13 +1,10 @@
 import { Command } from "commander";
 import {
-  AddressLookupTableProgram,
   ComputeBudgetProgram,
   Connection,
   Keypair,
   PublicKey,
-  sendAndConfirmTransaction,
   SystemProgram,
-  Transaction,
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
@@ -16,10 +13,8 @@ import {
   createInitializeMetadataPointerInstruction,
   createInitializeMintInstruction,
   createInitializeTransferHookInstruction,
-  createMultisig,
   createSetAuthorityInstruction,
   ExtensionType,
-  getAssociatedTokenAddressSync,
   getMintLen,
   getOrCreateAssociatedTokenAccount,
   LENGTH_SIZE,
@@ -33,13 +28,11 @@ import {
   pack,
   TokenMetadata,
 } from "@solana/spl-token-metadata";
-
 import {
   createInitializeConfidentialTransferMintInstruction,
   createInitializeScaledUiAmountConfigInstruction,
 } from "./token-extensions";
 import { AnchorProvider, Program, Wallet, BN } from "@coral-xyz/anchor";
-
 import { ExtSwap } from "../../target/types/ext_swap";
 
 const EXT_SWAP_IDL = require("../../target/idl/ext_swap.json");
@@ -70,6 +63,31 @@ function anchorProvider(connection: Connection, owner: Keypair) {
 async function main() {
   const program = new Command();
   const connection = new Connection(process.env.RPC_URL ?? "");
+
+  program.command("print-extensions").action(() => {
+    const [usdk, usdky] = keysFromEnv(["KAST_USDK", "KAST_USDKY"]);
+
+    const addresses: { [key: string]: PublicKey } = {
+      "USDK program": usdk.publicKey,
+      "USDK vault": PublicKey.findProgramAddressSync(
+        [Buffer.from("m_vault")],
+        usdk.publicKey
+      )[0],
+      "USDKY program": usdky.publicKey,
+      "USDKY vault": PublicKey.findProgramAddressSync(
+        [Buffer.from("m_vault")],
+        usdky.publicKey
+      )[0],
+    };
+
+    const tableData = Object.entries(addresses).map(([name, pubkey]) => ({
+      Name: name,
+      Address: pubkey.toBase58(),
+      Hex: `0x${pubkey.toBuffer().toString("hex")}`,
+    }));
+
+    console.table(tableData);
+  });
 
   program
     .command("create-ext-mint")
@@ -290,7 +308,7 @@ async function main() {
       );
 
       const tx = await extSwap.methods
-        .initializeGlobal(M_MINT)
+        .initializeGlobal()
         .accounts({
           admin: owner.publicKey,
         })
@@ -315,9 +333,9 @@ async function main() {
       );
 
       const tx = await extSwap.methods
-        .whitelistExtension(new PublicKey(extProgramId))
+        .whitelistExtension()
         .accounts({
-          admin: owner.publicKey,
+          extProgram: new PublicKey(extProgramId),
         })
         .signers([owner])
         .rpc();
@@ -353,181 +371,6 @@ async function main() {
 
       console.log(`Added wrap authority: ${tx}`);
     });
-
-  //   program
-  //     .command("update-earn-lut")
-  //     .description("Create or update the LUT for common addresses")
-  //     .option(
-  //       "-a, --address [pubkey]",
-  //       "Address of table to update",
-  //       "Aq87DiRe8thyDfPhkpe92umFj9VU6bt8o9S9MTAhNC6c"
-  //     )
-  //     .action(async ({ address }) => {
-  //       const [owner] = keysFromEnv(["PAYER_KEYPAIR"]);
-  //       const ixs = [
-  //         ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 250_000 }),
-  //       ];
-
-  //       // Get or create LUT
-  //       let tableAddress: PublicKey;
-  //       if (address) {
-  //         tableAddress = new PublicKey(address);
-  //       } else {
-  //         const [lookupTableIx, lookupTableAddress] =
-  //           AddressLookupTableProgram.createLookupTable({
-  //             authority: owner.publicKey,
-  //             payer: owner.publicKey,
-  //             recentSlot:
-  //               (await connection.getSlot({ commitment: "finalized" })) - 10,
-  //           });
-
-  //         console.log(`Creating lookup table: ${lookupTableAddress.toBase58()}`);
-  //         tableAddress = lookupTableAddress;
-  //         ixs.push(lookupTableIx);
-  //       }
-
-  //       // Addresses to add to LUT
-  //       const [mMint, wmMint, multisig] = keysFromEnv([
-  //         "M_MINT_KEYPAIR",
-  //         "WM_MINT_KEYPAIR",
-  //         "M_MINT_MULTISIG_KEYPAIR",
-  //       ]);
-  //       const [portalTokenAuthPda] = PublicKey.findProgramAddressSync(
-  //         [Buffer.from("token_authority")],
-  //         PROGRAMS.portal
-  //       );
-  //       const [earnTokenAuthPda] = PublicKey.findProgramAddressSync(
-  //         [Buffer.from("token_authority")],
-  //         PROGRAMS.earn
-  //       );
-  //       const [mVaultPda] = PublicKey.findProgramAddressSync(
-  //         [Buffer.from("m_vault")],
-  //         PROGRAMS.extEarn
-  //       );
-  //       const [mintAuthPda] = PublicKey.findProgramAddressSync(
-  //         [Buffer.from("mint_authority")],
-  //         PROGRAMS.extEarn
-  //       );
-  //       const [global] = PublicKey.findProgramAddressSync(
-  //         [Buffer.from("global")],
-  //         PROGRAM_ID
-  //       );
-  //       const [extGlobal] = PublicKey.findProgramAddressSync(
-  //         [Buffer.from("global")],
-  //         EXT_PROGRAM_ID
-  //       );
-
-  //       const globalAccount = await getProgram(connection).account.global.fetch(
-  //         global
-  //       );
-  //       const extGlobalAccount = await getExtProgram(
-  //         connection
-  //       ).account.extGlobal.fetch(extGlobal);
-
-  //       const addressesForTable = [
-  //         PROGRAMS.portal,
-  //         PROGRAMS.earn,
-  //         PROGRAMS.extEarn,
-  //         mMint.publicKey,
-  //         wmMint.publicKey,
-  //         multisig.publicKey,
-  //         portalTokenAuthPda,
-  //         earnTokenAuthPda,
-  //         mVaultPda,
-  //         mintAuthPda,
-  //         global,
-  //         extGlobal,
-  //         globalAccount.earnAuthority,
-  //         globalAccount.admin,
-  //         extGlobalAccount.earnAuthority,
-  //         extGlobalAccount.admin,
-  //         TOKEN_2022_PROGRAM_ID,
-  //       ];
-
-  //       // Add current earners to LUT
-  //       for (const pid of [PROGRAM_ID, EXT_PROGRAM_ID]) {
-  //         const auth = await EarnAuthority.load(connection, evmClient, pid);
-  //         const earners = await auth.getAllEarners();
-
-  //         for (const earner of earners) {
-  //           addressesForTable.push(earner.pubkey, earner.data.userTokenAccount);
-
-  //           // Check if there is an earn manager
-  //           if (
-  //             earner.data.earnManager &&
-  //             !addressesForTable.find((a) => a.equals(earner.data.earnManager!))
-  //           ) {
-  //             addressesForTable.push(earner.data.earnManager);
-  //           }
-  //         }
-  //       }
-
-  //       // Fetch current state of LUT
-  //       let existingAddresses: PublicKey[] = [];
-  //       if (address) {
-  //         const state = (await connection.getAddressLookupTable(tableAddress))
-  //           .value?.state.addresses;
-  //         if (!state) {
-  //           throw new Error(
-  //             `Failed to fetch state for address lookup table ${tableAddress}`
-  //           );
-  //         }
-  //         if (state.length === 256) {
-  //           throw new Error("LUT is full");
-  //         }
-
-  //         existingAddresses = state;
-  //       }
-
-  //       // Dedupe missing addresses
-  //       const toAdd = addressesForTable.filter(
-  //         (address) => !existingAddresses.find((a) => a.equals(address))
-  //       );
-  //       if (toAdd.length === 0) {
-  //         console.log("No addresses to add");
-  //         return;
-  //       }
-
-  //       if (existingAddresses.length + toAdd.length > 256) {
-  //         throw new Error(`cannot add ${toAdd.length} more addresses`);
-  //       }
-
-  //       ixs.push(
-  //         AddressLookupTableProgram.extendLookupTable({
-  //           payer: owner.publicKey,
-  //           authority: owner.publicKey,
-  //           lookupTable: tableAddress,
-  //           addresses: toAdd,
-  //         })
-  //       );
-
-  //       // Send transaction
-  //       const blockhash = await connection.getLatestBlockhash("finalized");
-
-  //       const messageV0 = new TransactionMessage({
-  //         payerKey: owner.publicKey,
-  //         recentBlockhash: blockhash.blockhash,
-  //         instructions: ixs,
-  //       }).compileToV0Message();
-
-  //       const transaction = new VersionedTransaction(messageV0);
-  //       transaction.sign([owner]);
-  //       const txid = await connection.sendTransaction(transaction);
-  //       console.log(`Transaction sent ${txid}\t${toAdd.length} addresses added`);
-
-  //       // Confirm
-  //       const confirmation = await connection.confirmTransaction(
-  //         {
-  //           signature: txid,
-  //           blockhash: blockhash.blockhash,
-  //           lastValidBlockHeight: blockhash.lastValidBlockHeight,
-  //         },
-  //         "confirmed"
-  //       );
-  //       if (confirmation.value.err) {
-  //         throw new Error(`Transaction not confirmed: ${confirmation.value.err}`);
-  //       }
-  //     });
 
   await program.parseAsync(process.argv);
 }
