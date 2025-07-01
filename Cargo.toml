@@ -20,4 +20,3 @@ spl-token-2022 = { version = "7.0.0", features = ["no-entrypoint"] }
 solana-security-txt = "1.1.1"
 cfg-if = "1.0"
 earn = { git = "https://github.com/m0-foundation/solana-m", branch = "develop", features = ["no-entrypoint"] }
-

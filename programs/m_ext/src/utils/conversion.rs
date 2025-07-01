@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
+use anchor_spl::token_interface::{Mint, Token2022};
 use cfg_if::cfg_if;
-use earn::state::Earner;
+use earn::state::Global as EarnGlobal;
 use spl_token_2022::extension::{BaseStateWithExtensions, StateWithExtensions};
 
 use crate::{
@@ -22,8 +22,7 @@ cfg_if! {
 pub fn sync_multiplier<'info>(
     ext_mint: &mut InterfaceAccount<'info, Mint>,
     ext_global_account: &mut Account<'info, ExtGlobal>,
-    m_earner_account: &Account<'info, Earner>,
-    vault_m_token_account: &InterfaceAccount<'info, TokenAccount>,
+    m_earn_global_account: &Account<'info, EarnGlobal>,
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
     token_program: &Program<'info, Token2022>,
@@ -32,7 +31,7 @@ pub fn sync_multiplier<'info>(
         if #[cfg(feature = "scaled-ui")] {
             // Get the current index and timestamp from the m_earn_global_account and cached values
             let (multiplier, timestamp): (f64, i64) =
-                get_latest_multiplier_and_timestamp(ext_global_account, m_earner_account);
+                get_latest_multiplier_and_timestamp(ext_global_account, m_earn_global_account)?;
 
             // Compare against the current multiplier
             // If the multiplier is the same, we don't need to update
@@ -62,30 +61,8 @@ pub fn sync_multiplier<'info>(
             ext_mint.reload()?;
 
             // Update the last m index and last ext index in the global account
-            ext_global_account.yield_config.last_m_index = m_earner_account.last_claim_index;
+            ext_global_account.yield_config.last_m_index = m_earn_global_account.index;
             ext_global_account.yield_config.last_ext_index = (multiplier * INDEX_SCALE_F64).floor() as u64;
-
-            // Note: This check should not be required anymore because we are using the vault's last claim index
-            // however, we keep it here for now to continue testing
-            //
-            // Check solvency of the vault
-            // i.e. that it holds enough M for each extension UI amount
-            // after the multiplier has been updated
-            if ext_mint.supply > 0 {
-                // Calculate the amount of tokens in the vault
-                let vault_m = vault_m_token_account.amount;
-
-                // Calculate the amount of tokens needed to be solvent
-                // Reduce it by two to avoid rounding errors (there is an edge cases where the rounding error
-                // from one index (down) to the next (up) can cause the difference to be 2)
-                let mut required_m = principal_to_amount_down(ext_mint.supply, multiplier)?;
-                required_m -= std::cmp::min(2, required_m);
-
-                // Check if the vault has enough tokens
-                if vault_m < required_m {
-                    return err!(ExtError::InsufficientCollateral);
-                }
-            }
 
             return Ok(multiplier);
         } else {
@@ -219,17 +196,17 @@ cfg_if! {
 
         fn get_latest_multiplier_and_timestamp<'info>(
             ext_global_account: &Account<'info, ExtGlobal>,
-            m_earner_account: &Account<'info, Earner>,
-        ) -> (f64, i64) {
-            let latest_m_multiplier = m_earner_account.last_claim_index as f64 / INDEX_SCALE_F64;
+            m_earn_global_account: &Account<'info, EarnGlobal>,
+        ) -> Result<(f64, i64)> {
+            let latest_m_multiplier = m_earn_global_account.index as f64 / INDEX_SCALE_F64;
             let cached_m_multiplier = ext_global_account.yield_config.last_m_index as f64 / INDEX_SCALE_F64;
-            let latest_timestamp: i64 = m_earner_account.last_claim_timestamp as i64;
+            let latest_timestamp: i64 = m_earn_global_account.timestamp as i64;
             let cached_ext_multiplier =
                 ext_global_account.yield_config.last_ext_index as f64 / INDEX_SCALE_F64;
 
             // If no change, return early
             if latest_m_multiplier == cached_m_multiplier {
-                return (cached_ext_multiplier, latest_timestamp);
+                return Ok((cached_ext_multiplier, latest_timestamp));
             }
 
             // Calculate the new ext multiplier based on the latest m multiplier and timestamp
@@ -238,9 +215,9 @@ cfg_if! {
                 cached_m_multiplier,
                 latest_m_multiplier,
                 ext_global_account.yield_config.fee_bps
-            );
+            )?;
 
-            (new_ext_multiplier, latest_timestamp)
+            Ok((new_ext_multiplier, latest_timestamp))
         }
 
         fn calculate_new_multiplier(
@@ -248,7 +225,21 @@ cfg_if! {
             last_m_multiplier: f64,
             new_m_multiplier: f64,
             fee_bps: u64,
-        ) -> f64 {
+        ) -> Result<f64> {
+            // Confirm the inputs are in the expected domain.
+            // These checks ensure that the resultant value is >= 1.0,
+            // are allowable values to set as the Token2022 Scaled UI multiplier,
+            // and the ext multiplier is monotonically increasing.
+            // While having the last ext multiplier <= last m multiplier isn't strictly necessary,
+            // it arises naturally from our construction and provides a good sanity check.
+            if last_ext_multiplier < 1.0 ||
+               last_m_multiplier < last_ext_multiplier ||
+               new_m_multiplier < last_m_multiplier ||
+               new_m_multiplier > 100.0 || // we set a high, but finite upper bound on the multiplier to ensure it (or the other multipliers) don't lead to overflow.
+               fee_bps > 10000 {
+                return err!(ExtError::InvalidInput);
+            }
+
             // Calculate the new ext multiplier from the formula:
             // new_ext_multiplier = last_ext_multiplier * (new_m_multiplier / last_m_multiplier) ^ (1 - fee_on_yield)
             // The derivation of this formula is explained in this document: https://gist.github.com/Oighty/89dd1288a0a7fb53eb6f0314846cb746
@@ -271,7 +262,7 @@ cfg_if! {
 
             // We need to round the new multiplier down and truncate at 10^-12
             // to return a consistent value
-            (new_ext_multiplier * INDEX_SCALE_F64).floor() / INDEX_SCALE_F64
+            Ok((new_ext_multiplier * INDEX_SCALE_F64).floor() / INDEX_SCALE_F64)
         }
     }
 }
@@ -287,48 +278,48 @@ mod tests {
                 // cases (starting from 1.0):
                 // no rounding
                 let expected = 1.125000000000;
-                let result = calculate_new_multiplier(1.0, 1.0, 1.125, 0);
+                let result = calculate_new_multiplier(1.0, 1.0, 1.125, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // would round up -> truncates
                 let expected = 1.666666666666;
-                let result = calculate_new_multiplier(1.0, 1.5, 2.5, 0);
+                let result = calculate_new_multiplier(1.0, 1.5, 2.5, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // would round down -> truncates
                 let expected = 1.333333333333;
-                let result = calculate_new_multiplier(1.0, 1.5, 2.0, 0);
+                let result = calculate_new_multiplier(1.0, 1.5, 2.0, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // cases (starting from truncated value that would have rounded up):
                 // no rounding
                 let expected = 1.749999999999; // off by one due to previous rounding
-                let result = calculate_new_multiplier(1.666666666666, 2.0, 2.1, 0);
+                let result = calculate_new_multiplier(1.666666666666, 2.0, 2.1, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // would round up -> truncates
                 let expected = 1.777777777777;
-                let result = calculate_new_multiplier(1.666666666666, 3.0, 3.2, 0);
+                let result = calculate_new_multiplier(1.666666666666, 3.0, 3.2, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // would round down -> truncates
                 let expected = 2.333333333332; // off by one due to previous rounding
-                let result = calculate_new_multiplier(1.666666666666, 5.0, 7.0, 0);
+                let result = calculate_new_multiplier(1.666666666666, 5.0, 7.0, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // cases (starting from truncated value that would have rounded down)
                 let expected = 1.499999999999; // off by one due to previous rounding
-                let result = calculate_new_multiplier(1.333333333333, 2.0, 2.25, 0);
+                let result = calculate_new_multiplier(1.333333333333, 2.0, 2.25, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // would round up -> truncates
                 let expected = 1.666666666666;
-                let result = calculate_new_multiplier(1.333333333333, 2.0, 2.5, 0);
+                let result = calculate_new_multiplier(1.333333333333, 2.0, 2.5, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // would round down -> truncates
                 let expected = 2.333333333332;
-                let result = calculate_new_multiplier(1.333333333333, 4.0, 7.0, 0);
+                let result = calculate_new_multiplier(1.333333333333, 4.0, 7.0, 0).unwrap();
                 assert_eq!(result, expected);
             }
 
@@ -356,7 +347,7 @@ mod tests {
                 //   1. no rounding
                 //   2. rounds down
                 //   3. no rounding
-                let result = calculate_new_multiplier(1.0, 1.0, 1.125, 2500);
+                let result = calculate_new_multiplier(1.0, 1.0, 1.125, 2500).unwrap();
                 let expected_actual = 1.092356486341; // wolfram alpha: 1.092356486341477...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
@@ -365,7 +356,7 @@ mod tests {
                 //   1. no rounding
                 //   2. rounds down
                 //   3. rounds down
-                let result = calculate_new_multiplier(1.3, 1.5, 1.65, 1500);
+                let result = calculate_new_multiplier(1.3, 1.5, 1.65, 1500).unwrap();
                 let expected_actual = 1.409701411824; // wolfram alpha: 1.409701411824313...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
@@ -374,7 +365,7 @@ mod tests {
                 //  1. no rounding
                 //  2. rounds down
                 //  3. would round up -> truncates
-                let result = calculate_new_multiplier(1.2, 1.5, 1.65, 1500);
+                let result = calculate_new_multiplier(1.2, 1.5, 1.65, 1500).unwrap();
                 let expected_actual = 1.301262841684; // wolfram alpha: 1.301262841683981...
                 let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
                 assert_eq!(result, expected);
@@ -383,7 +374,7 @@ mod tests {
                 //  1. no rounding
                 //  2. would round up -> truncates
                 //  3. no rounding
-                let result = calculate_new_multiplier(1.0, 1.5, 1.65, 1000);
+                let result = calculate_new_multiplier(1.0, 1.5, 1.65, 1000).unwrap();
                 let expected_actual = 1.089565684036; // wolfram alpha: 1.089565684035973...
                 let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
                 assert_eq!(result, expected);
@@ -392,7 +383,7 @@ mod tests {
                 //  1. no rounding
                 //  2. would round up -> truncates
                 //  3. rounds down
-                let result = calculate_new_multiplier(1.2, 1.5, 1.65, 1000);
+                let result = calculate_new_multiplier(1.2, 1.5, 1.65, 1000).unwrap();
                 let expected_actual = 1.307478820843; // wolfram alpha: 1.307478820843168...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
@@ -401,7 +392,7 @@ mod tests {
                 //  1. no rounding
                 //  2. would round up -> truncates
                 //  3. would round up -> truncates
-                let result = calculate_new_multiplier(1.3, 1.5, 1.65, 1000);
+                let result = calculate_new_multiplier(1.3, 1.5, 1.65, 1000).unwrap();
                 let expected_actual = 1.416435389247; // wolfram alpha: 1.41643538924676614906538927073063715743660444837662580163175093387867947...
                 let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
                 assert_eq!(result, expected);
@@ -410,7 +401,7 @@ mod tests {
                 //  1. rounds down
                 //  2. rounds down
                 //  3. no rounding
-                let result = calculate_new_multiplier(1.0, 1.125, 1.25, 1000);
+                let result = calculate_new_multiplier(1.0, 1.125, 1.25, 1000).unwrap();
                 let expected_actual = 1.099465842451; // wolfram alpha: 1.099465842451349...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
@@ -419,7 +410,7 @@ mod tests {
                 //  1. rounds down
                 //  2. rounds down
                 //  3. rounds down
-                let result = calculate_new_multiplier(1.1, 1.125, 1.25, 1000);
+                let result = calculate_new_multiplier(1.1, 1.125, 1.25, 1000).unwrap();
                 let expected_actual = 1.209412426696; // wolfram alpha: 1.209412426696484...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
@@ -428,7 +419,7 @@ mod tests {
                 //  1. rounds down
                 //  2. rounds down
                 //  3. would round up -> truncates
-                let result = calculate_new_multiplier(1.2, 1.125, 1.25, 1000);
+                let result = calculate_new_multiplier(1.2, 1.125, 1.25, 1000).unwrap();
                 let expected_actual = 1.319359010942; // wolfram alpha: 1.319359010941619...
                 let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
                 assert_eq!(result, expected);
@@ -437,7 +428,7 @@ mod tests {
                 //  1. rounds down
                 //  2. would round up -> truncates
                 //  3. no rounding
-                let result = calculate_new_multiplier(1.0, 1.125, 1.25, 2000);
+                let result = calculate_new_multiplier(1.0, 1.125, 1.25, 2000).unwrap();
                 let expected_actual = 1.087942624846; // wolfram alpha: 1.087942624845529...
                 let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
                 assert_eq!(result, expected);
@@ -446,7 +437,7 @@ mod tests {
                 //  1. rounds down
                 //  2. would round up -> truncates
                 //  3. rounds down
-                let result = calculate_new_multiplier(1.3, 1.125, 1.25, 2000);
+                let result = calculate_new_multiplier(1.3, 1.125, 1.25, 2000).unwrap();
                 let expected_actual = 1.414325412299; // wolfram alpha: 1.414325412299188...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
@@ -455,7 +446,7 @@ mod tests {
                 //  1. rounds down
                 //  2. would round up -> truncates
                 //  3. would round up -> truncates
-                let result = calculate_new_multiplier(1.2, 1.125, 1.25, 2000);
+                let result = calculate_new_multiplier(1.2, 1.125, 1.25, 2000).unwrap();
                 let expected_actual = 1.305531149815; // wolfram alpha: 1.305531149814635...
                 let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
                 assert_eq!(result, expected);
@@ -464,7 +455,7 @@ mod tests {
                 //  1. would round up -> truncates
                 //  2. rounds down
                 //  3. no rounding
-                let result = calculate_new_multiplier(1.0, 3.0, 3.2, 1000);
+                let result = calculate_new_multiplier(1.0, 3.0, 3.2, 1000).unwrap();
                 let expected_actual = 1.059804724543; // wolfram alpha: 1.059804724543068...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
@@ -473,7 +464,7 @@ mod tests {
                 //  1. would round up -> truncates
                 //  2. rounds down
                 //  3. rounds down
-                let result = calculate_new_multiplier(1.4, 3.0, 3.2, 1000);
+                let result = calculate_new_multiplier(1.4, 3.0, 3.2, 1000).unwrap();
                 let expected_actual = 1.483726614360; // wolfram alpha: 1.483726614360295...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
@@ -482,7 +473,7 @@ mod tests {
                 //  1. would round up -> truncates
                 //  2. rounds down
                 //  3. would round up -> truncates
-                let result = calculate_new_multiplier(1.2, 3.0, 3.2, 1000);
+                let result = calculate_new_multiplier(1.2, 3.0, 3.2, 1000).unwrap();
                 let expected_actual = 1.271765669452; // wolfram alpha: 1.271765669451681...
                 let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
                 assert_eq!(result, expected);
@@ -491,7 +482,7 @@ mod tests {
                 //  1. would round up -> truncates
                 //  2. would round up -> truncates
                 //  3. no rounding
-                let result = calculate_new_multiplier(1.0, 3.0, 3.2, 2000);
+                let result = calculate_new_multiplier(1.0, 3.0, 3.2, 2000).unwrap();
                 let expected_actual = 1.052986925779; // wolfram alpha: 1.052986925778570...
                 let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
                 assert_eq!(result, expected);
@@ -500,7 +491,7 @@ mod tests {
                 //  1. would round up -> truncates
                 //  2. would round up -> truncates
                 //  3. rounds down
-                let result = calculate_new_multiplier(1.2, 3.0, 3.2, 2000);
+                let result = calculate_new_multiplier(1.2, 3.0, 3.2, 2000).unwrap();
                 let expected_actual = 1.263584310934; // wolfram alpha: 1.263584310934284...
                 let expected = expected_actual;
                 assert_eq!(result, expected);
@@ -509,7 +500,7 @@ mod tests {
                 //  1. would round up -> truncates
                 //  2. would round up -> truncates
                 //  3. would round up -> truncates
-                let result = calculate_new_multiplier(1.4, 3.0, 3.2, 2000);
+                let result = calculate_new_multiplier(1.4, 3.0, 3.2, 2000).unwrap();
                 let expected_actual = 1.474181696090; // wolfram alpha: 1.474181696089998...
                 let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
                 assert_eq!(result, expected);

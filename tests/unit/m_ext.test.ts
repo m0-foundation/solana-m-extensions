@@ -490,303 +490,6 @@ for (const variant of VARIANTS) {
         }
       });
 
-      describe("set_m_mint unit tests", () => {
-        beforeEach(async () => {
-          const feeBps =
-            variant === Variant.NoYield ? undefined : new BN(randomInt(10000));
-          // Initialize the extension program
-          await $.initializeExt(
-            [$.admin.publicKey, $.wrapAuthority.publicKey],
-            feeBps
-          );
-
-          // wrap some tokens to the make the m vault's balance non-zero
-          await $.wrap($.admin, initialSupply);
-        });
-
-        // test cases
-        // [X] given the admin does not sign the transaction
-        //   [X] it reverts with a NotAuthorized error
-        // [X] given the admin signs the transaction
-        //   [X] given the new m mint is not owned by the token2022 program
-        //     [X] it reverts with a ConstraintMintTokenProgram error
-        //   [X] given the new m mint has a different number of decimals than the existing m mint
-        //     [X] it reverts with a ConstraintMintDecimals error
-        //   [X] given the m vault is not the m vault PDA
-        //     [X] it reverts with a ConstraintSeeds error
-        //   [X] given the m vault token account for the current m mint is not the m vault PDA's ATA
-        //     [X] it reverts with a ConstraintAssociated error
-        //   [X] given the m vault token account for the new m mint is not the m vault PDA's ATA
-        //     [X] it reverts with a ConstraintAssociated error
-        //   [X] given the m vault token account for the new m mint has fewer tokens than the m vault token account for the current m mint
-        //     [X] it reverts with an InsufficientCollateral error
-        //   [X] given all the accounts are correct
-        //     [X] it sets the m mint to the new mint
-
-        // given the admin does not sign the transaction
-        // it reverts with a NotAuthorized error
-        test("admin does not sign - reverts", async () => {
-          // Create a new m mint that is valid
-          const newMint = new Keypair();
-          await $.createMint(newMint, $.nonAdmin.publicKey, true, 6);
-
-          // Create the m vault ATA for the new mint
-          await $.createATA(newMint.publicKey, $.getMVault());
-
-          // Attempt to send the transaction
-          await $.expectAnchorError(
-            $.ext.methods
-              .setMMint()
-              .accountsPartial({
-                admin: $.nonAdmin.publicKey,
-                newMMint: newMint.publicKey,
-              })
-              .signers([$.nonAdmin])
-              .rpc(),
-            "NotAuthorized"
-          );
-        });
-
-        // given the admin signs the transaction
-        // given the new m mint is not owned by the token2022 program
-        // it reverts with a ConstraintAddress error
-        test("new m mint not owned by token2022 - reverts", async () => {
-          // Create a new m mint that is valid
-          const newMint = new Keypair();
-          await $.createMint(newMint, $.nonAdmin.publicKey, false);
-
-          // Create/get the m vault ATA for the new mint
-          const newVaultATA = await $.getATA(
-            newMint.publicKey,
-            $.getMVault(),
-            false
-          );
-
-          // Attempt to send the transaction
-          await $.expectAnchorError(
-            $.ext.methods
-              .setMMint()
-              .accountsPartial({
-                admin: $.admin.publicKey,
-                newMMint: newMint.publicKey,
-                newVaultMTokenAccount: newVaultATA,
-              })
-              .signers([$.admin])
-              .rpc(),
-            "ConstraintMintTokenProgram"
-          );
-        });
-
-        // given the new m mint has a different number of decimals than the existing m mint
-        // it reverts with a ConstraintMintDecimals error
-        test("new m mint incorrect decimals - reverts", async () => {
-          // Create a new m mint that is valid
-          const newMint = new Keypair();
-          await $.createMint(newMint, $.nonAdmin.publicKey, true, 9);
-
-          // Create the m vault ATA for the new mint
-          await $.createATA(newMint.publicKey, $.getMVault());
-
-          // Attempt to send the transaction
-          await $.expectAnchorError(
-            $.ext.methods
-              .setMMint()
-              .accountsPartial({
-                admin: $.admin.publicKey,
-                newMMint: newMint.publicKey,
-              })
-              .signers([$.admin])
-              .rpc(),
-            "ConstraintMintDecimals"
-          );
-        });
-
-        // given the m vault is not the m vault PDA
-        // it reverts with a SeedsConstraint error
-        test("m vault is not the m vault PDA - reverts", async () => {
-          // Create a new m mint that is valid
-          const newMint = new Keypair();
-          await $.createMint(newMint, $.nonAdmin.publicKey, true, 6);
-
-          // Create fake m vault PDA
-          const fakeMVault = PublicKey.unique();
-
-          // Create/get the m vault ATA for the old mint
-          const oldVaultATA = await $.getATA($.mMint.publicKey, fakeMVault);
-
-          // Create/get the m vault ATA for the new mint
-          const newVaultATA = await $.getATA(newMint.publicKey, fakeMVault);
-
-          // Attempt to send the transaction
-          await $.expectAnchorError(
-            $.ext.methods
-              .setMMint()
-              .accountsPartial({
-                admin: $.admin.publicKey,
-                newMMint: newMint.publicKey,
-                mVault: fakeMVault,
-                vaultMTokenAccount: oldVaultATA,
-                newVaultMTokenAccount: newVaultATA,
-              })
-              .signers([$.admin])
-              .rpc(),
-            "ConstraintSeeds"
-          );
-        });
-
-        // given the m vault token account for the current m mint is not the m vault PDA's ATA
-        // it reverts with a ConstraintAssociated error
-        test("m vault token account for current m mint is not the m vault PDA's ATA - reverts", async () => {
-          // Create a new m mint that is valid
-          const newMint = new Keypair();
-          await $.createMint(newMint, $.nonAdmin.publicKey, true, 6);
-
-          // Create the m vault ATA for the new mint
-          await $.createATA(newMint.publicKey, $.getMVault());
-
-          // Change the m vault token account
-          const { tokenAccount: nonAtaAccount } = await $.createTokenAccount(
-            $.mMint.publicKey,
-            $.getMVault(),
-            true,
-            true
-          );
-
-          // Attempt to send the transaction
-          await $.expectAnchorError(
-            $.ext.methods
-              .setMMint()
-              .accountsPartial({
-                admin: $.admin.publicKey,
-                newMMint: newMint.publicKey,
-                vaultMTokenAccount: nonAtaAccount,
-              })
-              .signers([$.admin])
-              .rpc(),
-            "ConstraintAssociated"
-          );
-        });
-
-        // given the m vault token account for the new m mint is not the m vault PDA's ATA
-        // it reverts with a ConstraintAssociated error
-        test("m vault token account for new m mint is not the m vault PDA's ATA - reverts", async () => {
-          // Create a new m mint that is valid
-          const newMint = new Keypair();
-          await $.createMint(newMint, $.nonAdmin.publicKey, true, 6);
-
-          // Change the m vault token account
-          const { tokenAccount: nonAtaAccount } = await $.createTokenAccount(
-            newMint.publicKey,
-            $.getMVault(),
-            true,
-            true
-          );
-
-          // Attempt to send the transaction
-          await $.expectAnchorError(
-            $.ext.methods
-              .setMMint()
-              .accountsPartial({
-                admin: $.admin.publicKey,
-                newMMint: newMint.publicKey,
-                newVaultMTokenAccount: nonAtaAccount,
-              })
-              .signers([$.admin])
-              .rpc(),
-            "ConstraintAssociated"
-          );
-        });
-
-        // given the m vault token account for the new m mint has fewer tokens than the m vault token account for the current m mint
-        // it reverts with an InsufficientCollateral error
-        test("new m mint vault token account has fewer tokens than current m mint vault token account - reverts", async () => {
-          // Create a new m mint that is valid
-          const newMint = new Keypair();
-          await $.createMint(newMint, $.nonAdmin.publicKey, true, 6);
-
-          // Create/get the ATA for the m vault for the new mint and mint some tokens to it
-          const mVaultATA: PublicKey = await $.getATA(
-            newMint.publicKey,
-            $.getMVault()
-          );
-
-          const amount = BigInt(randomInt(initialSupply.toNumber()));
-
-          const mintToInstruction = createMintToCheckedInstruction(
-            newMint.publicKey,
-            mVaultATA,
-            $.nonAdmin.publicKey,
-            amount,
-            6,
-            [],
-            TOKEN_2022_PROGRAM_ID
-          );
-
-          let tx = new Transaction();
-          tx.add(mintToInstruction);
-          await $.provider.sendAndConfirm!(tx, [$.nonAdmin]);
-
-          // Send the transaction
-          // Expect an insufficient collateral error
-          await $.expectAnchorError(
-            $.ext.methods
-              .setMMint()
-              .accountsPartial({
-                admin: $.admin.publicKey,
-                newMMint: newMint.publicKey,
-              })
-              .signers([$.admin])
-              .rpc(),
-            "InsufficientCollateral"
-          );
-        });
-
-        // given all the accounts are correct
-        // it sets the m mint to the new mint
-        // Create a new m mint that is valid
-        test("set m mint - success", async () => {
-          const newMint = new Keypair();
-          await $.createMint(newMint, $.nonAdmin.publicKey, true, 6);
-
-          // Create/get the ATA for the m vault for the new mint and mint some tokens to it
-          const mVaultATA: PublicKey = await $.getATA(
-            newMint.publicKey,
-            $.getMVault()
-          );
-
-          const amount = BigInt(initialSupply.toString());
-
-          const mintToInstruction = createMintToCheckedInstruction(
-            newMint.publicKey,
-            mVaultATA,
-            $.nonAdmin.publicKey,
-            amount,
-            6,
-            [],
-            TOKEN_2022_PROGRAM_ID
-          );
-
-          let tx = new Transaction();
-          tx.add(mintToInstruction);
-          await $.provider.sendAndConfirm!(tx, [$.nonAdmin]);
-
-          // Send the transaction
-          await $.ext.methods
-            .setMMint()
-            .accountsPartial({
-              admin: $.admin.publicKey,
-              newMMint: newMint.publicKey,
-            })
-            .signers([$.admin])
-            .rpc();
-
-          // Check that the m mint was updated
-          $.expectExtGlobalState({
-            mMint: newMint.publicKey,
-          });
-        });
-      });
-
       describe("add_wrap_authority unit tests", () => {
         let wrapAuthorities: PublicKey[];
 
@@ -976,7 +679,7 @@ for (const variant of VARIANTS) {
         //     [X] it reverts with an InvalidMint error
         //   [X] given the ext mint authority is not the ext mint authority PDA
         //     [X] it reverts with a ConstraintSeeds error
-        //   [X] given the m earner account does not match the derived PDA
+        //   [X] given the m earn global account does not match the derived PDA
         //     [X] it reverts with a ConstraintSeeds error
         //   [X] given the recipient token account is not a token account for the m mint
         //     [X] it reverts with a ConstraintTokenMint error
@@ -1043,9 +746,6 @@ for (const variant of VARIANTS) {
           // Create the ATA for the fake m vault so we avoid account not initialized errors
           const mVaultATA = await $.getATA($.mMint.publicKey, mVault);
 
-          // Create earner account for the fake m vault
-          const mEarnerAccount = await $.addMEarner(mVault);
-
           const recipientExtTokenAccount = await $.getATA(
             $.extMint.publicKey,
             $.admin.publicKey
@@ -1059,7 +759,6 @@ for (const variant of VARIANTS) {
                 admin: $.admin.publicKey,
                 mVault,
                 vaultMTokenAccount: mVaultATA,
-                mEarnerAccount,
                 recipientExtTokenAccount,
               })
               .signers([$.admin])
@@ -1080,10 +779,6 @@ for (const variant of VARIANTS) {
             true
           );
 
-          // Remove the m vault's current earner account and add the one for the non-ATA
-          await $.removeMEarner(mVault);
-          const mEarnerAccount = await $.addMEarner(mVault, nonAtaAccount);
-
           const recipientExtTokenAccount = await $.getATA(
             $.extMint.publicKey,
             $.admin.publicKey
@@ -1096,7 +791,6 @@ for (const variant of VARIANTS) {
               .accountsPartial({
                 admin: $.admin.publicKey,
                 vaultMTokenAccount: nonAtaAccount,
-                mEarnerAccount,
                 recipientExtTokenAccount,
               })
               .signers([$.admin])
@@ -1160,17 +854,10 @@ for (const variant of VARIANTS) {
 
         // given the m earner account does not match the derived one
         // it reverts with a ConstraintSeeds / AccountNotInitialized error
-        test("m earner account does not match derived pubkey - reverts", async () => {
-          // Change the m earner account
-          const mEarnerAccount = PublicKey.unique();
-          if (
-            mEarnerAccount.equals(
-              $.getMEarnerAccount(
-                await $.getATA($.mMint.publicKey, $.getMVault())
-              )
-            )
-          )
-            return;
+        test("m earn global account does not match derived pubkey - reverts", async () => {
+          // Change the m earn global account
+          const mEarnGlobalAccount = PublicKey.unique();
+          if (mEarnGlobalAccount.equals($.getEarnGlobalAccount())) return;
 
           const recipientExtTokenAccount = await $.getATA(
             $.extMint.publicKey,
@@ -1183,7 +870,7 @@ for (const variant of VARIANTS) {
               .claimFees()
               .accountsPartial({
                 admin: $.admin.publicKey,
-                mEarnerAccount,
+                mEarnGlobalAccount,
                 recipientExtTokenAccount,
               })
               .signers([$.admin])
@@ -1501,6 +1188,194 @@ for (const variant of VARIANTS) {
           });
         }
       });
+
+      if (variant !== Variant.NoYield) {
+        describe("set_fee unit tests", () => {
+          // yield variant test cases
+          // [X] given the admin does not sign the transaction
+          //   [X] it reverts with a NotAuthorized error
+          // [X] given the admin signs the transaction
+          //   [X] given the ext mint does not match the one on the global account
+          //     [X] it reverts with an InvalidMint error
+          //   [X] given the ext mint authority is not the ext mint authority PDA
+          //     [X] it reverts with a ConstraintSeeds error
+          //   [X] given all the accounts are correct
+          //     [X] given the multiplier is not synced
+          //       [X] it syncs the multiplier to the last claimed index
+          //       [X] it updates the fee bps
+          //     [X] given the multiplier is already synced
+          //       [X] it updates the fee bps
+
+          const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
+          let wrapAuthorities: PublicKey[];
+          const feeBps = new BN(randomInt(1, 10000)); // non-zero
+          const startIndex = new BN(
+            randomInt(initialIndex.toNumber() + 1, 2e12)
+          );
+
+          beforeEach(async () => {
+            wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
+            // Initialize the extension program
+            await $.initializeExt(wrapAuthorities, feeBps);
+
+            // Wrap some tokens from the admin to make the m vault's balance non-zero
+            await $.wrap($.admin, initialWrappedAmount);
+
+            // Propagate the start index
+            await $.propagateIndex(startIndex);
+
+            // Claim yield for the m vault and complete the claim cycle
+            const mVault = $.getMVault();
+            const mVaultATA = await $.getATA($.mMint.publicKey, mVault);
+            await $.mClaimFor(mVault, await $.getTokenBalance(mVaultATA));
+            await $.mCompleteClaims();
+
+            // Sync the multiplier
+            await $.sync();
+
+            // Reset the blockhash to avoid issues with duplicate transactions
+            $.svm.expireBlockhash();
+          });
+
+          // given the admin does not sign the transaction
+          // it reverts with a NotAuthorized error
+          test("admin does not sign - reverts", async () => {
+            // Attempt to send the transaction
+            await $.expectAnchorError(
+              $.ext.methods
+                .setFee(new BN(randomInt(10000)))
+                .accountsPartial({
+                  admin: $.nonAdmin.publicKey,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the admin signs the transaction
+
+          // given the ext mint does not match the one on the global account
+          // it reverts with an InvalidMint error
+          test("ext mint does not match global account - reverts", async () => {
+            // Create a new mint
+            const wrongMint = new Keypair();
+            await $.createMint(wrongMint, $.nonAdmin.publicKey, true, 6);
+
+            // Attempt to send the transaction
+            await $.expectAnchorError(
+              $.ext.methods
+                .setFee(new BN(randomInt(10000)))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  extMint: wrongMint.publicKey,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "InvalidMint"
+            );
+          });
+
+          // given the ext mint authority is not the ext mint authority PDA
+          // it reverts with a ConstraintSeeds error
+          test("ext mint authority is not the ext mint authority PDA - reverts", async () => {
+            // Change the ext mint authority
+            const extMintAuthority = PublicKey.unique();
+            if (extMintAuthority === $.getExtMintAuthority()) return;
+
+            // Attempt to send the transaction
+            await $.expectAnchorError(
+              $.ext.methods
+                .setFee(new BN(randomInt(10000)))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  extMintAuthority,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "ConstraintSeeds"
+            );
+          });
+
+          // given all the accounts are correct
+          // given the multiplier is not synced
+          // it syncs the multiplier to the last claimed index
+          // it updates the fee bps
+          test("multiplier not synced - success", async () => {
+            // warp forward in time slightly
+            $.warp(new BN(60), true);
+
+            // Propagate a new index to create a situation where multiplier needs sync
+            const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12));
+            await $.propagateIndex(newIndex);
+
+            // Claim yield to ensure vault has enough collateral
+            const mVault = $.getMVault();
+            const mVaultATA = await $.getATA($.mMint.publicKey, mVault);
+            await $.mClaimFor(mVault, await $.getTokenBalance(mVaultATA));
+            await $.mCompleteClaims();
+
+            // Get the new multiplier
+            const multiplier = await $.getNewMultiplier(newIndex);
+
+            // Setup and execute the instruction
+            const newFee = new BN(randomInt(10000));
+            await $.ext.methods
+              .setFee(newFee)
+              .accountsPartial({
+                admin: $.admin.publicKey,
+              })
+              .signers([$.admin])
+              .rpc();
+
+            // Verify multiplier was updated
+            $.expectScaledUiAmountConfig($.extMint.publicKey, {
+              authority: $.getExtMintAuthority(),
+              multiplier,
+              newMultiplier: multiplier,
+              newMultiplierEffectiveTimestamp: BigInt(
+                $.currentTime().toString()
+              ),
+            });
+
+            // Verify fee bps was updated
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                feeBps: newFee,
+                lastExtIndex: new BN(Math.floor(multiplier * 1e12)),
+                lastMIndex: newIndex,
+              },
+            });
+          });
+
+          // given all the accounts are correct
+          // given the multiplier is already synced
+          // it updates the fee bps
+          test("multiplier already synced - success", async () => {
+            // Cache the current multiplier
+            const multiplier = await $.getCurrentMultiplier();
+
+            // Setup and execute the instruction
+            const newFee = new BN(randomInt(10000));
+            await $.ext.methods
+              .setFee(newFee)
+              .accountsPartial({
+                admin: $.admin.publicKey,
+              })
+              .signers([$.admin])
+              .rpc();
+
+            // Verify fee bps was updated
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                feeBps: newFee,
+                lastExtIndex: new BN(Math.floor(multiplier * 1e12)),
+                lastMIndex: startIndex,
+              },
+            });
+          });
+        });
+      }
     });
 
     describe("wrap_authority instruction tests", () => {
@@ -1627,7 +1502,7 @@ for (const variant of VARIANTS) {
             );
 
             // Attempt to send the transaction
-            // Expect an invalid account error -> becomes an AccountNotInitialized error because you can't create an earner account for the wrong mint
+            // Expect an invalid account error
             await $.expectAnchorError(
               $.ext.methods
                 .wrap(mintAmount)
@@ -1641,7 +1516,7 @@ for (const variant of VARIANTS) {
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
-              "AccountNotInitialized"
+              "InvalidAccount"
             );
           });
 
@@ -1707,13 +1582,6 @@ for (const variant of VARIANTS) {
             const { tokenAccount: vaultMTokenAccount } =
               await $.createTokenAccount($.mMint.publicKey, mVault, true, true);
 
-            // Remove the m vault's current earner account and add the one for the non-ATA
-            await $.removeMEarner(mVault);
-            const mEarnerAccount = await $.addMEarner(
-              mVault,
-              vaultMTokenAccount
-            );
-
             // Attempt to send the transaction
             // Expect revert with a ConstraintAssociated error
             await $.expectAnchorError(
@@ -1725,7 +1593,6 @@ for (const variant of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   vaultMTokenAccount,
-                  mEarnerAccount,
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
@@ -2253,6 +2120,7 @@ for (const variant of VARIANTS) {
           const newIndex = new BN(
             randomInt(startIndex.toNumber() + 1, 2e12 + 1)
           );
+          let vaultBalanceAtNewIndex: BN;
 
           beforeEach(async () => {
             // Reset the blockhash to avoid issues with duplicate transactions from multiple claim cycles
@@ -2260,6 +2128,11 @@ for (const variant of VARIANTS) {
 
             // Propagate the new index
             await $.propagateIndex(newIndex);
+
+            // Cache the vault balance at the new index
+            vaultBalanceAtNewIndex = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
           });
 
           // test cases
@@ -2296,10 +2169,7 @@ for (const variant of VARIANTS) {
             // the extension is solvent
             test("Wrap with new index - no flows - success", async () => {
               // Mint yield to the m vault for the new index
-              await $.mClaimFor(
-                $.getMVault(),
-                await $.getTokenBalance(vaultMTokenAccount)
-              );
+              await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
               await $.mCompleteClaims();
 
               // Cache initial balances
@@ -2365,10 +2235,7 @@ for (const variant of VARIANTS) {
               await $.wrap($.admin, inflows);
 
               // Mint yield to the m vault for the new index
-              await $.mClaimFor(
-                $.getMVault(),
-                await $.getTokenBalance(vaultMTokenAccount)
-              );
+              await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
               await $.mCompleteClaims();
 
               // Cache initial balances
@@ -2434,10 +2301,7 @@ for (const variant of VARIANTS) {
               await $.unwrap($.admin, outflows);
 
               // Mint yield to the m vault for the new index
-              await $.mClaimFor(
-                $.getMVault(),
-                await $.getTokenBalance(vaultMTokenAccount)
-              );
+              await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
               await $.mCompleteClaims();
 
               // Cache initial balances
@@ -2512,10 +2376,7 @@ for (const variant of VARIANTS) {
               );
 
               // Mint yield to the m vault for the new index
-              await $.mClaimFor(
-                $.getMVault(),
-                await $.getTokenBalance(vaultMTokenAccount)
-              );
+              await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
               await $.mCompleteClaims();
 
               // Cache initial balances
@@ -2593,10 +2454,7 @@ for (const variant of VARIANTS) {
               await $.wrap($.admin, inflows);
 
               // Mint yield to the m vault for the new index
-              await $.mClaimFor(
-                $.getMVault(),
-                await $.getTokenBalance(vaultMTokenAccount)
-              );
+              await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
               await $.mCompleteClaims();
 
               // Cache initial balances
@@ -2674,10 +2532,7 @@ for (const variant of VARIANTS) {
               await $.unwrap($.admin, outflows);
 
               // Mint yield to the m vault for the new index
-              await $.mClaimFor(
-                $.getMVault(),
-                await $.getTokenBalance(vaultMTokenAccount)
-              );
+              await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
               await $.mCompleteClaims();
 
               // Cache initial balances
@@ -2821,7 +2676,7 @@ for (const variant of VARIANTS) {
             );
 
             // Attempt to send the transaction
-            // Expect an invalid account error -> becomes an AccountNotInitialized error because you can't create an earner account for the wrong mint
+            // Expect an invalid account error
             await $.expectAnchorError(
               $.ext.methods
                 .unwrap(wrappedAmount)
@@ -2835,7 +2690,7 @@ for (const variant of VARIANTS) {
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
-              "AccountNotInitialized"
+              "InvalidAccount"
             );
           });
 
@@ -2907,13 +2762,6 @@ for (const variant of VARIANTS) {
                 true
               );
 
-            // Remove the existing M earner account and create a new one for this token account
-            await $.removeMEarner(mVault);
-            const mEarnerAccount = await $.addMEarner(
-              mVault,
-              vaultMTokenAccount
-            );
-
             // Attempt to send the transaction
             // Expect revert with a ConstraintAssociated error
             await $.expectAnchorError(
@@ -2925,7 +2773,6 @@ for (const variant of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   vaultMTokenAccount,
-                  mEarnerAccount,
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
@@ -3512,6 +3359,7 @@ for (const variant of VARIANTS) {
             randomInt(startIndex.toNumber() + 1, 2e12 + 1)
           );
           let newMultiplier: number = 1.0;
+          let vaultBalanceAtNewIndex: BN;
 
           beforeEach(async () => {
             // Reset the blockhash to avoid issues with duplicate transactions from multiple claim cycles
@@ -3519,6 +3367,11 @@ for (const variant of VARIANTS) {
 
             // Propagate the new index
             await $.propagateIndex(newIndex);
+
+            // Get the vault balance at the new index
+            vaultBalanceAtNewIndex = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
 
             // Calculate the expected multipler after the new index push
             if (variant === Variant.ScaledUiAmount) {
@@ -3544,10 +3397,7 @@ for (const variant of VARIANTS) {
           // it unwraps the amount of M tokens from the M vault token account to the user's M token account
           test("Unwrap with new index - no flows - success", async () => {
             // Mint yield to the m vault for the new index
-            await $.mClaimFor(
-              $.getMVault(),
-              await $.getTokenBalance(vaultMTokenAccount)
-            );
+            await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
             await $.mCompleteClaims();
 
             // Cache initial balances
@@ -3620,10 +3470,7 @@ for (const variant of VARIANTS) {
             await $.wrap($.admin, inflows);
 
             // Mint yield to the m vault for the new index
-            await $.mClaimFor(
-              $.getMVault(),
-              await $.getTokenBalance(vaultMTokenAccount)
-            );
+            await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
             await $.mCompleteClaims();
 
             // Cache initial balances
@@ -3695,10 +3542,7 @@ for (const variant of VARIANTS) {
             await $.unwrap($.admin, outflows);
 
             // Mint yield to the m vault for the new index
-            await $.mClaimFor(
-              $.getMVault(),
-              await $.getTokenBalance(vaultMTokenAccount)
-            );
+            await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
             await $.mCompleteClaims();
 
             // Cache initial balances
@@ -3809,10 +3653,6 @@ for (const variant of VARIANTS) {
           // test cases
           // [X] given m earner account does not match the derived PDA
           //   [X] it reverts with an InvalidAccount error
-          // [X] given the m vault account does not match the derived PDA
-          //   [X] it reverts with a ConstraintSeeds error
-          // [X] given the vault m token account is not the M vault PDA's ATA
-          //   [X] it reverts with a ConstraintAssociated error
           // [X] given the ext mint account does not match the one stored in the global account
           //   [X] it reverts with an InvalidMint error
           // [X] given the ext mint authority account does match the derived PDA
@@ -3827,16 +3667,10 @@ for (const variant of VARIANTS) {
 
           // given m earner account does not match the derived PDA
           // it reverts with an ConstraintSeeds / AccountNotInitialized error
-          test("M earner account does not match derived account - reverts", async () => {
-            // Change the m earner account
-            const mEarnerAccount = PublicKey.unique();
-            if (
-              mEarnerAccount.equals(
-                $.getMEarnerAccount(
-                  await $.getATA($.mMint.publicKey, $.getMVault())
-                )
-              )
-            ) {
+          test("M earn global account does not match derived account - reverts", async () => {
+            // Change the m earn global account
+            const mEarnGlobalAccount = PublicKey.unique();
+            if (mEarnGlobalAccount.equals($.getEarnGlobalAccount())) {
               return;
             }
 
@@ -3846,62 +3680,10 @@ for (const variant of VARIANTS) {
               $.ext.methods
                 .sync()
                 .accountsPartial({
-                  mEarnerAccount,
+                  mEarnGlobalAccount,
                 })
                 .signers([])
                 .rpc()
-            );
-          });
-
-          // given the m vault account does not match the derived PDA
-          // it reverts with a ConstraintSeeds error
-          test("M vault account does not match derived PDA - reverts", async () => {
-            // Change the m vault account
-            const mVault = PublicKey.unique();
-            if (mVault.equals($.getMVault())) {
-              return;
-            }
-
-            // Attempt to send the transaction
-            // Expect an invalid account error
-            await $.expectSystemError(
-              $.ext.methods
-                .sync()
-                .accountsPartial({
-                  mVault,
-                })
-                .signers([])
-                .rpc()
-            );
-          });
-
-          // given the vault m token account is not the M vault PDA's ATA
-          // it reverts with a ConstraintAssociated error
-          test("M vault token account is not the M Vault PDA's ATA - reverts", async () => {
-            // Create a valid token account that is not the ATA
-            const mVault = $.getMVault();
-            const { tokenAccount: vaultMTokenAccount } =
-              await $.createTokenAccount($.mMint.publicKey, mVault, true, true);
-
-            // Remove the existing M earner account and create a new one for this token account
-            await $.removeMEarner(mVault);
-            const mEarnerAccount = await $.addMEarner(
-              mVault,
-              vaultMTokenAccount
-            );
-
-            // Attempt to send the transaction
-            // Expect revert with a ConstraintAssociated error
-            await $.expectAnchorError(
-              $.ext.methods
-                .sync()
-                .accountsPartial({
-                  vaultMTokenAccount,
-                  mEarnerAccount,
-                })
-                .signers([])
-                .rpc(),
-              "ConstraintAssociated"
             );
           });
 
@@ -4000,6 +3782,36 @@ for (const variant of VARIANTS) {
             });
 
             await $.expectExtSolvent();
+          });
+
+          // given the m vault has not received yield to match the latest M index
+          // it updates the scaled ui config on the ext mint to match the m index
+          // the extension doesn't need to be solvent, but should be later
+          test("M vault has not had yield claimed for the latest M index - success", async () => {
+            // Propagate a new index that is greater than the start index
+            const newIndex = new BN(
+              randomInt(startIndex.toNumber() + 1, 2e12 + 1)
+            );
+            const newMultiplier = await $.getNewMultiplier(newIndex);
+            await $.propagateIndex(newIndex);
+
+            // Cache the scaled ui amount config
+            const scaledUiAmountConfig = await $.getScaledUiAmountConfig(
+              $.extMint.publicKey
+            );
+
+            // Send the instruction
+            await $.ext.methods.sync().accounts({}).signers([]).rpc();
+
+            // Confirm the scaled ui config on the ext mint matches the m index
+            await $.expectScaledUiAmountConfig($.extMint.publicKey, {
+              authority: scaledUiAmountConfig.authority,
+              multiplier: newMultiplier,
+              newMultiplier: newMultiplier,
+              newMultiplierEffectiveTimestamp: BigInt(
+                $.currentTime().toString()
+              ),
+            });
           });
         });
       });

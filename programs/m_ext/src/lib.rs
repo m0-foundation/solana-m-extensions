@@ -12,15 +12,13 @@ use instructions::*;
 
 #[cfg(not(feature = "no-entrypoint"))]
 solana_security_txt::security_txt! {
-    // Required fields
-    name: "<insert name>",
-    project_url: "<insert project url>",
-    contacts: "<insert contact email>",
-    policy: "<insert terms file>",
-    // Optional Fields
+    name: "M0 Extension Program",
+    project_url: "https://m0.org/",
+    contacts: "email:security@m0.xyz",
+    policy: "https://github.com/m0-foundation/solana-m/blob/main/SECURITY.md",
     preferred_languages: "en",
-    source_code: "<insert source code url>",
-    auditors: "<insert auditor name(s)>"
+    source_code: "https://github.com/m0-foundation/solana-extensions/tree/main/programs/m_ext",
+    auditors: "Asymmetric Research,Adevar Labs,OtterSec,Halborn"
 }
 
 declare_id!("3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da");
@@ -59,10 +57,6 @@ pub mod m_ext {
     #[cfg(feature = "scaled-ui")]
     pub fn set_fee(ctx: Context<SetFee>, fee_bps: u64) -> Result<()> {
         SetFee::handler(ctx, fee_bps)
-    }
-
-    pub fn set_m_mint(ctx: Context<SetMMint>) -> Result<()> {
-        SetMMint::handler(ctx)
     }
 
     pub fn add_wrap_authority(
