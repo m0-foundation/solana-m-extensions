@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import shell from "shelljs";
-import { Keypair } from "@solana/web3.js";
+import { Keypair, PublicKey } from "@solana/web3.js";
 import fs from "fs";
 
 if (!fs.existsSync("devnet-keypair.json")) {
@@ -67,6 +67,23 @@ if (!fs.existsSync("devnet-keypair.json")) {
     });
 
   program
+    .command("propose-upgrade-program")
+    .option("-t, --type", "Yield type", "scaled-ui")
+    .option("-e, --extension", "Extension program ID", "KAST_USDK")
+    .option("-c, --computePrice", "Compute price", "300000")
+    .option("-a, --authority", "Authority to transfer buffer to")
+    .action(({ type, extension, computePrice, authority }) => {
+      const [pid] = keysFromEnv([extension]);
+      const pubkey = pid.publicKey.toBase58();
+      const buffAuth = new PublicKey(authority);
+
+      console.log(`Building and deploying extension ${pubkey}`);
+      buildProgram(pubkey, type);
+
+      updateProgram(pubkey, parseInt(computePrice), buffAuth);
+    });
+
+  program
     .command("upgrade-swap-program")
     .option("-c, --computePrice", "Compute price", "300000")
     .option(
@@ -76,8 +93,16 @@ if (!fs.existsSync("devnet-keypair.json")) {
     )
     .action(({ computePrice, pubkey }) => {
       console.log("Building swap program...");
-      shell.exec("anchor build -p ext_swap --verifiable", { silent: true });
-      updateProgram(pubkey, parseInt(computePrice), "ext_swap.so");
+      shell.rm("-f", `target/verifiable/ext_swap.so`);
+
+      const res = shell.exec("anchor build -p ext_swap --verifiable", {
+        silent: true,
+      });
+      if (res.code !== 0) {
+        throw new Error(`Buffer write failed: ${res.stderr}`);
+      }
+
+      updateProgram(pubkey, parseInt(computePrice), undefined, "ext_swap.so");
     });
 
   await program.parseAsync(process.argv);
@@ -93,16 +118,19 @@ function setProgramID(pid: string) {
 }
 
 function buildProgram(pid: string, yieldFeature: string) {
+  // remove old binary
+  shell.rm("-f", "target/verifiable/m_ext.so.so");
+
   // set program ID to the extension program
   setProgramID(pid);
 
   console.log("Building the program...");
+
   const result = shell.exec(
     "anchor build -p m_ext --verifiable " +
       `-- --features ${yieldFeature} --no-default-features`,
     { silent: true }
   );
-
   if (result.code !== 0) {
     throw new Error(`Build failed: ${result.stderr}`);
   }
@@ -123,7 +151,7 @@ function deployProgram(programKeypair: Keypair, computePrice: number) {
       --keypair devnet-keypair.json \
       --max-sign-attempts 3 \
       --program-id pid.json \
-      target/deploy/m_ext.so`,
+      target/verifiable/m_ext.so`,
     { silent: true }
   );
 
@@ -134,7 +162,8 @@ function deployProgram(programKeypair: Keypair, computePrice: number) {
 function updateProgram(
   pid: string,
   computePrice: number,
-  buildFile = "m_ext.so"
+  transferBufferAuth?: PublicKey,
+  binaryFile = "m_ext.so"
 ) {
   // create a temporary buffer to write the upgrade to
   shell.exec(
@@ -155,12 +184,32 @@ function updateProgram(
       --keypair devnet-keypair.json \
       --max-sign-attempts 3 \
       --buffer buffer.json \
-      target/deploy/${buildFile}`,
+      target/verifiable/${binaryFile}`,
     { silent: true }
   );
-
   if (result.code !== 0) {
     throw new Error(`Buffer write failed: ${result.stderr}`);
+  }
+
+  if (transferBufferAuth) {
+    console.log(
+      `Transferring buffer authority to ${transferBufferAuth.toBase58()}`
+    );
+
+    // transfer the buffer authority to provided pubkey
+    const result = shell.exec(
+      `solana program set-buffer-authority \
+        --url ${process.env.RPC_URL} \
+        --keypair devnet-keypair.json \
+        --buffer ${bufferAddress} \
+        --new-authority ${transferBufferAuth}`,
+      { silent: true }
+    );
+    if (result.code !== 0) {
+      throw new Error(`Set buffer authority failed: ${result.stderr}`);
+    }
+
+    return;
   }
 
   // upgrade the program with the new buffer
@@ -172,7 +221,6 @@ function updateProgram(
       ${pid}`,
     { silent: true }
   );
-
   if (result.code !== 0) {
     throw new Error(`Upgrade failed: ${result.stderr}`);
   }
