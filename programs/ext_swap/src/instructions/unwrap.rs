@@ -117,7 +117,7 @@ pub struct Unwrap<'info> {
 }
 
 impl<'info> Unwrap<'info> {
-    fn validate(&self) -> Result<()> {
+    fn validate(&self, amount: u64) -> Result<()> {
         if !self
             .swap_global
             .whitelisted_extensions
@@ -139,10 +139,14 @@ impl<'info> Unwrap<'info> {
             return err!(SwapError::UnauthorizedUnwrapper);
         }
 
+        if amount == 0 {
+            return err!(SwapError::InvalidAmount);
+        }
+
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate())]
+    #[access_control(ctx.accounts.validate(amount))]
     pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, amount: u64) -> Result<()> {
         // Set swap program as authority if none provided
         let unwrap_authority = match &ctx.accounts.unwrap_authority {

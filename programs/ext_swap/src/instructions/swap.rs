@@ -163,6 +163,7 @@ pub struct Swap<'info> {
 impl<'info> Swap<'info> {
     fn validate(
         &self,
+        amount: u64,
         remaining_accounts: &[AccountInfo<'_>],
         remaining_accounts_split_idx: usize,
     ) -> Result<()> {
@@ -180,20 +181,19 @@ impl<'info> Swap<'info> {
             return err!(SwapError::InvalidIndex);
         }
 
+        if amount == 0 {
+            return err!(SwapError::InvalidAmount);
+        }
+
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(ctx.remaining_accounts, remaining_accounts_split_idx))]
+    #[access_control(ctx.accounts.validate(amount, ctx.remaining_accounts, remaining_accounts_split_idx))]
     pub fn handler(
         ctx: Context<'_, '_, '_, 'info, Self>,
         amount: u64,
         remaining_accounts_split_idx: usize,
     ) -> Result<()> {
-        // Skip if amount is zero
-        if amount == 0 {
-            return Ok(());
-        }
-
         let m_pre_balance = ctx.accounts.intermediate_m_account.amount;
         let to_pre_balance = ctx.accounts.to_token_account.amount;
 

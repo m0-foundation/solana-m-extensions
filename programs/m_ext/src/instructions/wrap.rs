@@ -89,7 +89,7 @@ pub struct Wrap<'info> {
 }
 
 impl Wrap<'_> {
-    pub fn validate(&self) -> Result<()> {
+    pub fn validate(&self, amount: u64) -> Result<()> {
         let auth = match &self.wrap_authority {
             Some(auth) => auth.key,
             None => self.token_authority.key,
@@ -100,10 +100,14 @@ impl Wrap<'_> {
             return err!(ExtError::NotAuthorized);
         }
 
+        if amount == 0 {
+            return err!(ExtError::InvalidAmount);
+        }
+
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate())]
+    #[access_control(ctx.accounts.validate(amount))]
     pub fn handler(ctx: Context<Self>, amount: u64) -> Result<()> {
         let authority_seeds: &[&[&[u8]]] = &[&[
             MINT_AUTHORITY_SEED,
@@ -120,11 +124,6 @@ impl Wrap<'_> {
             authority_seeds,
             &ctx.accounts.ext_token_program,
         )?;
-
-        // Skip if amount is zero
-        if amount == 0 {
-            return Ok(());
-        }
 
         // Transfer the amount of m tokens from the user to the m vault
         transfer_tokens(
