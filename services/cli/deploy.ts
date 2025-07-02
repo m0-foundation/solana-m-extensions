@@ -17,9 +17,9 @@ const opts: shell.ExecOptions & { async: false } = {
 
   program
     .command("deploy-program")
-    .option("-t, --type", "Yield type", "scaled-ui")
-    .option("-e, --extension", "Extension program ID", "KAST_USDK")
-    .option("-c, --computePrice", "Compute price", "300000")
+    .option("-t, --type <type>", "Yield type", "scaled-ui")
+    .option("-e, --extension <name>", "Extension program ID", "KAST_USDK")
+    .option("-c, --computePrice <number>", "Compute price", "300000")
     .action(({ type, extension, computePrice }) => {
       const [pid] = keysFromEnv([extension]);
       const pubkey = pid.publicKey.toBase58();
@@ -32,8 +32,8 @@ const opts: shell.ExecOptions & { async: false } = {
 
   program
     .command("init-idl")
-    .option("-t, --type", "Yield type", "scaled-ui")
-    .option("-e, --extension", "Extension program ID", "KAST_USDK")
+    .option("-t, --type <type>", "Yield type", "scaled-ui")
+    .option("-e, --extension <name>", "Extension program ID", "KAST_USDK")
     .action(({ type, extension }) => {
       const [pid] = keysFromEnv([extension]);
       const pubkey = pid.publicKey.toBase58();
@@ -46,11 +46,11 @@ const opts: shell.ExecOptions & { async: false } = {
 
   program
     .command("upgrade-program")
-    .option("-t, --type", "Yield type", "scaled-ui")
-    .option("-e, --extension", "Extension program ID", "KAST_USDK")
-    .option("-c, --computePrice", "Compute price", "300000")
+    .option("-t, --type <type>", "Yield type", "scaled-ui")
+    .option("-e, --extension <name>", "Extension program ID", "KAST_USDK")
+    .option("-c, --computePrice <number>", "Compute price", "300000")
     .option("-s, --swapProgram", "Update swap program", false)
-    .option("-a, --authority", "Authority to transfer buffer to")
+    .option("-a, --authority <pubkey>", "Authority to transfer buffer to")
     .action(({ type, extension, computePrice, swapProgram, authority }) => {
       const [pid] = keysFromEnv([extension]);
       const pubkey = pid.publicKey.toBase58();
@@ -64,15 +64,6 @@ const opts: shell.ExecOptions & { async: false } = {
 
   await program.parseAsync(process.argv);
 })();
-
-function setProgramID(pid: string) {
-  shell.sed(
-    "-i",
-    /declare_id!\("[^"]*"\)/,
-    `declare_id!("${pid}")`,
-    "programs/m_ext/src/lib.rs"
-  );
-}
 
 function buildProgram(pid: string, yieldFeature: string, swapProgram = false) {
   // remove old binary
@@ -200,6 +191,15 @@ function initIDL(pid: string) {
       --provider.wallet devnet-keypair.json \
       ${pid}`,
     opts
+  );
+}
+
+function setProgramID(pid: string) {
+  shell.sed(
+    "-i",
+    /declare_id!\("[^"]*"\)/,
+    `declare_id!("${pid}")`,
+    "programs/m_ext/src/lib.rs"
   );
 }
 
