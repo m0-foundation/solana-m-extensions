@@ -7,20 +7,13 @@ if (!fs.existsSync("devnet-keypair.json")) {
   throw new Error("devnet keypair not found");
 }
 
+const opts: shell.ExecOptions & { async: false } = {
+  silent: true,
+  async: false,
+};
+
 (async function main() {
   const program = new Command();
-
-  program
-    .command("build-program")
-    .option("-t, --type", "Yield type", "scaled-ui")
-    .option("-e, --extension", "Extension program ID", "KAST_USDK")
-    .action(({ type, extension }) => {
-      const [pid] = keysFromEnv([extension]);
-      const pubkey = pid.publicKey.toBase58();
-
-      console.log(`Building extension ${pubkey}`);
-      buildProgram(pubkey, type);
-    });
 
   program
     .command("deploy-program")
@@ -32,8 +25,8 @@ if (!fs.existsSync("devnet-keypair.json")) {
       const pubkey = pid.publicKey.toBase58();
 
       console.log(`Building and deploying extension ${pubkey}`);
-      buildProgram(pubkey, type);
 
+      buildProgram(pubkey, type);
       deployProgram(pid, parseInt(computePrice));
     });
 
@@ -46,8 +39,8 @@ if (!fs.existsSync("devnet-keypair.json")) {
       const pubkey = pid.publicKey.toBase58();
 
       console.log(`Building and initializing IDL for extension ${pubkey}`);
-      buildProgram(pubkey, type);
 
+      buildProgram(pubkey, type);
       initIDL(pubkey);
     });
 
@@ -56,53 +49,17 @@ if (!fs.existsSync("devnet-keypair.json")) {
     .option("-t, --type", "Yield type", "scaled-ui")
     .option("-e, --extension", "Extension program ID", "KAST_USDK")
     .option("-c, --computePrice", "Compute price", "300000")
-    .action(({ type, extension, computePrice }) => {
-      const [pid] = keysFromEnv([extension]);
-      const pubkey = pid.publicKey.toBase58();
-
-      console.log(`Building and deploying extension ${pubkey}`);
-      buildProgram(pubkey, type);
-
-      updateProgram(pubkey, parseInt(computePrice));
-    });
-
-  program
-    .command("propose-upgrade-program")
-    .option("-t, --type", "Yield type", "scaled-ui")
-    .option("-e, --extension", "Extension program ID", "KAST_USDK")
-    .option("-c, --computePrice", "Compute price", "300000")
+    .option("-s, --swapProgram", "Update swap program", false)
     .option("-a, --authority", "Authority to transfer buffer to")
-    .action(({ type, extension, computePrice, authority }) => {
+    .action(({ type, extension, computePrice, swapProgram, authority }) => {
       const [pid] = keysFromEnv([extension]);
       const pubkey = pid.publicKey.toBase58();
-      const buffAuth = new PublicKey(authority);
 
-      console.log(`Building and deploying extension ${pubkey}`);
-      buildProgram(pubkey, type);
+      let bufferAuth: PublicKey | undefined;
+      if (authority) bufferAuth = new PublicKey(authority);
 
-      updateProgram(pubkey, parseInt(computePrice), buffAuth);
-    });
-
-  program
-    .command("upgrade-swap-program")
-    .option("-c, --computePrice", "Compute price", "300000")
-    .option(
-      "-p, --pubkey",
-      "Swap program ID",
-      "MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH"
-    )
-    .action(({ computePrice, pubkey }) => {
-      console.log("Building swap program...");
-      shell.rm("-f", `target/verifiable/ext_swap.so`);
-
-      const res = shell.exec("anchor build -p ext_swap --verifiable", {
-        silent: true,
-      });
-      if (res.code !== 0) {
-        throw new Error(`Buffer write failed: ${res.stderr}`);
-      }
-
-      updateProgram(pubkey, parseInt(computePrice), undefined, "ext_swap.so");
+      buildProgram(pubkey, type, swapProgram);
+      updateProgram(pubkey, parseInt(computePrice), bufferAuth, swapProgram);
     });
 
   await program.parseAsync(process.argv);
@@ -117,19 +74,27 @@ function setProgramID(pid: string) {
   );
 }
 
-function buildProgram(pid: string, yieldFeature: string) {
+function buildProgram(pid: string, yieldFeature: string, swapProgram = false) {
   // remove old binary
-  shell.rm("-f", "target/verifiable/m_ext.so.so");
+  shell.rm("-f", "target/verifiable/m_ext.so");
+  shell.rm("-f", "target/verifiable/ext_swap.so");
+
+  // not building an extension
+  if (swapProgram) {
+    console.log("Building swap program...");
+    const res = shell.exec("anchor build -p ext_swap --verifiable", opts);
+    if (res.code !== 0) throw new Error(`Buffer write failed: ${res.stderr}`);
+    return;
+  }
 
   // set program ID to the extension program
   setProgramID(pid);
 
-  console.log("Building the program...");
+  console.log(`Building extension program ${pid}...`);
 
   const result = shell.exec(
-    "anchor build -p m_ext --verifiable " +
-      `-- --features ${yieldFeature} --no-default-features`,
-    { silent: true }
+    `anchor build -p m_ext --verifiable -- --features ${yieldFeature} --no-default-features`,
+    opts
   );
   if (result.code !== 0) {
     throw new Error(`Build failed: ${result.stderr}`);
@@ -140,9 +105,7 @@ function buildProgram(pid: string, yieldFeature: string) {
 }
 
 function deployProgram(programKeypair: Keypair, computePrice: number) {
-  shell.exec(`echo '[${programKeypair.secretKey}]' > pid.json`, {
-    silent: true,
-  });
+  shell.exec(`echo '[${programKeypair.secretKey}]' > pid.json`, opts);
 
   shell.exec(
     `solana program deploy \
@@ -152,7 +115,7 @@ function deployProgram(programKeypair: Keypair, computePrice: number) {
       --max-sign-attempts 3 \
       --program-id pid.json \
       target/verifiable/m_ext.so`,
-    { silent: true }
+    opts
   );
 
   // delete the temporary pid keypair file
@@ -162,17 +125,17 @@ function deployProgram(programKeypair: Keypair, computePrice: number) {
 function updateProgram(
   pid: string,
   computePrice: number,
-  transferBufferAuth?: PublicKey,
-  binaryFile = "m_ext.so"
+  bufferAuth?: PublicKey,
+  swapProgram = false
 ) {
   // create a temporary buffer to write the upgrade to
   shell.exec(
     "solana-keygen new --no-bip39-passphrase --force -s --outfile=buffer.json",
-    { silent: true }
+    opts
   );
 
   const bufferAddress = shell
-    .exec("solana-keygen pubkey buffer.json", { silent: true })
+    .exec("solana-keygen pubkey buffer.json", opts)
     .stdout.trim();
 
   console.log(`Buffer address: ${bufferAddress}`);
@@ -184,17 +147,15 @@ function updateProgram(
       --keypair devnet-keypair.json \
       --max-sign-attempts 3 \
       --buffer buffer.json \
-      target/verifiable/${binaryFile}`,
-    { silent: true }
+      target/verifiable/${swapProgram ? "ext_swap" : "m_ext"}.so`,
+    opts
   );
   if (result.code !== 0) {
     throw new Error(`Buffer write failed: ${result.stderr}`);
   }
 
-  if (transferBufferAuth) {
-    console.log(
-      `Transferring buffer authority to ${transferBufferAuth.toBase58()}`
-    );
+  if (bufferAuth) {
+    console.log(`Transferring buffer authority to ${bufferAuth.toBase58()}`);
 
     // transfer the buffer authority to provided pubkey
     const result = shell.exec(
@@ -202,8 +163,8 @@ function updateProgram(
         --url ${process.env.RPC_URL} \
         --keypair devnet-keypair.json \
         --buffer ${bufferAddress} \
-        --new-authority ${transferBufferAuth}`,
-      { silent: true }
+        --new-authority ${bufferAuth}`,
+      opts
     );
     if (result.code !== 0) {
       throw new Error(`Set buffer authority failed: ${result.stderr}`);
@@ -219,7 +180,7 @@ function updateProgram(
       --keypair devnet-keypair.json \
       ${bufferAddress} \
       ${pid}`,
-    { silent: true }
+    opts
   );
   if (result.code !== 0) {
     throw new Error(`Upgrade failed: ${result.stderr}`);
@@ -234,11 +195,11 @@ function updateProgram(
 function initIDL(pid: string) {
   shell.exec(
     `anchor idl init \
-      -f target/idl/ext_swap.json \
+      -f target/idl/m_ext.json \
       --provider.cluster ${process.env.RPC_URL}) \
       --provider.wallet devnet-keypair.json \
       ${pid}`,
-    { silent: true }
+    opts
   );
 }
 
