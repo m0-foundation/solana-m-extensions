@@ -12,4 +12,6 @@ pub enum SwapError {
     UnauthorizedUnwrapper,
     #[msg("Signer is not authorized to perform this action")]
     NotAuthorized,
+    #[msg("Invalid amount")]
+    InvalidAmount,
 }

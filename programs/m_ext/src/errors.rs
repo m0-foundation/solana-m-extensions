@@ -24,4 +24,6 @@ pub enum ExtError {
     TypeConversionError,
     #[msg("Invalid value provided for calculation")]
     InvalidInput,
+    #[msg("Invalid amount")]
+    InvalidAmount,
 }
