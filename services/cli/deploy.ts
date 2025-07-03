@@ -31,6 +31,26 @@ const opts: shell.ExecOptions & { async: false } = {
     });
 
   program
+    .command("transfer-upgrade-auth")
+    .argument("programID")
+    .action((programID) => {
+      const pid = new PublicKey(programID);
+
+      const result = shell.exec(
+        `solana program set-upgrade-authority \
+          ${pid.toBase58()} \
+          --new-upgrade-authority ${process.env.SQUADS_MULTISIG} \
+          --skip-new-upgrade-authority-signer-check \
+          --keypair devnet-keypair.json \
+          --url ${process.env.RPC_URL}`,
+        opts
+      );
+      if (result.code !== 0) throw new Error(`Build failed: ${result.stderr}`);
+
+      console.log(`Upgrade authority set\n${result.stdout}`);
+    });
+
+  program
     .command("init-idl")
     .option("-t, --type <type>", "Yield type", "scaled-ui")
     .option("-e, --extension <name>", "Extension program ID", "KAST_USDK")
@@ -50,16 +70,55 @@ const opts: shell.ExecOptions & { async: false } = {
     .option("-e, --extension <name>", "Extension program ID", "KAST_USDK")
     .option("-c, --computePrice <number>", "Compute price", "300000")
     .option("-s, --swapProgram", "Update swap program", false)
-    .option("-a, --authority <pubkey>", "Authority to transfer buffer to")
-    .action(({ type, extension, computePrice, swapProgram, authority }) => {
+    .option("-a, --squadsAuth", "If Squads multisig is the auth", false)
+    .option("-b, --skipBuild", "Skip build and deploy", false)
+    .action(
+      ({
+        type,
+        extension,
+        computePrice,
+        swapProgram,
+        squadsAuth,
+        skipBuild,
+      }) => {
+        const [pid] = keysFromEnv([extension]);
+        const pubkey = pid.publicKey.toBase58();
+
+        if (!skipBuild) buildProgram(pubkey, type, swapProgram);
+        updateProgram(pubkey, parseInt(computePrice), squadsAuth, swapProgram);
+      }
+    );
+
+  program
+    .command("verify-pda-txn")
+    .option("-t, --type <type>", "Yield type", "scaled-ui")
+    .option("-e, --extension <name>", "Extension program ID", "KAST_USDK")
+    .option(
+      "-h, --hash <name>",
+      "Commit hash",
+      "88a692239f1c336d412d591c78bbf31043ad0af2"
+    )
+    .action(({ type, extension, hash }) => {
+      const [pid] = keysFromEnv([extension]);
+      const pubkey = pid.publicKey.toBase58();
+      verifyPdaTransaction(pubkey, type, hash);
+    });
+
+  program
+    .command("submit-verify-job")
+    .option("-e, --extension <name>", "Extension program ID", "KAST_USDK")
+    .action(({ type, extension, hash }) => {
       const [pid] = keysFromEnv([extension]);
       const pubkey = pid.publicKey.toBase58();
 
-      let bufferAuth: PublicKey | undefined;
-      if (authority) bufferAuth = new PublicKey(authority);
+      const result = shell.exec(
+        `solana-verify remote submit-job \ 
+          --program-id ${pubkey} \ 
+          --uploader ${process.env.SQUADS_MULTISIG}`,
+        opts
+      );
 
-      buildProgram(pubkey, type, swapProgram);
-      updateProgram(pubkey, parseInt(computePrice), bufferAuth, swapProgram);
+      console.log(`Submit verify job: ${result.stdout}`);
     });
 
   await program.parseAsync(process.argv);
@@ -74,7 +133,7 @@ function buildProgram(pid: string, yieldFeature: string, swapProgram = false) {
   if (swapProgram) {
     console.log("Building swap program...");
     const res = shell.exec("anchor build -p ext_swap --verifiable", opts);
-    if (res.code !== 0) throw new Error(`Buffer write failed: ${res.stderr}`);
+    if (res.code !== 0) throw new Error(`Swap build failed: ${res.stderr}`);
     return;
   }
 
@@ -116,7 +175,7 @@ function deployProgram(programKeypair: Keypair, computePrice: number) {
 function updateProgram(
   pid: string,
   computePrice: number,
-  bufferAuth?: PublicKey,
+  squadsAuth = false,
   swapProgram = false
 ) {
   // create a temporary buffer to write the upgrade to
@@ -145,16 +204,17 @@ function updateProgram(
     throw new Error(`Buffer write failed: ${result.stderr}`);
   }
 
-  if (bufferAuth) {
-    console.log(`Transferring buffer authority to ${bufferAuth.toBase58()}`);
+  if (squadsAuth) {
+    const auth = process.env.SQUADS_MULTISIG;
+    console.log(`Transferring buffer authority to ${auth}`);
 
     // transfer the buffer authority to provided pubkey
     const result = shell.exec(
       `solana program set-buffer-authority \
         --url ${process.env.RPC_URL} \
         --keypair devnet-keypair.json \
-        --buffer ${bufferAddress} \
-        --new-authority ${bufferAuth}`,
+        --new-buffer-authority ${auth} \ 
+         ${bufferAddress} `,
       opts
     );
     if (result.code !== 0) {
@@ -187,11 +247,31 @@ function initIDL(pid: string) {
   shell.exec(
     `anchor idl init \
       -f target/idl/m_ext.json \
-      --provider.cluster ${process.env.RPC_URL}) \
+      --provider.cluster ${process.env.RPC_URL} \
       --provider.wallet devnet-keypair.json \
       ${pid}`,
     opts
   );
+}
+
+function verifyPdaTransaction(
+  pid: string,
+  yieldFeature: string,
+  commitHash: string,
+  libraryName = "m_ext"
+) {
+  const result = shell.exec(
+    `solana-verify export-pda-tx \
+      -u ${process.env.RPC_URL} \ 
+      --program-id ${pid} \
+      https://github.com/m0-foundation/solana-extensions --library-name ${libraryName} \ 
+      --commit-hash ${commitHash} \
+      --uploader ${process.env.SQUADS_MULTISIG} \
+      -- --features ${yieldFeature} --no-default-features`,
+    opts
+  );
+
+  console.log(`PDA verification transaction: ${result.stdout}`);
 }
 
 function setProgramID(pid: string) {

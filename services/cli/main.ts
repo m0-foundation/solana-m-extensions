@@ -34,6 +34,7 @@ import {
 } from "./token-extensions";
 import { AnchorProvider, Program, Wallet, BN } from "@coral-xyz/anchor";
 import { ExtSwap } from "../../target/types/ext_swap";
+import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 
 const EXT_SWAP_IDL = require("../../target/idl/ext_swap.json");
 const NO_YIELD_EXT_IDL = require("../../target/idl/no_yield.json");
@@ -300,22 +301,36 @@ async function main() {
     .command("initialize-ext-swap")
     .description("Initialize the Extension Swap Facility")
     .action(async () => {
-      const [owner] = keysFromEnv(["PAYER_KEYPAIR"]);
+      const [payer] = keysFromEnv(["PAYER_KEYPAIR"]);
+      const admin = process.env.SQUADS_MULTISIG
+        ? new PublicKey(process.env.SQUADS_MULTISIG)
+        : payer.publicKey;
 
       const extSwap = new Program<ExtSwap>(
         EXT_SWAP_IDL,
-        anchorProvider(connection, owner)
+        anchorProvider(connection, payer)
       );
 
       const tx = await extSwap.methods
         .initializeGlobal()
         .accounts({
-          admin: owner.publicKey,
+          admin,
         })
-        .signers([owner])
-        .rpc();
+        .transaction();
 
-      console.log(`Initialized Extension Swap Facility: ${tx}`);
+      tx.feePayer = admin;
+      tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+      if (process.env.SQUADS_MULTISIG) {
+        const b = tx.serialize({ verifySignatures: false });
+        console.log("Transaction:", {
+          b64: b.toString("base64"),
+          b58: bs58.encode(b),
+        });
+      } else {
+        const sig = await connection.sendTransaction(tx, [payer]);
+        console.log(`Initialized Extension Swap Facility: ${sig}`);
+      }
     });
 
   program
