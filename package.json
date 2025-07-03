@@ -6,8 +6,8 @@
     "build": "make build-programs",
     "cli:dev": "op run --account mzerolabs.1password.com --env-file='.env.dev' -- ts-node services/cli/main.ts",
     "cli:prod": "op run --account mzerolabs.1password.com --env-file='.env.prod' -- ts-node services/cli/main.ts",
-    "deploy:dev": "op run --account mzerolabs.1password.com --env-file='.env.dev' -- ts-node services/cli/deploy.ts",
-    "deploy:prod": "op run --account mzerolabs.1password.com --env-file='.env.prod' -- ts-node services/cli/main.ts",
+    "deploy:dev": "op run --no-masking --account mzerolabs.1password.com --env-file='.env.dev' -- ts-node services/cli/deploy.ts",
+    "deploy:prod": "op run --no-masking --account mzerolabs.1password.com --env-file='.env.prod' -- ts-node services/cli/main.ts",
     "make:dev": "source .env.dev && make"
   },
   "devDependencies": {
