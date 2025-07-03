@@ -10,6 +10,18 @@
     "deploy:prod": "op run --no-masking --account mzerolabs.1password.com --env-file='.env.prod' -- ts-node services/cli/main.ts",
     "make:dev": "source .env.dev && make"
   },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.1",
+    "@m0-foundation/solana-m-sdk": "https://gitpkg.vercel.app/m0-foundation/solana-m/sdk?0991eb829a52f6ba5969fd47d3100ef6871f0a6d&scripts.postinstall=yarn%20build",
+    "@solana-developers/helpers": "^2.7.0",
+    "@solana/buffer-layout": "^4.0.1",
+    "@solana/buffer-layout-utils": "^0.2.0",
+    "@solana/spl-token": "^0.4.13",
+    "@solana/web3.js": "^1.98",
+    "anchor-litesvm": "0.1.2",
+    "bn.js": "^5.2.1",
+    "litesvm": "0.2.0"
+  },
   "devDependencies": {
     "@coral-xyz/anchor": "catalog:",
     "@m0-foundation/solana-m-sdk": "catalog:",

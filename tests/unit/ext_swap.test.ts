@@ -569,6 +569,30 @@ describe("extension swap tests", () => {
       expect(await getTokenBalance(accounts.ataA)).toBe(0.008e6);
       expect(await getTokenBalance(accounts.ataB)).toBe(0.001e6);
     });
+
+    it("swap invalid amount", async () => {
+      await sendTransaction(
+        program.methods
+          .swap(new BN(0), 0)
+          .accounts({
+            signer: swapper.publicKey,
+            unwrapAuthority: program.programId,
+            wrapAuthority: program.programId,
+            mMint: mMint.publicKey,
+            mTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromExtProgram: extProgramA.publicKey,
+            toExtProgram: extProgramB.publicKey,
+            fromMint: mintA.publicKey,
+            toMint: mintB.publicKey,
+            fromTokenAccount: accounts.ataA,
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction(),
+        [swapper],
+        /Error Message: Invalid amount/
+      );
+    });
   });
 
   describe("remaining accounts", () => {

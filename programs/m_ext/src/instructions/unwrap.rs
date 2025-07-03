@@ -89,7 +89,7 @@ pub struct Unwrap<'info> {
 }
 
 impl Unwrap<'_> {
-    pub fn validate(&self) -> Result<()> {
+    pub fn validate(&self, amount: u64) -> Result<()> {
         let auth = match &self.unwrap_authority {
             Some(auth) => auth.key,
             None => self.token_authority.key,
@@ -100,10 +100,14 @@ impl Unwrap<'_> {
             return err!(ExtError::NotAuthorized);
         }
 
+        if amount == 0 {
+            return err!(ExtError::InvalidAmount);
+        }
+
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate())]
+    #[access_control(ctx.accounts.validate(amount))]
     pub fn handler(ctx: Context<Self>, mut amount: u64) -> Result<()> {
         let authority_seeds: &[&[&[u8]]] = &[&[
             MINT_AUTHORITY_SEED,
@@ -120,11 +124,6 @@ impl Unwrap<'_> {
             authority_seeds,
             &ctx.accounts.ext_token_program,
         )?;
-
-        // Skip if amount is zero
-        if amount == 0 {
-            return Ok(());
-        }
 
         // Calculate the principal amount of ext tokens to burn
         // from the amount of m tokens to unwrap

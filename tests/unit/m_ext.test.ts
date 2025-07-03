@@ -1689,6 +1689,22 @@ for (const variant of VARIANTS) {
             );
           });
 
+          test("Invalid amount - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrap(new BN(0))
+                .accounts({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
+                  fromMTokenAccount,
+                  toExtTokenAccount,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "InvalidAmount"
+            );
+          });
+
           // given a wrap authority is not provided
           // given the token authority is on the wrap authorities list
           // given the from token account has enough M tokens
@@ -2896,6 +2912,22 @@ for (const variant of VARIANTS) {
               toMTokenAccountBalance.add(fromExtTokenAccountBalance),
               Comparison.LessThanOrEqual,
               new BN(2)
+            );
+          });
+
+          test("Invalid amount - revert", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .unwrap(new BN(0))
+                .accounts({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  unwrapAuthority: $.ext.programId,
+                  fromExtTokenAccount,
+                  toMTokenAccount,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "InvalidAmount"
             );
           });
 
