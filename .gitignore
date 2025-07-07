@@ -5,4 +5,5 @@ target
 node_modules
 test-ledger
 .yarn
+clients/ext_swap/generated
 devnet-keypair.json

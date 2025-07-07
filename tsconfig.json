@@ -2,6 +2,7 @@
   "compilerOptions": {
     "types": ["jest", "node"],
     "typeRoots": ["./node_modules/@types"],
+    "lib": ["ES2020", "DOM"],
     "module": "commonjs",
     "target": "es2020",
     "strict": true,

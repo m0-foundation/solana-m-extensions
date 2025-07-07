@@ -23,6 +23,8 @@
     "litesvm": "0.2.0"
   },
   "devDependencies": {
+    "@codama/nodes-from-anchor": "^1.2.1",
+    "@codama/renderers": "^1.0.24",
     "@coral-xyz/anchor": "catalog:",
     "@m0-foundation/solana-m-sdk": "catalog:",
     "@solana/spl-token": "catalog:",
@@ -33,6 +35,7 @@
     "@types/node": "^22.15.32",
     "anchor-litesvm": "~0.1.1",
     "bn.js": "catalog:",
+    "codama": "^1.3.0",
     "fastestsmallesttextencoderdecoder": "catalog:",
     "jest": "~29.0.3",
     "litesvm": "~0.1.0",
