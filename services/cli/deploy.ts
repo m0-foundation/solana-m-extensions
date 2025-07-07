@@ -24,7 +24,7 @@ const opts: shell.ExecOptions & { async: false } = {
       const [pid] = keysFromEnv([extension]);
       const pubkey = pid.publicKey.toBase58();
 
-      console.log(`Building and deploying extension ${pubkey}`);
+      console.log(`Building and deploying extension ${pubkey} (${type})`);
 
       buildProgram(pubkey, type);
       deployProgram(pid, parseInt(computePrice));
@@ -157,7 +157,7 @@ function buildProgram(pid: string, yieldFeature: string, swapProgram = false) {
 function deployProgram(programKeypair: Keypair, computePrice: number) {
   shell.exec(`echo '[${programKeypair.secretKey}]' > pid.json`, opts);
 
-  shell.exec(
+  const result = shell.exec(
     `solana program deploy \
       --url ${process.env.RPC_URL} \
       --with-compute-unit-price ${computePrice} \
@@ -170,6 +170,12 @@ function deployProgram(programKeypair: Keypair, computePrice: number) {
 
   // delete the temporary pid keypair file
   shell.exec("rm pid.json");
+
+  if (result.code !== 0) {
+    throw new Error(`Deploy failed: ${result.stderr}`);
+  }
+
+  console.log(`Deployed program: ${result.stdout}`);
 }
 
 function updateProgram(
