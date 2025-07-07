@@ -44,7 +44,6 @@ import {
   ScaledUiAmountConfig,
   ScaledUiAmountConfigLayout,
 } from "../test-utils";
-
 import { MExt as ScaledUIExt } from "../../target/types/scaled_ui";
 import { MExt as NoYieldExt } from "../../target/types/no_yield";
 
@@ -1219,17 +1218,6 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       default:
         throw new Error("Unsupported variant for initializeExt");
     }
-  }
-
-  public async setMMint(mint: PublicKey) {
-    // Send the instruction
-    await this.ext.methods
-      .setMMint()
-      .accounts({
-        newMMint: mint,
-      })
-      .signers([this.admin])
-      .rpc();
   }
 
   public async addWrapAuthority(newWrapAuthority: PublicKey) {

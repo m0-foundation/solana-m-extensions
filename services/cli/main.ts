@@ -1,11 +1,9 @@
 import { Command } from "commander";
 import {
-  AddressLookupTableProgram,
   ComputeBudgetProgram,
   Connection,
   Keypair,
   PublicKey,
-  sendAndConfirmTransaction,
   SystemProgram,
   Transaction,
   TransactionMessage,
@@ -16,10 +14,8 @@ import {
   createInitializeMetadataPointerInstruction,
   createInitializeMintInstruction,
   createInitializeTransferHookInstruction,
-  createMultisig,
   createSetAuthorityInstruction,
   ExtensionType,
-  getAssociatedTokenAddressSync,
   getMintLen,
   getOrCreateAssociatedTokenAccount,
   LENGTH_SIZE,
@@ -33,14 +29,13 @@ import {
   pack,
   TokenMetadata,
 } from "@solana/spl-token-metadata";
-
 import {
   createInitializeConfidentialTransferMintInstruction,
   createInitializeScaledUiAmountConfigInstruction,
 } from "./token-extensions";
 import { AnchorProvider, Program, Wallet, BN } from "@coral-xyz/anchor";
-
 import { ExtSwap } from "../../target/types/ext_swap";
+import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 
 const EXT_SWAP_IDL = require("../../target/idl/ext_swap.json");
 const NO_YIELD_EXT_IDL = require("../../target/idl/no_yield.json");
@@ -70,6 +65,31 @@ function anchorProvider(connection: Connection, owner: Keypair) {
 async function main() {
   const program = new Command();
   const connection = new Connection(process.env.RPC_URL ?? "");
+
+  program.command("print-extensions").action(() => {
+    const [usdk, usdky] = keysFromEnv(["KAST_USDK", "KAST_USDKY"]);
+
+    const addresses: { [key: string]: PublicKey } = {
+      "USDK program": usdk.publicKey,
+      "USDK vault": PublicKey.findProgramAddressSync(
+        [Buffer.from("m_vault")],
+        usdk.publicKey
+      )[0],
+      "USDKY program": usdky.publicKey,
+      "USDKY vault": PublicKey.findProgramAddressSync(
+        [Buffer.from("m_vault")],
+        usdky.publicKey
+      )[0],
+    };
+
+    const tableData = Object.entries(addresses).map(([name, pubkey]) => ({
+      Name: name,
+      Address: pubkey.toBase58(),
+      Hex: `0x${pubkey.toBuffer().toString("hex")}`,
+    }));
+
+    console.table(tableData);
+  });
 
   program
     .command("create-ext-mint")
@@ -107,13 +127,19 @@ async function main() {
         initConfidential,
         initTransferHook,
       }) => {
-        const [payer, mint, ext, owner, freezeAuthority] = keysFromEnv([
+        const [payer, mint, ext] = keysFromEnv([
           "PAYER_KEYPAIR",
           "EXT_MINT_KEYPAIR",
           "EXT_PROGRAM_KEYPAIR",
-          "EXT_OWNER",
-          "EXT_FREEZE_AUTHORITY",
         ]);
+
+        console.log(
+          `Deploying ${mint.publicKey.toBase58()} for extension program ${ext.publicKey.toBase58()}`
+        );
+
+        const authority = process.env.SQUADS_MULTISIG
+          ? new PublicKey(process.env.SQUADS_MULTISIG)
+          : payer.publicKey;
 
         // Get the mint authority by deriving the PDA from the extension program
         let mintAuthority = PublicKey.findProgramAddressSync(
@@ -137,14 +163,13 @@ async function main() {
         await createToken2022Mint(
           connection,
           payer,
-          owner.publicKey,
+          authority,
           mint,
           mintAuthority,
-          freezeAuthority.publicKey,
+          authority, // freeze authority
           name,
           symbol,
-          iconUri ??
-            "https://gistcdn.githack.com/SC4RECOIN/a729afb77aa15a4aa6b1b46c3afa1b52/raw/209da531ed46c1aaef0b1d3d7b67b3a5cec257f3/M_Symbol_512.svg",
+          iconUri,
           extensions
         );
 
@@ -208,73 +233,97 @@ async function main() {
   program
     .command("initialize-ext")
     .description("Initialize the extension program")
-    .option("-v, --variant <string>", "Program variant", process.env.VARIANT)
+    .option("-v, --variant <string>", "Program variant", "no-yield")
     .option("-f, --fee [number]", "Fee in bps", "0")
     .action(async ({ variant, fee }) => {
-      const [owner, extMint, program] = keysFromEnv([
-        "EXT_OWNER",
+      const [payer, extMint, program] = keysFromEnv([
+        "PAYER_KEYPAIR",
         "EXT_MINT_KEYPAIR",
         "EXT_PROGRAM_KEYPAIR",
       ]);
+
+      const admin = process.env.SQUADS_MULTISIG
+        ? new PublicKey(process.env.SQUADS_MULTISIG)
+        : payer.publicKey;
 
       // Setup wrap authorities list
       const swapGlobalSigner = PublicKey.findProgramAddressSync(
         [Buffer.from("global")],
         EXT_SWAP
       )[0];
+      const portalTokenAuth = PublicKey.findProgramAddressSync(
+        [Buffer.from("TOKEN_AUTHORITY_SEED")],
+        new PublicKey("mzp1q2j5Hr1QuLC3KFBCAUz5aUckT6qyuZKZ3WJnMmY")
+      )[0];
 
-      const wrapAuthorities: PublicKey[] = [swapGlobalSigner, owner.publicKey];
+      const wrapAuthorities: PublicKey[] = [
+        swapGlobalSigner,
+        portalTokenAuth,
+        admin,
+      ];
 
-      let extProgram, tx;
-
+      let transaction: Transaction;
       switch (variant) {
         case "no-yield":
           // Insert the program ID into the IDL so we can interact with it
           NO_YIELD_EXT_IDL.address = program.publicKey.toBase58();
 
-          extProgram = new Program(
+          const noYieldProgram = new Program(
             NO_YIELD_EXT_IDL,
-            anchorProvider(connection, owner)
+            anchorProvider(connection, payer)
           );
 
-          tx = await extProgram.methods
+          transaction = await noYieldProgram.methods
             .initialize(wrapAuthorities)
             .accounts({
-              admin: owner.publicKey,
+              admin: admin,
               mMint: M_MINT,
               extMint: extMint.publicKey,
             })
-            .signers([owner])
-            .rpc();
+            .transaction();
 
-          console.log(`Initialized no yield extension: ${tx}`);
-
+          console.log("Initialized no yield extension");
           break;
 
         case "scaled-ui":
           // Insert the program ID into the IDL so we can interact with it
           SCALED_UI_EXT_IDL.address = program.publicKey.toBase58();
 
-          extProgram = new Program(
+          const suiProgram = new Program(
             SCALED_UI_EXT_IDL,
-            anchorProvider(connection, owner)
+            anchorProvider(connection, payer)
           );
 
-          tx = await extProgram.methods
+          transaction = await suiProgram.methods
             .initialize(wrapAuthorities, new BN(fee))
             .accounts({
-              admin: owner.publicKey,
+              admin: admin,
               mMint: M_MINT,
               extMint: extMint.publicKey,
             })
-            .signers([owner])
-            .rpc();
+            .transaction();
 
-          console.log(`Initialized scaled UI extension: ${tx}`);
+          console.log("Initialized scaled UI extension");
 
           break;
         default:
           throw new Error(`Unknown variant: ${variant}`);
+      }
+
+      transaction.feePayer = admin;
+      transaction.recentBlockhash = (
+        await connection.getLatestBlockhash()
+      ).blockhash;
+
+      if (process.env.SQUADS_MULTISIG) {
+        const b = transaction.serialize({ verifySignatures: false });
+        console.log("Transaction:", {
+          b64: b.toString("base64"),
+          b58: bs58.encode(b),
+        });
+      } else {
+        const sig = await connection.sendTransaction(transaction, [payer]);
+        console.log(`Initialized Extension Swap Facility: ${sig}`);
       }
     });
 
@@ -282,22 +331,36 @@ async function main() {
     .command("initialize-ext-swap")
     .description("Initialize the Extension Swap Facility")
     .action(async () => {
-      const [owner] = keysFromEnv(["PAYER_KEYPAIR"]);
+      const [payer] = keysFromEnv(["PAYER_KEYPAIR"]);
+      const admin = process.env.SQUADS_MULTISIG
+        ? new PublicKey(process.env.SQUADS_MULTISIG)
+        : payer.publicKey;
 
       const extSwap = new Program<ExtSwap>(
         EXT_SWAP_IDL,
-        anchorProvider(connection, owner)
+        anchorProvider(connection, payer)
       );
 
       const tx = await extSwap.methods
-        .initializeGlobal(M_MINT)
+        .initializeGlobal()
         .accounts({
-          admin: owner.publicKey,
+          admin,
         })
-        .signers([owner])
-        .rpc();
+        .transaction();
 
-      console.log(`Initialized Extension Swap Facility: ${tx}`);
+      tx.feePayer = admin;
+      tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+      if (process.env.SQUADS_MULTISIG) {
+        const b = tx.serialize({ verifySignatures: false });
+        console.log("Transaction:", {
+          b64: b.toString("base64"),
+          b58: bs58.encode(b),
+        });
+      } else {
+        const sig = await connection.sendTransaction(tx, [payer]);
+        console.log(`Initialized Extension Swap Facility: ${sig}`);
+      }
     });
 
   program
@@ -315,9 +378,9 @@ async function main() {
       );
 
       const tx = await extSwap.methods
-        .whitelistExtension(new PublicKey(extProgramId))
+        .whitelistExtension()
         .accounts({
-          admin: owner.publicKey,
+          extProgram: new PublicKey(extProgramId),
         })
         .signers([owner])
         .rpc();
@@ -325,180 +388,34 @@ async function main() {
       console.log(`Whitelisted extension: ${tx}`);
     });
 
-  //   program
-  //     .command("update-earn-lut")
-  //     .description("Create or update the LUT for common addresses")
-  //     .option(
-  //       "-a, --address [pubkey]",
-  //       "Address of table to update",
-  //       "Aq87DiRe8thyDfPhkpe92umFj9VU6bt8o9S9MTAhNC6c"
-  //     )
-  //     .action(async ({ address }) => {
-  //       const [owner] = keysFromEnv(["PAYER_KEYPAIR"]);
-  //       const ixs = [
-  //         ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 250_000 }),
-  //       ];
+  program
+    .command("add-wrap-authority")
+    .description("Add a wrap authority on the Extension program")
+    .argument("<wrapAuthority>", "Pubkey of wrap authority to whitelist")
+    .action(async (wrapAuthority) => {
+      const [owner, extProgram] = keysFromEnv([
+        "EXT_OWNER",
+        "EXT_PROGRAM_KEYPAIR",
+      ]);
 
-  //       // Get or create LUT
-  //       let tableAddress: PublicKey;
-  //       if (address) {
-  //         tableAddress = new PublicKey(address);
-  //       } else {
-  //         const [lookupTableIx, lookupTableAddress] =
-  //           AddressLookupTableProgram.createLookupTable({
-  //             authority: owner.publicKey,
-  //             payer: owner.publicKey,
-  //             recentSlot:
-  //               (await connection.getSlot({ commitment: "finalized" })) - 10,
-  //           });
+      // Insert the program ID into the IDL so we can interact with it
+      NO_YIELD_EXT_IDL.address = extProgram.publicKey.toBase58();
 
-  //         console.log(`Creating lookup table: ${lookupTableAddress.toBase58()}`);
-  //         tableAddress = lookupTableAddress;
-  //         ixs.push(lookupTableIx);
-  //       }
+      const ext = new Program(
+        NO_YIELD_EXT_IDL,
+        anchorProvider(connection, owner)
+      );
 
-  //       // Addresses to add to LUT
-  //       const [mMint, wmMint, multisig] = keysFromEnv([
-  //         "M_MINT_KEYPAIR",
-  //         "WM_MINT_KEYPAIR",
-  //         "M_MINT_MULTISIG_KEYPAIR",
-  //       ]);
-  //       const [portalTokenAuthPda] = PublicKey.findProgramAddressSync(
-  //         [Buffer.from("token_authority")],
-  //         PROGRAMS.portal
-  //       );
-  //       const [earnTokenAuthPda] = PublicKey.findProgramAddressSync(
-  //         [Buffer.from("token_authority")],
-  //         PROGRAMS.earn
-  //       );
-  //       const [mVaultPda] = PublicKey.findProgramAddressSync(
-  //         [Buffer.from("m_vault")],
-  //         PROGRAMS.extEarn
-  //       );
-  //       const [mintAuthPda] = PublicKey.findProgramAddressSync(
-  //         [Buffer.from("mint_authority")],
-  //         PROGRAMS.extEarn
-  //       );
-  //       const [global] = PublicKey.findProgramAddressSync(
-  //         [Buffer.from("global")],
-  //         PROGRAM_ID
-  //       );
-  //       const [extGlobal] = PublicKey.findProgramAddressSync(
-  //         [Buffer.from("global")],
-  //         EXT_PROGRAM_ID
-  //       );
+      const tx = await ext.methods
+        .addWrapAuthority(new PublicKey(wrapAuthority))
+        .accounts({
+          admin: owner.publicKey,
+        })
+        .signers([owner])
+        .rpc();
 
-  //       const globalAccount = await getProgram(connection).account.global.fetch(
-  //         global
-  //       );
-  //       const extGlobalAccount = await getExtProgram(
-  //         connection
-  //       ).account.extGlobal.fetch(extGlobal);
-
-  //       const addressesForTable = [
-  //         PROGRAMS.portal,
-  //         PROGRAMS.earn,
-  //         PROGRAMS.extEarn,
-  //         mMint.publicKey,
-  //         wmMint.publicKey,
-  //         multisig.publicKey,
-  //         portalTokenAuthPda,
-  //         earnTokenAuthPda,
-  //         mVaultPda,
-  //         mintAuthPda,
-  //         global,
-  //         extGlobal,
-  //         globalAccount.earnAuthority,
-  //         globalAccount.admin,
-  //         extGlobalAccount.earnAuthority,
-  //         extGlobalAccount.admin,
-  //         TOKEN_2022_PROGRAM_ID,
-  //       ];
-
-  //       // Add current earners to LUT
-  //       for (const pid of [PROGRAM_ID, EXT_PROGRAM_ID]) {
-  //         const auth = await EarnAuthority.load(connection, evmClient, pid);
-  //         const earners = await auth.getAllEarners();
-
-  //         for (const earner of earners) {
-  //           addressesForTable.push(earner.pubkey, earner.data.userTokenAccount);
-
-  //           // Check if there is an earn manager
-  //           if (
-  //             earner.data.earnManager &&
-  //             !addressesForTable.find((a) => a.equals(earner.data.earnManager!))
-  //           ) {
-  //             addressesForTable.push(earner.data.earnManager);
-  //           }
-  //         }
-  //       }
-
-  //       // Fetch current state of LUT
-  //       let existingAddresses: PublicKey[] = [];
-  //       if (address) {
-  //         const state = (await connection.getAddressLookupTable(tableAddress))
-  //           .value?.state.addresses;
-  //         if (!state) {
-  //           throw new Error(
-  //             `Failed to fetch state for address lookup table ${tableAddress}`
-  //           );
-  //         }
-  //         if (state.length === 256) {
-  //           throw new Error("LUT is full");
-  //         }
-
-  //         existingAddresses = state;
-  //       }
-
-  //       // Dedupe missing addresses
-  //       const toAdd = addressesForTable.filter(
-  //         (address) => !existingAddresses.find((a) => a.equals(address))
-  //       );
-  //       if (toAdd.length === 0) {
-  //         console.log("No addresses to add");
-  //         return;
-  //       }
-
-  //       if (existingAddresses.length + toAdd.length > 256) {
-  //         throw new Error(`cannot add ${toAdd.length} more addresses`);
-  //       }
-
-  //       ixs.push(
-  //         AddressLookupTableProgram.extendLookupTable({
-  //           payer: owner.publicKey,
-  //           authority: owner.publicKey,
-  //           lookupTable: tableAddress,
-  //           addresses: toAdd,
-  //         })
-  //       );
-
-  //       // Send transaction
-  //       const blockhash = await connection.getLatestBlockhash("finalized");
-
-  //       const messageV0 = new TransactionMessage({
-  //         payerKey: owner.publicKey,
-  //         recentBlockhash: blockhash.blockhash,
-  //         instructions: ixs,
-  //       }).compileToV0Message();
-
-  //       const transaction = new VersionedTransaction(messageV0);
-  //       transaction.sign([owner]);
-  //       const txid = await connection.sendTransaction(transaction);
-  //       console.log(`Transaction sent ${txid}\t${toAdd.length} addresses added`);
-
-  //       // Confirm
-  //       const confirmation = await connection.confirmTransaction(
-  //         {
-  //           signature: txid,
-  //           blockhash: blockhash.blockhash,
-  //           lastValidBlockHeight: blockhash.lastValidBlockHeight,
-  //         },
-  //         "confirmed"
-  //       );
-  //       if (confirmation.value.err) {
-  //         throw new Error(`Transaction not confirmed: ${confirmation.value.err}`);
-  //       }
-  //     });
+      console.log(`Added wrap authority: ${tx}`);
+    });
 
   await program.parseAsync(process.argv);
 }
@@ -506,7 +423,7 @@ async function main() {
 async function createToken2022Mint(
   connection: Connection,
   payer: Keypair,
-  owner: PublicKey,
+  authority: PublicKey,
   mint: Keypair,
   mintAuthority: PublicKey,
   freezeAuthority: PublicKey | null,
@@ -517,7 +434,7 @@ async function createToken2022Mint(
   evmTokenAddress: string | null = null
 ) {
   const metaData: TokenMetadata = {
-    updateAuthority: owner,
+    updateAuthority: authority,
     mint: mint.publicKey,
     name: tokenName,
     symbol: tokenSymbol,
@@ -550,7 +467,7 @@ async function createToken2022Mint(
         instructions.push(
           createInitializeMetadataPointerInstruction(
             mint.publicKey,
-            owner,
+            authority,
             mint.publicKey,
             TOKEN_2022_PROGRAM_ID
           )
@@ -570,7 +487,7 @@ async function createToken2022Mint(
         instructions.push(
           createInitializeTransferHookInstruction(
             mint.publicKey,
-            owner, // authority
+            authority,
             PublicKey.default, // no transfer hook
             TOKEN_2022_PROGRAM_ID
           )
@@ -580,7 +497,7 @@ async function createToken2022Mint(
         instructions.push(
           createInitializeConfidentialTransferMintInstruction(
             mint.publicKey,
-            owner,
+            authority,
             false
           )
         );
@@ -631,7 +548,7 @@ async function createToken2022Mint(
         programId: TOKEN_2022_PROGRAM_ID,
         metadata: mint.publicKey,
         oldAuthority: payer.publicKey,
-        newAuthority: owner,
+        newAuthority: authority,
       }),
       createSetAuthorityInstruction(
         mint.publicKey,

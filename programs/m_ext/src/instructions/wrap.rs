@@ -10,7 +10,7 @@ use crate::{
     },
 };
 use earn::{
-    state::{Earner, EARNER_SEED},
+    state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
     ID as EARN_PROGRAM,
 };
 
@@ -37,11 +37,11 @@ pub struct Wrap<'info> {
     pub global_account: Account<'info, ExtGlobal>,
 
     #[account(
-        seeds = [EARNER_SEED, vault_m_token_account.key().as_ref()],
+        seeds = [EARN_GLOBAL_SEED],
         seeds::program = EARN_PROGRAM,
-        bump = m_earner_account.bump,
+        bump = m_earn_global_account.bump,
     )]
-    pub m_earner_account: Account<'info, Earner>,
+    pub m_earn_global_account: Account<'info, EarnGlobal>,
 
     /// CHECK: This account is validated by the seed, it stores no data
     #[account(
@@ -82,14 +82,14 @@ pub struct Wrap<'info> {
     )]
     pub to_ext_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    // we have duplicate entries for the token2022 program since the interface needs to be consistent, and all extensions may not be token2022
-    // additionally, it allows us to change the m token program in the future without breaking the interface
+    // we have duplicate entries for the token2022 program since the interface needs to be consistent
+    // but we want to leave open the possibility that either may not have to be token2022 in the future
     pub m_token_program: Program<'info, Token2022>,
     pub ext_token_program: Program<'info, Token2022>,
 }
 
 impl Wrap<'_> {
-    pub fn validate(&self) -> Result<()> {
+    pub fn validate(&self, amount: u64) -> Result<()> {
         let auth = match &self.wrap_authority {
             Some(auth) => auth.key,
             None => self.token_authority.key,
@@ -100,10 +100,14 @@ impl Wrap<'_> {
             return err!(ExtError::NotAuthorized);
         }
 
+        if amount == 0 {
+            return err!(ExtError::InvalidAmount);
+        }
+
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate())]
+    #[access_control(ctx.accounts.validate(amount))]
     pub fn handler(ctx: Context<Self>, amount: u64) -> Result<()> {
         let authority_seeds: &[&[&[u8]]] = &[&[
             MINT_AUTHORITY_SEED,
@@ -115,8 +119,7 @@ impl Wrap<'_> {
         let multiplier = sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
-            &ctx.accounts.m_earner_account,
-            &ctx.accounts.vault_m_token_account,
+            &ctx.accounts.m_earn_global_account,
             &ctx.accounts.ext_mint_authority,
             authority_seeds,
             &ctx.accounts.ext_token_program,
