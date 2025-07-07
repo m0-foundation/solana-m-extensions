@@ -53,7 +53,7 @@ const opts: shell.ExecOptions & { async: false } = {
   program
     .command("init-idl")
     .option("-t, --type <type>", "Yield type", "scaled-ui")
-    .option("-e, --extension <name>", "Extension program ID", "KAST_USDK")
+    .option("-e, --extension <name>", "Extension program ID", "KAST_USDKY")
     .action(({ type, extension }) => {
       const [pid] = keysFromEnv([extension]);
       const pubkey = pid.publicKey.toBase58();
