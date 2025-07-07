@@ -1,5 +1,4 @@
 use super::account_meta_for_swap::MExtSwap;
-use crate::state::SwapGlobal;
 use anchor_lang::prelude::*;
 use anyhow::{Error, Result};
 use jupiter_amm_interface::{
@@ -16,6 +15,13 @@ use spl_token_2022::extension::{
 };
 use std::collections::{HashMap, HashSet};
 
+pub const MINTS: &[Pubkey] = &[
+    // Add the mints that are supported by the M Extension Swap
+    pubkey!("mzeroXDoBpRVhnEXBra27qzAMdxgpWVY3DzQW7xMVJp"), // wM
+    pubkey!("usdkbee86pkLyRmxfFCdkyySpxRb5ndCxVsK2BkRXwX"), // USDK
+    pubkey!("usdkyPPxgV7sfNyKb8eDz66ogPrkRXG3wS2FVb6LLUf"), // USDKY
+];
+
 #[derive(Clone)]
 pub struct MExtSwapAmm {
     pub key: Pubkey,
@@ -28,16 +34,11 @@ pub struct MExtSwapAmm {
 impl Amm for MExtSwapAmm {
     // TODO can we require initial multipliers in the keyed_account.params input?
     fn from_keyed_account(keyed_account: &KeyedAccount, _amm_context: &AmmContext) -> Result<Self> {
-        let swap_global =
-            SwapGlobal::try_deserialize(&mut &keyed_account.account.data[..]).unwrap();
-
-        let reserve_mints = swap_global.whitelisted_extensions.clone();
+        let mut reserve_mints = Vec::new();
         let mut reserve_multipliers = HashMap::new();
-        for mint in &reserve_mints {
-            // Get the mint extension data
-            // If ScaledUI, look up the multiplier
-            // Otherwise, default to 1.0
-            // TODO we don't have a good way to get the mint account here
+        for mint in MINTS {
+            reserve_mints.push(*mint);
+            // Set all multipliers to 1.0 by default, needs to be updated before quoting
             reserve_multipliers.insert(*mint, 1.0);
         }
 
