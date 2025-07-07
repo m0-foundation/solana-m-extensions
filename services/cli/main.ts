@@ -5,6 +5,7 @@ import {
   Keypair,
   PublicKey,
   SystemProgram,
+  Transaction,
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
@@ -126,13 +127,19 @@ async function main() {
         initConfidential,
         initTransferHook,
       }) => {
-        const [payer, mint, ext, owner, freezeAuthority] = keysFromEnv([
+        const [payer, mint, ext] = keysFromEnv([
           "PAYER_KEYPAIR",
           "EXT_MINT_KEYPAIR",
           "EXT_PROGRAM_KEYPAIR",
-          "EXT_OWNER",
-          "EXT_FREEZE_AUTHORITY",
         ]);
+
+        console.log(
+          `Deploying ${mint.publicKey.toBase58()} for extension program ${ext.publicKey.toBase58()}`
+        );
+
+        const authority = process.env.SQUADS_MULTISIG
+          ? new PublicKey(process.env.SQUADS_MULTISIG)
+          : payer.publicKey;
 
         // Get the mint authority by deriving the PDA from the extension program
         let mintAuthority = PublicKey.findProgramAddressSync(
@@ -156,14 +163,13 @@ async function main() {
         await createToken2022Mint(
           connection,
           payer,
-          owner.publicKey,
+          authority,
           mint,
           mintAuthority,
-          freezeAuthority.publicKey,
+          authority, // freeze authority
           name,
           symbol,
-          iconUri ??
-            "https://gistcdn.githack.com/SC4RECOIN/a729afb77aa15a4aa6b1b46c3afa1b52/raw/209da531ed46c1aaef0b1d3d7b67b3a5cec257f3/M_Symbol_512.svg",
+          iconUri,
           extensions
         );
 
@@ -227,73 +233,97 @@ async function main() {
   program
     .command("initialize-ext")
     .description("Initialize the extension program")
-    .option("-v, --variant <string>", "Program variant", process.env.VARIANT)
+    .option("-v, --variant <string>", "Program variant", "no-yield")
     .option("-f, --fee [number]", "Fee in bps", "0")
     .action(async ({ variant, fee }) => {
-      const [owner, extMint, program] = keysFromEnv([
-        "EXT_OWNER",
+      const [payer, extMint, program] = keysFromEnv([
+        "PAYER_KEYPAIR",
         "EXT_MINT_KEYPAIR",
         "EXT_PROGRAM_KEYPAIR",
       ]);
+
+      const admin = process.env.SQUADS_MULTISIG
+        ? new PublicKey(process.env.SQUADS_MULTISIG)
+        : payer.publicKey;
 
       // Setup wrap authorities list
       const swapGlobalSigner = PublicKey.findProgramAddressSync(
         [Buffer.from("global")],
         EXT_SWAP
       )[0];
+      const portalTokenAuth = PublicKey.findProgramAddressSync(
+        [Buffer.from("TOKEN_AUTHORITY_SEED")],
+        new PublicKey("mzp1q2j5Hr1QuLC3KFBCAUz5aUckT6qyuZKZ3WJnMmY")
+      )[0];
 
-      const wrapAuthorities: PublicKey[] = [swapGlobalSigner, owner.publicKey];
+      const wrapAuthorities: PublicKey[] = [
+        swapGlobalSigner,
+        portalTokenAuth,
+        admin,
+      ];
 
-      let extProgram, tx;
-
+      let transaction: Transaction;
       switch (variant) {
         case "no-yield":
           // Insert the program ID into the IDL so we can interact with it
           NO_YIELD_EXT_IDL.address = program.publicKey.toBase58();
 
-          extProgram = new Program(
+          const noYieldProgram = new Program(
             NO_YIELD_EXT_IDL,
-            anchorProvider(connection, owner)
+            anchorProvider(connection, payer)
           );
 
-          tx = await extProgram.methods
+          transaction = await noYieldProgram.methods
             .initialize(wrapAuthorities)
             .accounts({
-              admin: owner.publicKey,
+              admin: admin,
               mMint: M_MINT,
               extMint: extMint.publicKey,
             })
-            .signers([owner])
-            .rpc();
+            .transaction();
 
-          console.log(`Initialized no yield extension: ${tx}`);
-
+          console.log("Initialized no yield extension");
           break;
 
         case "scaled-ui":
           // Insert the program ID into the IDL so we can interact with it
           SCALED_UI_EXT_IDL.address = program.publicKey.toBase58();
 
-          extProgram = new Program(
+          const suiProgram = new Program(
             SCALED_UI_EXT_IDL,
-            anchorProvider(connection, owner)
+            anchorProvider(connection, payer)
           );
 
-          tx = await extProgram.methods
+          transaction = await suiProgram.methods
             .initialize(wrapAuthorities, new BN(fee))
             .accounts({
-              admin: owner.publicKey,
+              admin: admin,
               mMint: M_MINT,
               extMint: extMint.publicKey,
             })
-            .signers([owner])
-            .rpc();
+            .transaction();
 
-          console.log(`Initialized scaled UI extension: ${tx}`);
+          console.log("Initialized scaled UI extension");
 
           break;
         default:
           throw new Error(`Unknown variant: ${variant}`);
+      }
+
+      transaction.feePayer = admin;
+      transaction.recentBlockhash = (
+        await connection.getLatestBlockhash()
+      ).blockhash;
+
+      if (process.env.SQUADS_MULTISIG) {
+        const b = transaction.serialize({ verifySignatures: false });
+        console.log("Transaction:", {
+          b64: b.toString("base64"),
+          b58: bs58.encode(b),
+        });
+      } else {
+        const sig = await connection.sendTransaction(transaction, [payer]);
+        console.log(`Initialized Extension Swap Facility: ${sig}`);
       }
     });
 
@@ -393,7 +423,7 @@ async function main() {
 async function createToken2022Mint(
   connection: Connection,
   payer: Keypair,
-  owner: PublicKey,
+  authority: PublicKey,
   mint: Keypair,
   mintAuthority: PublicKey,
   freezeAuthority: PublicKey | null,
@@ -404,7 +434,7 @@ async function createToken2022Mint(
   evmTokenAddress: string | null = null
 ) {
   const metaData: TokenMetadata = {
-    updateAuthority: owner,
+    updateAuthority: authority,
     mint: mint.publicKey,
     name: tokenName,
     symbol: tokenSymbol,
@@ -437,7 +467,7 @@ async function createToken2022Mint(
         instructions.push(
           createInitializeMetadataPointerInstruction(
             mint.publicKey,
-            owner,
+            authority,
             mint.publicKey,
             TOKEN_2022_PROGRAM_ID
           )
@@ -457,7 +487,7 @@ async function createToken2022Mint(
         instructions.push(
           createInitializeTransferHookInstruction(
             mint.publicKey,
-            owner, // authority
+            authority,
             PublicKey.default, // no transfer hook
             TOKEN_2022_PROGRAM_ID
           )
@@ -467,7 +497,7 @@ async function createToken2022Mint(
         instructions.push(
           createInitializeConfidentialTransferMintInstruction(
             mint.publicKey,
-            owner,
+            authority,
             false
           )
         );
@@ -518,7 +548,7 @@ async function createToken2022Mint(
         programId: TOKEN_2022_PROGRAM_ID,
         metadata: mint.publicKey,
         oldAuthority: payer.publicKey,
-        newAuthority: owner,
+        newAuthority: authority,
       }),
       createSetAuthorityInstruction(
         mint.publicKey,
