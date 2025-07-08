@@ -364,40 +364,15 @@ async function main() {
     });
 
   program
-    .command("whitelist-extension")
-    .description(
-      "Whitelist an extension program on the Extension Swap Facility"
-    )
-    .argument("<extProgramId>", "Extension program ID to whitelist")
-    .action(async (extProgramId) => {
-      const [owner] = keysFromEnv(["EXT_OWNER"]);
-
-      const extSwap = new Program<ExtSwap>(
-        EXT_SWAP_IDL,
-        anchorProvider(connection, owner)
-      );
-
-      const tx = await extSwap.methods
-        .whitelistExtension()
-        .accounts({
-          extProgram: new PublicKey(extProgramId),
-        })
-        .signers([owner])
-        .rpc();
-
-      console.log(`Whitelisted extension: ${tx}`);
-    });
-
-  program
     .command("add-wrap-authority")
     .description("Add a wrap authority on the Extension program")
     .argument(
       "<wrapAuthorities>",
-      "Comma-separated list of wrap authority to whitelist"
+      "Comma-separated list of pubkeys to whitelist"
     )
     .action(async (wrapAuthorities) => {
       const [payer, extProgram] = keysFromEnv([
-        "EXT_OWNER",
+        "PAYER_KEYPAIR",
         "EXT_PROGRAM_KEYPAIR",
       ]);
 
@@ -426,6 +401,9 @@ async function main() {
         );
       }
 
+      tx.feePayer = admin;
+      tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
       if (process.env.SQUADS_MULTISIG) {
         const b = tx.serialize({ verifySignatures: false });
         console.log("Transaction:", {
@@ -435,6 +413,87 @@ async function main() {
       } else {
         const sig = await connection.sendTransaction(tx, [payer]);
         console.log(`Added wrap authorties: ${sig}`);
+      }
+    });
+
+  program
+    .command("whitelist-swap-unwrapper")
+    .description("Whitelist an unwrapper on the swap program")
+    .argument("<authorities>", "Comma-separated list of pubkeys to whitelist")
+    .action(async (auths) => {
+      const [payer] = keysFromEnv(["PAYER_KEYPAIR"]);
+      const admin = new PublicKey(process.env.SQUADS_MULTISIG!);
+
+      const swap = new Program<ExtSwap>(
+        EXT_SWAP_IDL,
+        anchorProvider(connection, payer)
+      );
+
+      const tx = new Transaction();
+
+      for (const auth of auths.split(",")) {
+        tx.add(
+          await swap.methods
+            .whitelistUnwrapper(new PublicKey(auth))
+            .accounts({
+              admin,
+            })
+            .instruction()
+        );
+      }
+
+      tx.feePayer = admin;
+      tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+      const b = tx.serialize({ verifySignatures: false });
+      console.log("Transaction:", {
+        b64: b.toString("base64"),
+        b58: bs58.encode(b),
+      });
+    });
+
+  program
+    .command("whitelist-extensions")
+    .description("Whitelist extensions on the Swap Facility")
+    .argument("<extensions>", "Comma-separated list of extensions")
+    .action(async (extensions) => {
+      const [payer] = keysFromEnv(["PAYER_KEYPAIR"]);
+
+      const admin = process.env.SQUADS_MULTISIG
+        ? new PublicKey(process.env.SQUADS_MULTISIG)
+        : payer.publicKey;
+
+      const extSwap = new Program<ExtSwap>(
+        EXT_SWAP_IDL,
+        anchorProvider(connection, payer)
+      );
+
+      const tx = new Transaction();
+
+      for (const ext of extensions.split(",")) {
+        tx.add(
+          await extSwap.methods
+            .whitelistExtension()
+            .accountsPartial({
+              admin,
+              extProgram: new PublicKey(ext),
+            })
+            .instruction()
+        );
+      }
+
+      tx.feePayer = admin;
+      tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+      if (process.env.SQUADS_MULTISIG) {
+        const b = tx.serialize({ verifySignatures: false });
+        console.log("Transaction:", {
+          b64: b.toString("base64"),
+          b58: bs58.encode(b),
+        });
+      } else {
+        const sig = await connection.sendTransaction(tx, [payer]);
+        console.log(`Added extensions: ${sig}`);
       }
     });
 
