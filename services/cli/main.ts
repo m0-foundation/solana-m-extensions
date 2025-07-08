@@ -391,30 +391,51 @@ async function main() {
   program
     .command("add-wrap-authority")
     .description("Add a wrap authority on the Extension program")
-    .argument("<wrapAuthority>", "Pubkey of wrap authority to whitelist")
-    .action(async (wrapAuthority) => {
-      const [owner, extProgram] = keysFromEnv([
+    .argument(
+      "<wrapAuthorities>",
+      "Comma-separated list of wrap authority to whitelist"
+    )
+    .action(async (wrapAuthorities) => {
+      const [payer, extProgram] = keysFromEnv([
         "EXT_OWNER",
         "EXT_PROGRAM_KEYPAIR",
       ]);
+
+      const admin = process.env.SQUADS_MULTISIG
+        ? new PublicKey(process.env.SQUADS_MULTISIG)
+        : payer.publicKey;
 
       // Insert the program ID into the IDL so we can interact with it
       NO_YIELD_EXT_IDL.address = extProgram.publicKey.toBase58();
 
       const ext = new Program(
         NO_YIELD_EXT_IDL,
-        anchorProvider(connection, owner)
+        anchorProvider(connection, payer)
       );
 
-      const tx = await ext.methods
-        .addWrapAuthority(new PublicKey(wrapAuthority))
-        .accounts({
-          admin: owner.publicKey,
-        })
-        .signers([owner])
-        .rpc();
+      const tx = new Transaction();
 
-      console.log(`Added wrap authority: ${tx}`);
+      for (const auth of wrapAuthorities.split(",")) {
+        tx.add(
+          await ext.methods
+            .addWrapAuthority(new PublicKey(auth))
+            .accounts({
+              admin,
+            })
+            .instruction()
+        );
+      }
+
+      if (process.env.SQUADS_MULTISIG) {
+        const b = tx.serialize({ verifySignatures: false });
+        console.log("Transaction:", {
+          b64: b.toString("base64"),
+          b58: bs58.encode(b),
+        });
+      } else {
+        const sig = await connection.sendTransaction(tx, [payer]);
+        console.log(`Added wrap authorties: ${sig}`);
+      }
     });
 
   await program.parseAsync(process.argv);
