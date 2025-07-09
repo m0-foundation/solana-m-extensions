@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import {
+  AddressLookupTableProgram,
   ComputeBudgetProgram,
   Connection,
   Keypair,
@@ -16,6 +17,7 @@ import {
   createInitializeTransferHookInstruction,
   createSetAuthorityInstruction,
   ExtensionType,
+  getAssociatedTokenAddressSync,
   getMintLen,
   getOrCreateAssociatedTokenAccount,
   LENGTH_SIZE,
@@ -36,6 +38,7 @@ import {
 import { AnchorProvider, Program, Wallet, BN } from "@coral-xyz/anchor";
 import { ExtSwap } from "../../target/types/ext_swap";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
+import { PROGRAM_ID as EARN_PID } from "@m0-foundation/solana-m-sdk";
 
 const EXT_SWAP_IDL = require("../../target/idl/ext_swap.json");
 const NO_YIELD_EXT_IDL = require("../../target/idl/no_yield.json");
@@ -494,6 +497,160 @@ async function main() {
       } else {
         const sig = await connection.sendTransaction(tx, [payer]);
         console.log(`Added extensions: ${sig}`);
+      }
+    });
+
+  program
+    .command("update-swap-lut")
+    .description("Create or update the LUT for common addresses")
+    .action(async () => {
+      const [owner, wM, ext1, ext2] = keysFromEnv([
+        "PAYER_KEYPAIR",
+        "M0_WM",
+        "KAST_USDK",
+        "KAST_USDKY",
+      ]);
+      const ixs = [
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 250_000 }),
+      ];
+
+      // Get or create LUT
+      let tableAddress: PublicKey;
+      if (process.env.LOOKUP_TABLE) {
+        tableAddress = new PublicKey(process.env.LOOKUP_TABLE);
+      } else {
+        const [lookupTableIx, lookupTableAddress] =
+          AddressLookupTableProgram.createLookupTable({
+            authority: owner.publicKey,
+            payer: owner.publicKey,
+            recentSlot:
+              (await connection.getSlot({ commitment: "finalized" })) - 10,
+          });
+
+        console.log(`Creating lookup table: ${lookupTableAddress.toBase58()}`);
+        tableAddress = lookupTableAddress;
+        ixs.push(lookupTableIx);
+      }
+
+      const addressesForTable = [EXT_SWAP];
+
+      // Swap program addresses
+      addressesForTable.push(
+        PublicKey.findProgramAddressSync([Buffer.from("global")], EXT_SWAP)[0],
+        PublicKey.findProgramAddressSync([Buffer.from("global")], EARN_PID)[0],
+        M_MINT
+      );
+
+      // Extension mints
+      const mints: { [key: string]: string } = {
+        extaykYu5AQcDm3qZAbiDN3yp6skqn6Nssj7veUUGZw:
+          "usdkbee86pkLyRmxfFCdkyySpxRb5ndCxVsK2BkRXwX",
+        extMahs9bUFMYcviKCvnSRaXgs5PcqmMzcnHRtTqE85:
+          "usdkyPPxgV7sfNyKb8eDz66ogPrkRXG3wS2FVb6LLUf",
+        Fb2AsCKmPd4gKhabT6KsremSHMrJ8G2Mopnc6rDQZX9e:
+          "usdkbee86pkLyRmxfFCdkyySpxRb5ndCxVsK2BkRXwX",
+        "3PskKTHgboCbUSQPMcCAZdZNFHbNvSoZ8zEFYANCdob7":
+          "usdkyPPxgV7sfNyKb8eDz66ogPrkRXG3wS2FVb6LLUf",
+        wMXX1K1nca5W4pZr1piETe78gcAVVrEFi9f4g46uXko:
+          "mzeroXDoBpRVhnEXBra27qzAMdxgpWVY3DzQW7xMVJp",
+      };
+
+      // Add common addresses for each extension
+      for (const ext of [wM, ext1, ext2]) {
+        const mint = new PublicKey(mints[ext.publicKey.toBase58()]);
+
+        const vault = PublicKey.findProgramAddressSync(
+          [Buffer.from("m_vault")],
+          ext.publicKey
+        )[0];
+
+        const vaultAta = getAssociatedTokenAddressSync(
+          mint,
+          vault,
+          true,
+          TOKEN_2022_PROGRAM_ID
+        );
+
+        addressesForTable.push(
+          ext.publicKey,
+          PublicKey.findProgramAddressSync(
+            [Buffer.from("global")],
+            ext.publicKey
+          )[0],
+          mint,
+          vault,
+          PublicKey.findProgramAddressSync(
+            [Buffer.from("mint_authority")],
+            ext.publicKey
+          )[0],
+          vaultAta
+        );
+      }
+
+      // Fetch current state of LUT
+      let existingAddresses: PublicKey[] = [];
+      if (process.env.LOOKUP_TABLE) {
+        const state = (await connection.getAddressLookupTable(tableAddress))
+          .value?.state.addresses;
+        if (!state) {
+          throw new Error(
+            `Failed to fetch state for address lookup table ${tableAddress}`
+          );
+        }
+        if (state.length === 256) {
+          throw new Error("LUT is full");
+        }
+
+        existingAddresses = state;
+      }
+
+      // Dedupe missing addresses
+      const toAdd = addressesForTable.filter(
+        (address) => !existingAddresses.find((a) => a.equals(address))
+      );
+      if (toAdd.length === 0) {
+        console.log("No addresses to add");
+        return;
+      }
+
+      if (existingAddresses.length + toAdd.length > 256) {
+        throw new Error(`cannot add ${toAdd.length} more addresses`);
+      }
+
+      ixs.push(
+        AddressLookupTableProgram.extendLookupTable({
+          payer: owner.publicKey,
+          authority: owner.publicKey,
+          lookupTable: tableAddress,
+          addresses: toAdd,
+        })
+      );
+
+      // Send transaction
+      const blockhash = await connection.getLatestBlockhash("finalized");
+
+      const messageV0 = new TransactionMessage({
+        payerKey: owner.publicKey,
+        recentBlockhash: blockhash.blockhash,
+        instructions: ixs,
+      }).compileToV0Message();
+
+      const transaction = new VersionedTransaction(messageV0);
+      transaction.sign([owner]);
+      const txid = await connection.sendTransaction(transaction);
+      console.log(`Transaction sent ${txid}\t${toAdd.length} addresses added`);
+
+      // Confirm
+      const confirmation = await connection.confirmTransaction(
+        {
+          signature: txid,
+          blockhash: blockhash.blockhash,
+          lastValidBlockHeight: blockhash.lastValidBlockHeight,
+        },
+        "confirmed"
+      );
+      if (confirmation.value.err) {
+        throw new Error(`Transaction not confirmed: ${confirmation.value.err}`);
       }
     });
 
