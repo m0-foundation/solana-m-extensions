@@ -1,10 +1,6 @@
 // external dependencies
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022};
-use earn::{
-    state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
-    ID as EARN_PROGRAM,
-};
 
 // local dependencies
 use crate::{
@@ -22,17 +18,13 @@ pub struct SetFee<'info> {
         mut,
         seeds = [EXT_GLOBAL_SEED],
         has_one = admin @ ExtError::NotAuthorized,
+        has_one = m_mint @ ExtError::InvalidMint,
         has_one = ext_mint @ ExtError::InvalidMint,
         bump = global_account.bump,
     )]
     pub global_account: Account<'info, ExtGlobal>,
 
-    #[account(
-        seeds = [EARN_GLOBAL_SEED],
-        seeds::program = EARN_PROGRAM,
-        bump = m_earn_global_account.bump,
-    )]
-    pub m_earn_global_account: Account<'info, EarnGlobal>,
+    pub m_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
         mut,
@@ -74,7 +66,7 @@ impl SetFee<'_> {
         sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
-            &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.m_mint,
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[signer_bump]]],
             &ctx.accounts.ext_token_program,

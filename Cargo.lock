@@ -830,12 +830,11 @@ dependencies = [
 [[package]]
 name = "earn"
 version = "0.1.0"
-source = "git+https://github.com/m0-foundation/solana-m?branch=develop#fb96d0521d4a187b33874936b21b22bb16505fec"
+source = "git+https://github.com/m0-foundation/solana-m?branch=scaledui-prototype#bdfcce9a63e4ca0589d0a54ed5a61b804abf7e74"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
  "cfg-if",
- "solana-program",
  "solana-security-txt",
  "spl-token-2022 7.0.0",
 ]

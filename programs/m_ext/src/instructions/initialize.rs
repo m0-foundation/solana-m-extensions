@@ -1,9 +1,12 @@
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
+use anchor_spl::{
+    token_2022::spl_token_2022::state::AccountState,
+    token_interface::{Mint, Token2022, TokenAccount},
+};
 use cfg_if::cfg_if;
 use earn::{
-    state::{Earner, Global as EarnGlobal, EARNER_SEED, GLOBAL_SEED as EARN_GLOBAL_SEED},
+    state::{EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
     ID as EARN_PROGRAM,
 };
 use std::collections::HashSet;
@@ -20,7 +23,7 @@ cfg_if! {
         use anchor_spl::token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey;
         use spl_token_2022::extension::ExtensionType;
         use crate::{
-            constants::{INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
+            constants::{INDEX_SCALE_F64, INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
             utils::conversion::{sync_multiplier, get_mint_extensions, get_scaled_ui_config},
         };
     }
@@ -45,7 +48,7 @@ pub struct Initialize<'info> {
 
     #[account(
         mint::token_program = m_token_program,
-        address = m_earn_global_account.mint,
+        address = m_earn_global_account.m_mint,
     )]
     pub m_mint: InterfaceAccount<'info, Mint>,
 
@@ -71,10 +74,13 @@ pub struct Initialize<'info> {
     )]
     pub m_vault: AccountInfo<'info>,
 
+    // We require the vault m token account to be initialized and thawed to initialize the extension.
+    // This ensures that it is permissioned to hold $M.
     #[account(
         associated_token::mint = m_mint,
         associated_token::authority = m_vault,
         associated_token::token_program = m_token_program,
+        constraint = vault_m_token_account.state == AccountState::Initialized @ ExtError::InvalidAccount,
     )]
     pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
 
@@ -84,16 +90,6 @@ pub struct Initialize<'info> {
         bump = m_earn_global_account.bump,
     )]
     pub m_earn_global_account: Account<'info, EarnGlobal>,
-
-    // This account isn't used, but requiring it means we enforce that the vault m token account
-    // is an M earner when the program is initialized. Therefore, we can be sure that the extension
-    // will be earning yield from the start.
-    #[account(
-        seeds = [EARNER_SEED, vault_m_token_account.key().as_ref()],
-        seeds::program = EARN_PROGRAM,
-        bump = m_earner_account.bump,
-    )]
-    pub m_earner_account: Account<'info, Earner>,
 
     pub m_token_program: Program<'info, Token2022>, // we have duplicate entries for the token2022 program bc the M token program could change in the future
 
@@ -162,9 +158,12 @@ impl Initialize<'_> {
         let yield_config: YieldConfig;
         cfg_if! {
             if #[cfg(feature = "scaled-ui")] {
+                let m_scaled_ui_config =
+                    earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
+                let m_multiplier: f64 = m_scaled_ui_config.new_multiplier.into();
                 yield_config = YieldConfig {
                     fee_bps,
-                    last_m_index: ctx.accounts.m_earn_global_account.index,
+                    last_m_index: (m_multiplier * INDEX_SCALE_F64) as u64,
                     last_ext_index: INDEX_SCALE_U64, // we set the extension index to 1.0 initially
                 };
             } else {
@@ -193,7 +192,7 @@ impl Initialize<'_> {
         sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
-            &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.m_mint,
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
             &ctx.accounts.ext_token_program,
