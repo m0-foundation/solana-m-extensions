@@ -5,10 +5,8 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{
-            amount_to_principal_down, amount_to_principal_up, get_latest_multiplier_and_timestamp,
-            principal_to_amount_down, principal_to_amount_up, sync_multiplier,
-        },
+        conversion::sync_multiplier,
+        quote::{Op, Quoter},
         token::{burn_tokens, transfer_tokens_from_program},
     },
 };
@@ -99,36 +97,6 @@ impl Unwrap<'_> {
         Ok(())
     }
 
-    pub fn quote(&self, principal: u64, exact_out: bool) -> Result<u64> {
-        // Get the current multiplier and timestamp from the m_mint and cached values
-        let (m_multiplier, ext_multiplier, _) =
-            get_latest_multiplier_and_timestamp(&self.global_account, &self.m_mint)?;
-
-        // Calculate the output principal in/out based the multipliers, quote type, and input principal
-        Self::quote_cached(principal, exact_out, m_multiplier, ext_multiplier)
-    }
-
-    fn quote_cached(
-        principal: u64,
-        exact_out: bool,
-        m_multiplier: f64,
-        ext_multiplier: f64,
-    ) -> Result<u64> {
-        if exact_out {
-            // Calculate the ext principal in based on the m principal out
-            amount_to_principal_up(
-                principal_to_amount_up(principal, m_multiplier)?,
-                ext_multiplier,
-            )
-        } else {
-            // Calculate the m principal out based on the ext principal in
-            amount_to_principal_down(
-                principal_to_amount_down(principal, ext_multiplier)?,
-                m_multiplier,
-            )
-        }
-    }
-
     #[access_control(ctx.accounts.validate(principal))]
     pub fn handler(ctx: Context<Self>, principal: u64, exact_out: bool) -> Result<()> {
         let authority_seeds: &[&[&[u8]]] = &[&[
@@ -147,16 +115,12 @@ impl Unwrap<'_> {
             &ctx.accounts.ext_token_program,
         )?;
 
+        let quoter = Quoter::new_from_cache(m_ext_multiplier, ext_multiplier);
+
         let (m_principal, ext_principal): (u64, u64) = if exact_out {
-            (
-                Self::quote_cached(principal, true, m_ext_multiplier, ext_multiplier)?,
-                principal,
-            )
+            (quoter.quote(Op::Unwrap, principal, true)?, principal)
         } else {
-            (
-                principal,
-                Self::quote_cached(principal, false, m_ext_multiplier, ext_multiplier)?,
-            )
+            (principal, quoter.quote(Op::Unwrap, principal, false)?)
         };
 
         // Burn the amount of ext tokens from the user

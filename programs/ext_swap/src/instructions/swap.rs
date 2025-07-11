@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use m_ext::cpi::accounts::{Unwrap, Wrap};
+// use m_ext::instructions::{Unwrap, Wrap};
 use m_ext::state::{EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
 
 use crate::{
@@ -153,7 +154,7 @@ pub struct Swap<'info> {
 impl<'info> Swap<'info> {
     fn validate(
         &self,
-        from_principal: u64,
+        principal: u64,
         remaining_accounts: &[AccountInfo<'_>],
         remaining_accounts_split_idx: usize,
     ) -> Result<()> {
@@ -171,17 +172,18 @@ impl<'info> Swap<'info> {
             return err!(SwapError::InvalidIndex);
         }
 
-        if from_principal == 0 {
+        if principal == 0 {
             return err!(SwapError::InvalidAmount);
         }
 
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(from_principal, ctx.remaining_accounts, remaining_accounts_split_idx))]
+    #[access_control(ctx.accounts.validate(principal, ctx.remaining_accounts, remaining_accounts_split_idx))]
     pub fn handler(
         ctx: Context<'_, '_, '_, 'info, Self>,
-        from_principal: u64,
+        principal: u64,
+        exact_out: bool,
         remaining_accounts_split_idx: usize,
     ) -> Result<()> {
         let m_pre_balance = ctx.accounts.intermediate_m_account.amount;
@@ -192,12 +194,26 @@ impl<'info> Swap<'info> {
         let (unwrap_remaining_accounts, wrap_remaining_accounts) =
             remaining_accounts.split_at(remaining_accounts_split_idx);
 
+        // Calculate the unwrap and wrap principals based on the quote type and input principal
+        let unwrap_principal = if exact_out {
+            wrap_accounts.quote(principal, true)?
+        } else {
+            principal
+        };
+
+        let wrap_principal = if exact_out {
+            principal
+        } else {
+            unwrap_accounts.quote(principal, false)?
+        };
+
         // Set swap program as authority if none provided
         let unwrap_authority = match &ctx.accounts.unwrap_authority {
             Some(auth) => auth.to_account_info(),
             None => ctx.accounts.swap_global.to_account_info(),
         };
 
+        // Execute the unwrap
         m_ext::cpi::unwrap(
             CpiContext::new_with_signer(
                 ctx.accounts.from_ext_program.to_account_info(),
@@ -218,12 +234,13 @@ impl<'info> Swap<'info> {
                 &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
             )
             .with_remaining_accounts(unwrap_remaining_accounts.to_vec()),
-            from_principal,
+            unwrap_principal,
+            exact_out,
         )?;
 
-        // Reload M balance and wrap difference
-        ctx.accounts.intermediate_m_account.reload()?;
-        let m_delta = ctx.accounts.intermediate_m_account.amount - m_pre_balance;
+        // // Reload M balance and wrap difference
+        // ctx.accounts.intermediate_m_account.reload()?;
+        // let m_delta = ctx.accounts.intermediate_m_account.amount - m_pre_balance;
 
         // Set swap program as authority if none provided
         let wrap_authority = match &ctx.accounts.wrap_authority {
@@ -231,6 +248,7 @@ impl<'info> Swap<'info> {
             None => ctx.accounts.swap_global.to_account_info(),
         };
 
+        // Execute the wrap
         m_ext::cpi::wrap(
             CpiContext::new_with_signer(
                 ctx.accounts.to_ext_program.to_account_info(),
@@ -251,13 +269,14 @@ impl<'info> Swap<'info> {
                 &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
             )
             .with_remaining_accounts(wrap_remaining_accounts.to_vec()),
-            m_delta,
+            wrap_principal,
+            exact_out,
         )?;
 
         // Reload and log amounts
-        ctx.accounts.to_token_account.reload()?;
-        let to_principal = ctx.accounts.to_token_account.amount - to_pre_balance;
-        msg!("{} -> {} M -> {}", from_principal, m_delta, to_principal);
+        // ctx.accounts.to_token_account.reload()?;
+        // let to_principal = ctx.accounts.to_token_account.amount - to_pre_balance;
+        // msg!("{} -> {} M -> {}", from_principal, m_delta, to_principal);
 
         // Close intermediate account
         ctx.accounts.intermediate_m_account.reload()?;

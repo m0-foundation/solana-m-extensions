@@ -5,10 +5,8 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{
-            amount_to_principal_down, amount_to_principal_up, get_latest_multiplier_and_timestamp,
-            principal_to_amount_down, principal_to_amount_up, sync_multiplier,
-        },
+        conversion::sync_multiplier,
+        quote::{Op, Quoter},
         token::{mint_tokens, transfer_tokens},
     },
 };
@@ -81,7 +79,7 @@ pub struct Wrap<'info> {
 }
 
 impl Wrap<'_> {
-    fn validate(&self, m_principal: u64) -> Result<()> {
+    fn validate(&self, principal: u64) -> Result<()> {
         let auth = match &self.wrap_authority {
             Some(auth) => auth.key,
             None => self.token_authority.key,
@@ -92,41 +90,11 @@ impl Wrap<'_> {
             return err!(ExtError::NotAuthorized);
         }
 
-        if m_principal == 0 {
+        if principal == 0 {
             return err!(ExtError::InvalidAmount);
         }
 
         Ok(())
-    }
-
-    pub fn quote(&self, principal: u64, exact_out: bool) -> Result<u64> {
-        // Get the latest multipliers
-        let (m_multiplier, ext_multiplier, _) =
-            get_latest_multiplier_and_timestamp(&self.global_account, &self.m_mint)?;
-
-        // Calculate the output principal in/out based the multipliers, quote type, and input principal
-        Self::quote_cached(principal, exact_out, m_multiplier, ext_multiplier)
-    }
-
-    fn quote_cached(
-        principal: u64,
-        exact_out: bool,
-        m_multiplier: f64,
-        ext_multiplier: f64,
-    ) -> Result<u64> {
-        if exact_out {
-            // Calculate the m principal in based on the ext principal out
-            amount_to_principal_up(
-                principal_to_amount_up(principal, ext_multiplier)?,
-                m_multiplier,
-            )
-        } else {
-            // Calculate the ext principal out based on the m principal in
-            amount_to_principal_down(
-                principal_to_amount_down(principal, m_multiplier)?,
-                ext_multiplier,
-            )
-        }
     }
 
     #[access_control(ctx.accounts.validate(principal))]
@@ -147,18 +115,14 @@ impl Wrap<'_> {
             &ctx.accounts.ext_token_program,
         )?;
 
+        let quoter = Quoter::new_from_cache(m_multiplier, ext_multiplier);
+
         // Calculate the principal amount of ext tokens to mint
         // based on the principal amount of m tokens to wrap
         let (m_principal, ext_principal) = if exact_out {
-            (
-                Self::quote_cached(principal, true, m_multiplier, ext_multiplier)?,
-                principal,
-            )
+            (quoter.quote(Op::Wrap, principal, true)?, principal)
         } else {
-            (
-                principal,
-                Self::quote_cached(principal, false, m_multiplier, ext_multiplier)?,
-            )
+            (principal, quoter.quote(Op::Wrap, principal, false)?)
         };
 
         // Transfer the amount of m tokens from the user to the m vault
