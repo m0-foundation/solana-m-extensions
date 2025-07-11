@@ -79,12 +79,12 @@ pub mod m_ext {
 
     // Wrap authority instructions
 
-    pub fn wrap(ctx: Context<Wrap>, amount: u64) -> Result<()> {
-        Wrap::handler(ctx, amount)
+    pub fn wrap(ctx: Context<Wrap>, principal: u64, exact_out: bool) -> Result<()> {
+        Wrap::handler(ctx, principal, exact_out)
     }
 
-    pub fn unwrap(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
-        Unwrap::handler(ctx, amount)
+    pub fn unwrap(ctx: Context<Unwrap>, principal: u64, exact_out: bool) -> Result<()> {
+        Unwrap::handler(ctx, principal, exact_out)
     }
 
     // Open instructions

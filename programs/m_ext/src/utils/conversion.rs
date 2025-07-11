@@ -1,7 +1,9 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022};
 use cfg_if::cfg_if;
-use spl_token_2022::extension::{BaseStateWithExtensions, StateWithExtensions};
+use spl_token_2022::extension::{
+    scaled_ui_amount::ScaledUiAmountConfig, BaseStateWithExtensions, StateWithExtensions,
+};
 
 use crate::{
     constants::{INDEX_SCALE_F64, INDEX_SCALE_U64},
@@ -12,8 +14,8 @@ use crate::{
 cfg_if! {
     if #[cfg(feature = "scaled-ui")] {
         use anchor_lang::solana_program::program::invoke_signed;
-        use spl_token_2022::extension::scaled_ui_amount::{PodF64, ScaledUiAmountConfig, UnixTimestamp};
         use crate::constants::ONE_HUNDRED_PERCENT_F64;
+        use spl_token_2022::extension::scaled_ui_amount::{PodF64, UnixTimestamp};
     }
 }
 
@@ -25,13 +27,13 @@ pub fn sync_multiplier<'info>(
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
     token_program: &Program<'info, Token2022>,
-) -> Result<f64> {
+) -> Result<(f64, f64)> {
+    // Get the current index and timestamp from the m_mint and cached values
+    let (m_multiplier, ext_multiplier, timestamp): (f64, f64, i64) =
+        get_latest_multiplier_and_timestamp(ext_global_account, m_mint)?;
+
     cfg_if! {
         if #[cfg(feature = "scaled-ui")] {
-            // Get the current index and timestamp from the m_mint and cached values
-            let (m_multiplier, ext_multiplier, timestamp): (f64, f64, i64) =
-                get_latest_multiplier_and_timestamp(ext_global_account, m_mint)?;
-
             // Compare against the current multiplier
             // If the multiplier is the same, we don't need to update
             let scaled_ui_config = get_scaled_ui_config(ext_mint)?;
@@ -39,7 +41,7 @@ pub fn sync_multiplier<'info>(
             if scaled_ui_config.new_multiplier == PodF64::from(ext_multiplier)
                 && scaled_ui_config.new_multiplier_effective_timestamp == UnixTimestamp::from(timestamp)
             {
-                return Ok(ext_multiplier);
+                return Ok((m_multiplier, ext_multiplier));
             }
 
             // Update the multiplier and timestamp in the mint account
@@ -62,13 +64,11 @@ pub fn sync_multiplier<'info>(
             // Update the last m index and last ext index in the global account
             ext_global_account.yield_config.last_m_index = (m_multiplier * INDEX_SCALE_F64).floor() as u64;
             ext_global_account.yield_config.last_ext_index = (ext_multiplier * INDEX_SCALE_F64).floor() as u64;
-
-            return Ok(ext_multiplier);
-        } else {
-            // Ext tokens are 1:1 with M tokens and we don't need to sync this
-            return Ok(1.0);
         }
     }
+
+    // Return the multipliers
+    Ok((m_multiplier, ext_multiplier))
 }
 
 pub fn amount_to_principal_down(amount: u64, multiplier: f64) -> Result<u64> {
@@ -176,31 +176,33 @@ pub fn get_mint_extensions<'info>(
     Ok(extensions)
 }
 
-cfg_if! {
-    if #[cfg(feature = "scaled-ui")] {
-        pub fn get_scaled_ui_config<'info>(
-            mint: &InterfaceAccount<'info, Mint>,
-        ) -> Result<ScaledUiAmountConfig> {
-            // Get the mint account data with extensions
-            let account_info = mint.to_account_info();
-            let mint_data = account_info.try_borrow_data()?;
-            let mint_ext_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
+pub fn get_scaled_ui_config<'info>(
+    mint: &InterfaceAccount<'info, Mint>,
+) -> Result<ScaledUiAmountConfig> {
+    // Get the mint account data with extensions
+    let account_info = mint.to_account_info();
+    let mint_data = account_info.try_borrow_data()?;
+    let mint_ext_data = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
 
-            // Get the scaled UI config extension
-            let scaled_ui_config = mint_ext_data.get_extension::<ScaledUiAmountConfig>()?;
+    // Get the scaled UI config extension
+    let scaled_ui_config = mint_ext_data.get_extension::<ScaledUiAmountConfig>()?;
 
-            Ok(*scaled_ui_config)
-        }
+    Ok(*scaled_ui_config)
+}
 
+#[allow(unused_variables)]
+pub fn get_latest_multiplier_and_timestamp<'info>(
+    ext_global_account: &Account<'info, ExtGlobal>,
+    m_mint: &InterfaceAccount<'info, Mint>,
+) -> Result<(f64, f64, i64)> {
+    let m_scaled_ui_config = get_scaled_ui_config(m_mint)?;
+    let latest_m_multiplier: f64 = m_scaled_ui_config.new_multiplier.into();
+    let latest_timestamp: i64 = m_scaled_ui_config.new_multiplier_effective_timestamp.into();
 
-        fn get_latest_multiplier_and_timestamp<'info>(
-            ext_global_account: &Account<'info, ExtGlobal>,
-            m_mint: &InterfaceAccount<'info, Mint>,
-        ) -> Result<(f64, f64, i64)> {
-            let m_scaled_ui_config = get_scaled_ui_config(m_mint)?;
-            let latest_m_multiplier: f64 = m_scaled_ui_config.new_multiplier.into();
-            let cached_m_multiplier: f64 = ext_global_account.yield_config.last_m_index as f64 / INDEX_SCALE_F64;
-            let latest_timestamp: i64 = m_scaled_ui_config.new_multiplier_effective_timestamp.into();
+    cfg_if! {
+        if #[cfg(feature = "scaled-ui")] {
+            let cached_m_multiplier: f64 =
+                ext_global_account.yield_config.last_m_index as f64 / INDEX_SCALE_F64;
             let cached_ext_multiplier =
                 ext_global_account.yield_config.last_ext_index as f64 / INDEX_SCALE_F64;
 
@@ -214,57 +216,63 @@ cfg_if! {
                 cached_ext_multiplier,
                 cached_m_multiplier,
                 latest_m_multiplier,
-                ext_global_account.yield_config.fee_bps
+                ext_global_account.yield_config.fee_bps,
             )?;
 
             Ok((latest_m_multiplier, new_ext_multiplier, latest_timestamp))
+        } else {
+            // If not using scaled UI, the ext multiplier is 1.0
+            let latest_ext_multiplier: f64 = 1.0;
+            Ok((latest_m_multiplier, latest_ext_multiplier, latest_timestamp))
         }
+    }
+}
 
-        fn calculate_new_multiplier(
-            last_ext_multiplier: f64,
-            last_m_multiplier: f64,
-            new_m_multiplier: f64,
-            fee_bps: u64,
-        ) -> Result<f64> {
-            // Confirm the inputs are in the expected domain.
-            // These checks ensure that the resultant value is >= 1.0,
-            // are allowable values to set as the Token2022 Scaled UI multiplier,
-            // and the ext multiplier is monotonically increasing.
-            // While having the last ext multiplier <= last m multiplier isn't strictly necessary,
-            // it arises naturally from our construction and provides a good sanity check.
-            if last_ext_multiplier < 1.0 ||
+#[cfg(feature = "scaled-ui")]
+fn calculate_new_multiplier(
+    last_ext_multiplier: f64,
+    last_m_multiplier: f64,
+    new_m_multiplier: f64,
+    fee_bps: u64,
+) -> Result<f64> {
+    // Confirm the inputs are in the expected domain.
+    // These checks ensure that the resultant value is >= 1.0,
+    // are allowable values to set as the Token2022 Scaled UI multiplier,
+    // and the ext multiplier is monotonically increasing.
+    // While having the last ext multiplier <= last m multiplier isn't strictly necessary,
+    // it arises naturally from our construction and provides a good sanity check.
+    if last_ext_multiplier < 1.0 ||
                last_m_multiplier < last_ext_multiplier ||
                new_m_multiplier < last_m_multiplier ||
                new_m_multiplier > 100.0 || // we set a high, but finite upper bound on the multiplier to ensure it (or the other multipliers) don't lead to overflow.
-               fee_bps > 10000 {
-                return err!(ExtError::InvalidInput);
-            }
-
-            // Calculate the new ext multiplier from the formula:
-            // new_ext_multiplier = last_ext_multiplier * (new_m_multiplier / last_m_multiplier) ^ (1 - fee_on_yield)
-            // The derivation of this formula is explained in this document: https://gist.github.com/Oighty/89dd1288a0a7fb53eb6f0314846cb746
-            let m_increase_factor = new_m_multiplier / last_m_multiplier;
-
-            // Calculate the increase factor for the ext index, if the fee is zero, then the increase factor is the same as M
-            let ext_increase_factor = if fee_bps == 0 {
-                m_increase_factor
-            } else {
-                // Calculate the increase factor for the ext index
-                let fee_on_yield = fee_bps as f64 / ONE_HUNDRED_PERCENT_F64;
-                // The precision of the powf operation is non-deterministic
-                // However, the margin of error is ~10^-16, which is smaller than the 10^-12 precision
-                // that we need for this use case. See: https://doc.rust-lang.org/std/primitive.f64.html#method.powf
-                m_increase_factor.powf(1.0f64 - fee_on_yield)
-            };
-
-            // Calculate the new extension multiplier (index in f64 scaled down)
-            let new_ext_multiplier = last_ext_multiplier * ext_increase_factor;
-
-            // We need to round the new multiplier down and truncate at 10^-12
-            // to return a consistent value
-            Ok((new_ext_multiplier * INDEX_SCALE_F64).floor() / INDEX_SCALE_F64)
-        }
+               fee_bps > 10000
+    {
+        return err!(ExtError::InvalidInput);
     }
+
+    // Calculate the new ext multiplier from the formula:
+    // new_ext_multiplier = last_ext_multiplier * (new_m_multiplier / last_m_multiplier) ^ (1 - fee_on_yield)
+    // The derivation of this formula is explained in this document: https://gist.github.com/Oighty/89dd1288a0a7fb53eb6f0314846cb746
+    let m_increase_factor = new_m_multiplier / last_m_multiplier;
+
+    // Calculate the increase factor for the ext index, if the fee is zero, then the increase factor is the same as M
+    let ext_increase_factor = if fee_bps == 0 {
+        m_increase_factor
+    } else {
+        // Calculate the increase factor for the ext index
+        let fee_on_yield = fee_bps as f64 / ONE_HUNDRED_PERCENT_F64;
+        // The precision of the powf operation is non-deterministic
+        // However, the margin of error is ~10^-16, which is smaller than the 10^-12 precision
+        // that we need for this use case. See: https://doc.rust-lang.org/std/primitive.f64.html#method.powf
+        m_increase_factor.powf(1.0f64 - fee_on_yield)
+    };
+
+    // Calculate the new extension multiplier (index in f64 scaled down)
+    let new_ext_multiplier = last_ext_multiplier * ext_increase_factor;
+
+    // We need to round the new multiplier down and truncate at 10^-12
+    // to return a consistent value
+    Ok((new_ext_multiplier * INDEX_SCALE_F64).floor() / INDEX_SCALE_F64)
 }
 
 #[cfg(test)]

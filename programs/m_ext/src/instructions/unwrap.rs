@@ -5,7 +5,10 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{amount_to_principal_down, principal_to_amount_down, sync_multiplier},
+        conversion::{
+            amount_to_principal_down, amount_to_principal_up, get_latest_multiplier_and_timestamp,
+            principal_to_amount_down, principal_to_amount_up, sync_multiplier,
+        },
         token::{burn_tokens, transfer_tokens_from_program},
     },
 };
@@ -78,7 +81,7 @@ pub struct Unwrap<'info> {
 }
 
 impl Unwrap<'_> {
-    pub fn validate(&self, ext_principal: u64) -> Result<()> {
+    pub fn validate(&self, principal: u64) -> Result<()> {
         let auth = match &self.unwrap_authority {
             Some(auth) => auth.key,
             None => self.token_authority.key,
@@ -89,15 +92,45 @@ impl Unwrap<'_> {
             return err!(ExtError::NotAuthorized);
         }
 
-        if ext_principal == 0 {
+        if principal == 0 {
             return err!(ExtError::InvalidAmount);
         }
 
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(ext_principal))]
-    pub fn handler(ctx: Context<Self>, ext_principal: u64) -> Result<()> {
+    pub fn quote(&self, principal: u64, exact_out: bool) -> Result<u64> {
+        // Get the current multiplier and timestamp from the m_mint and cached values
+        let (m_multiplier, ext_multiplier, _) =
+            get_latest_multiplier_and_timestamp(&self.global_account, &self.m_mint)?;
+
+        // Calculate the output principal in/out based the multipliers, quote type, and input principal
+        Self::quote_cached(principal, exact_out, m_multiplier, ext_multiplier)
+    }
+
+    fn quote_cached(
+        principal: u64,
+        exact_out: bool,
+        m_multiplier: f64,
+        ext_multiplier: f64,
+    ) -> Result<u64> {
+        if exact_out {
+            // Calculate the ext principal in based on the m principal out
+            amount_to_principal_up(
+                principal_to_amount_up(principal, m_multiplier)?,
+                ext_multiplier,
+            )
+        } else {
+            // Calculate the m principal out based on the ext principal in
+            amount_to_principal_down(
+                principal_to_amount_down(principal, ext_multiplier)?,
+                m_multiplier,
+            )
+        }
+    }
+
+    #[access_control(ctx.accounts.validate(principal))]
+    pub fn handler(ctx: Context<Self>, principal: u64, exact_out: bool) -> Result<()> {
         let authority_seeds: &[&[&[u8]]] = &[&[
             MINT_AUTHORITY_SEED,
             &[ctx.accounts.global_account.ext_mint_authority_bump],
@@ -105,7 +138,7 @@ impl Unwrap<'_> {
 
         // If necessary, sync the multiplier between M and Ext tokens
         // Return the current value to use for conversions
-        let ext_multiplier: f64 = sync_multiplier(
+        let (m_ext_multiplier, ext_multiplier): (f64, f64) = sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
             &ctx.accounts.m_mint,
@@ -114,19 +147,17 @@ impl Unwrap<'_> {
             &ctx.accounts.ext_token_program,
         )?;
 
-        // Get the current multiplier for the m_mint
-        let m_scaled_ui_config =
-            earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
-        let m_multiplier: f64 = m_scaled_ui_config.new_multiplier.into();
-
-        // TODO should we reduce ext_principal to the user's balance to avoid reverts?
-
-        // Calculate the principal amount of m tokens
-        // from the principal amount of ext tokens to unwrap
-        let m_principal: u64 = amount_to_principal_down(
-            principal_to_amount_down(ext_principal, ext_multiplier)?,
-            m_multiplier,
-        )?;
+        let (m_principal, ext_principal): (u64, u64) = if exact_out {
+            (
+                Self::quote_cached(principal, true, m_ext_multiplier, ext_multiplier)?,
+                principal,
+            )
+        } else {
+            (
+                principal,
+                Self::quote_cached(principal, false, m_ext_multiplier, ext_multiplier)?,
+            )
+        };
 
         // Burn the amount of ext tokens from the user
         burn_tokens(
