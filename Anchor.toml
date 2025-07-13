@@ -1,18 +1,19 @@
 [toolchain]
-anchor_version = "0.31.1"    # `anchor-cli` version to use(requires `avm`)
-solana_version = "2.1.0"     # Solana version to use(applies to all Solana tools)
+anchor_version = "0.31.1"
+solana_version = "2.1.0"
 
 [features]
-seeds = false
+resolution = true
 skip-lint = false
 
 [programs.localnet]
-m_ext = "3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da"
+callback_interface = "F7HuoZhamk9hawJcwLv9q4XnZXJv3cJwAe4BNuyA4Uri"
 ext_swap = "MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH"
+m_ext = "3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
+cluster = "localnet"
 wallet = "tests/keys/user.json"

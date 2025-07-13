@@ -84,6 +84,14 @@ pub mod m_ext {
         Wrap::handler(ctx, principal, exact_out)
     }
 
+    pub fn optimistic_wrap<'info>(
+        ctx: Context<'_, '_, '_, 'info, OptimisticWrap<'info>>,
+        principal: u64,
+        exact_out: bool,
+    ) -> Result<()> {
+        OptimisticWrap::handler(ctx, principal, exact_out)
+    }
+
     pub fn unwrap(ctx: Context<Unwrap>, principal: u64, exact_out: bool) -> Result<()> {
         Unwrap::handler(ctx, principal, exact_out)
     }
