@@ -8,6 +8,7 @@ use crate::{
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::Mint;
 
+#[derive(AnchorSerialize, AnchorDeserialize)]
 pub enum Op {
     Wrap,
     Unwrap,

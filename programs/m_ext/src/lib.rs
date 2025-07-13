@@ -9,6 +9,7 @@ pub mod utils;
 use anchor_lang::prelude::*;
 
 use instructions::*;
+use utils::quote::Op;
 
 #[cfg(not(feature = "no-entrypoint"))]
 solana_security_txt::security_txt! {
@@ -92,5 +93,14 @@ pub mod m_ext {
     #[cfg(feature = "scaled-ui")]
     pub fn sync(ctx: Context<Sync>) -> Result<()> {
         Sync::handler(ctx)
+    }
+
+    pub fn quote(
+        ctx: Context<Quote>,
+        operation: Op,
+        principal: u64,
+        exact_out: bool,
+    ) -> Result<u64> {
+        Quote::handler(ctx, operation, principal, exact_out)
     }
 }
