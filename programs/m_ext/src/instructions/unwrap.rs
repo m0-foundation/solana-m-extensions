@@ -209,7 +209,7 @@ impl<'info> OptimisticUnwrap<'info> {
 
         // CPI to the callback program to allow it to perform additional logic
         // TODO: does this need to be custodied by the program or can we use the provided "from_token_account"
-        callback_interface::cpi::callback(
+        callback_interface::cpi::wrap_callback(
             CpiContext::new(
                 ctx.accounts.callback_program.to_account_info(),
                 callback_interface::cpi::accounts::Callback {

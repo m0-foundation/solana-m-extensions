@@ -7,12 +7,17 @@ declare_id!("F7HuoZhamk9hawJcwLv9q4XnZXJv3cJwAe4BNuyA4Uri");
 pub mod callback_interface {
     use super::*;
 
-    pub fn callback(_ctx: Context<Callback>, _amount: u64) -> Result<()> {
+    pub fn wrap_callback(_ctx: Context<Callback>, _amount: u64) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn unwrap_callback(_ctx: Context<Callback>, _amount: u64) -> Result<()> {
         Ok(())
     }
 }
 
-// TODO need to think about signer permissions for token transfers as well as access control
+// TODO need to think about signer permissions for token transfers
+// as well as access control for who can call the callback
 #[derive(Accounts)]
 pub struct Callback<'info> {
     #[account(mint::token_program = token_program)]

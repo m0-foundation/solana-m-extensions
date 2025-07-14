@@ -212,7 +212,7 @@ impl<'info> OptimisticWrap<'info> {
         let pre_m_balance = ctx.accounts.common.vault_m_token_account.amount;
 
         // CPI to the callback program to allow it to perform additional logic
-        callback_interface::cpi::callback(
+        callback_interface::cpi::unwrap_callback(
             CpiContext::new(
                 ctx.accounts.callback_program.to_account_info(),
                 callback_interface::cpi::accounts::Callback {

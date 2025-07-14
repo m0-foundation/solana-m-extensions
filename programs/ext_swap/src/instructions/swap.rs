@@ -186,8 +186,8 @@ impl<'info> Swap<'info> {
         exact_out: bool,
         remaining_accounts_split_idx: usize,
     ) -> Result<()> {
-        let m_pre_balance = ctx.accounts.intermediate_m_account.amount;
-        let to_pre_balance = ctx.accounts.to_token_account.amount;
+        // let m_pre_balance = ctx.accounts.intermediate_m_account.amount;
+        // let to_pre_balance = ctx.accounts.to_token_account.amount;
 
         // Optional remaining accounts passed to the instructions
         let remaining_accounts = ctx.remaining_accounts;
