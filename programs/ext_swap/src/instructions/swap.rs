@@ -194,17 +194,43 @@ impl<'info> Swap<'info> {
         let (unwrap_remaining_accounts, wrap_remaining_accounts) =
             remaining_accounts.split_at(remaining_accounts_split_idx);
 
-        // Calculate the unwrap and wrap principals based on the quote type and input principal
-        let unwrap_principal = if exact_out {
-            wrap_accounts.quote(principal, true)?
-        } else {
-            principal
-        };
+        // Get quotes for each operation
+        let (unwrap_principal, wrap_principal): (u64, u64) = if exact_out {
+            // CPI to the to_ext and get the input amount required for`principal` out
+            let m_principal_in = m_ext::cpi::quote(
+                CpiContext::new(
+                    ctx.accounts.to_ext_program.to_account_info(),
+                    m_ext::cpi::accounts::Quote {
+                        m_mint: ctx.accounts.m_mint.to_account_info(),
+                        ext_mint: ctx.accounts.to_mint.to_account_info(),
+                        global_account: ctx.accounts.to_global.to_account_info(),
+                    },
+                ),
+                m_ext::utils::quote::Op::Wrap,
+                principal,
+                true,
+            )?
+            .get();
 
-        let wrap_principal = if exact_out {
-            principal
+            (m_principal_in, principal)
         } else {
-            unwrap_accounts.quote(principal, false)?
+            // CPI to the from_ext and get the amount of m returned from the unwrap
+            let m_principal_out = m_ext::cpi::quote(
+                CpiContext::new(
+                    ctx.accounts.from_ext_program.to_account_info(),
+                    m_ext::cpi::accounts::Quote {
+                        m_mint: ctx.accounts.m_mint.to_account_info(),
+                        ext_mint: ctx.accounts.from_mint.to_account_info(),
+                        global_account: ctx.accounts.from_global.to_account_info(),
+                    },
+                ),
+                m_ext::utils::quote::Op::Unwrap,
+                principal,
+                false,
+            )?
+            .get();
+
+            (principal, m_principal_out)
         };
 
         // Set swap program as authority if none provided
