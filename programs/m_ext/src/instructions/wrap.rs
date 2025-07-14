@@ -141,6 +141,9 @@ impl Wrap<'_> {
 
 #[derive(Accounts)]
 pub struct OptimisticWrap<'info> {
+    // TODO a couple accounts are not needed in this version. might make sense to copy and remove them:
+    // - from_token_account
+    // - token_authority -> will need an explicit wrap authority passed though, however not including means we reduce the risk of the callback since this user doesn't have to sign this call
     common: Wrap<'info>,
 
     /// CHECK: Manually validated as a program
@@ -167,6 +170,9 @@ impl<'info> OptimisticWrap<'info> {
         if !self.callback_program.executable {
             return err!(ExtError::InvalidAccount);
         }
+
+        // TODO do we need to add a re-entrancy lock
+        // to prevent nested calls to this program from the callback?
         Ok(())
     }
 

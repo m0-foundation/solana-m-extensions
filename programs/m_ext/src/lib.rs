@@ -96,6 +96,14 @@ pub mod m_ext {
         Unwrap::handler(ctx, principal, exact_out)
     }
 
+    pub fn optimistic_unwrap<'info>(
+        ctx: Context<'_, '_, '_, 'info, OptimisticUnwrap<'info>>,
+        principal: u64,
+        exact_out: bool,
+    ) -> Result<()> {
+        OptimisticUnwrap::handler(ctx, principal, exact_out)
+    }
+
     // Open instructions
 
     #[cfg(feature = "scaled-ui")]

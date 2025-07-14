@@ -104,24 +104,16 @@ impl Unwrap<'_> {
             &[ctx.accounts.global_account.ext_mint_authority_bump],
         ]];
 
-        // If necessary, sync the multiplier between M and Ext tokens
-        // Return the current value to use for conversions
-        let (m_ext_multiplier, ext_multiplier): (f64, f64) = sync_multiplier(
+        let (m_principal, ext_principal) = pre_unwrap(
             &mut ctx.accounts.ext_mint,
-            &mut ctx.accounts.global_account,
             &ctx.accounts.m_mint,
+            &mut ctx.accounts.global_account,
             &ctx.accounts.ext_mint_authority,
             authority_seeds,
             &ctx.accounts.ext_token_program,
+            principal,
+            exact_out,
         )?;
-
-        let quoter = Quoter::new_from_cache(m_ext_multiplier, ext_multiplier);
-
-        let (m_principal, ext_principal): (u64, u64) = if exact_out {
-            (quoter.quote(Op::Unwrap, principal, true)?, principal)
-        } else {
-            (principal, quoter.quote(Op::Unwrap, principal, false)?)
-        };
 
         // Burn the amount of ext tokens from the user
         burn_tokens(
@@ -144,5 +136,136 @@ impl Unwrap<'_> {
         )?;
 
         Ok(())
+    }
+}
+
+#[derive(Accounts)]
+pub struct OptimisticUnwrap<'info> {
+    common: Unwrap<'info>,
+
+    /// CHECK: Manually validated as a program in instruction handler
+    pub callback_program: UncheckedAccount<'info>,
+}
+
+impl<'info> OptimisticUnwrap<'info> {
+    fn validate(&self, principal: u64) -> Result<()> {
+        let auth = match &self.common.unwrap_authority {
+            Some(auth) => auth.key,
+            None => self.common.token_authority.key,
+        };
+
+        // Ensure the caller is authorized to wrap
+        if !self.common.global_account.wrap_authorities.contains(auth) {
+            return err!(ExtError::NotAuthorized);
+        }
+
+        if principal == 0 {
+            return err!(ExtError::InvalidAmount);
+        }
+
+        // Ensure callback program is executable
+        if !self.callback_program.executable {
+            return err!(ExtError::InvalidAccount);
+        }
+
+        Ok(())
+    }
+
+    #[access_control(ctx.accounts.validate(principal))]
+    pub fn handler(
+        ctx: Context<'_, '_, '_, 'info, Self>,
+        principal: u64,
+        exact_out: bool,
+    ) -> Result<()> {
+        let authority_seeds: &[&[&[u8]]] = &[&[
+            MINT_AUTHORITY_SEED,
+            &[ctx.accounts.common.global_account.ext_mint_authority_bump],
+        ]];
+
+        let (m_principal, ext_principal) = pre_unwrap(
+            &mut ctx.accounts.common.ext_mint,
+            &ctx.accounts.common.m_mint,
+            &mut ctx.accounts.common.global_account,
+            &ctx.accounts.common.ext_mint_authority,
+            authority_seeds,
+            &ctx.accounts.common.ext_token_program,
+            principal,
+            exact_out,
+        )?;
+
+        // Send the M tokens to the to_token_account optimistically
+        transfer_tokens_from_program(
+            &ctx.accounts.common.vault_m_token_account, // from
+            &ctx.accounts.common.to_m_token_account,    // to
+            m_principal,                                // amount
+            &ctx.accounts.common.m_mint,                // mint
+            &ctx.accounts.common.m_vault,               // authority
+            &[&[
+                M_VAULT_SEED,
+                &[ctx.accounts.common.global_account.m_vault_bump],
+            ]], // authority seeds
+            &ctx.accounts.common.m_token_program,       // token program
+        )?;
+
+        // CPI to the callback program to allow it to perform additional logic
+        // TODO: does this need to be custodied by the program or can we use the provided "from_token_account"
+        callback_interface::cpi::callback(
+            CpiContext::new(
+                ctx.accounts.callback_program.to_account_info(),
+                callback_interface::cpi::accounts::Callback {
+                    mint: ctx.accounts.common.ext_mint.to_account_info(),
+                    send_to: ctx.accounts.common.from_ext_token_account.to_account_info(),
+                    token_program: ctx.accounts.common.ext_token_program.to_account_info(),
+                },
+            )
+            .with_remaining_accounts(ctx.remaining_accounts.to_vec()),
+            ext_principal,
+        )?;
+
+        // Reload the from_ext_token_account
+        ctx.accounts.common.from_ext_token_account.reload()?;
+
+        // Burn the ext_principal from the from_ext_token_account
+        // This suffices as a balance check since it will fail if they did not provide the tokens
+        burn_tokens(
+            &ctx.accounts.common.from_ext_token_account, // from
+            ext_principal,                               // amount
+            &ctx.accounts.common.ext_mint,               // mint
+            &ctx.accounts.common.token_authority.to_account_info(), // authority
+            &ctx.accounts.common.ext_token_program,      // token program
+        )?;
+
+        Ok(())
+    }
+}
+
+fn pre_unwrap<'info>(
+    ext_mint: &mut InterfaceAccount<'info, Mint>,
+    m_mint: &InterfaceAccount<'info, Mint>,
+    ext_global_account: &mut Account<'info, ExtGlobal>,
+    ext_mint_authority: &AccountInfo<'info>,
+    authority_seeds: &[&[&[u8]]],
+    ext_token_program: &Program<'info, Token2022>,
+    principal: u64,
+    exact_out: bool,
+) -> Result<(u64, u64)> {
+    // If necessary, sync the multiplier between M and Ext tokens
+    // Return the current value to use for conversions
+    let (m_ext_multiplier, ext_multiplier): (f64, f64) = sync_multiplier(
+        ext_mint,
+        ext_global_account,
+        m_mint,
+        ext_mint_authority,
+        authority_seeds,
+        ext_token_program,
+    )?;
+
+    let quoter = Quoter::new_from_cache(m_ext_multiplier, ext_multiplier);
+
+    // Return (m_principal, ext_principal) quote for the unwrap operation
+    if exact_out {
+        Ok((quoter.quote(Op::Unwrap, principal, true)?, principal))
+    } else {
+        Ok((principal, quoter.quote(Op::Unwrap, principal, false)?))
     }
 }
