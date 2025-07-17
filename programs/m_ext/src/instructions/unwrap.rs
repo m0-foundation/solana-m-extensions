@@ -140,14 +140,14 @@ impl Unwrap<'_> {
 }
 
 #[derive(Accounts)]
-pub struct OptimisticUnwrap<'info> {
+pub struct FlashUnwrap<'info> {
     common: Unwrap<'info>,
 
     /// CHECK: Manually validated as a program in instruction handler
     pub callback_program: UncheckedAccount<'info>,
 }
 
-impl<'info> OptimisticUnwrap<'info> {
+impl<'info> FlashUnwrap<'info> {
     fn validate(&self, principal: u64) -> Result<()> {
         let auth = match &self.common.unwrap_authority {
             Some(auth) => auth.key,
@@ -193,7 +193,7 @@ impl<'info> OptimisticUnwrap<'info> {
             exact_out,
         )?;
 
-        // Send the M tokens to the to_token_account optimistically
+        // Send the M tokens to the to_token_account flashally
         transfer_tokens_from_program(
             &ctx.accounts.common.vault_m_token_account, // from
             &ctx.accounts.common.to_m_token_account,    // to

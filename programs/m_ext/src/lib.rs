@@ -84,24 +84,24 @@ pub mod m_ext {
         Wrap::handler(ctx, principal, exact_out)
     }
 
-    pub fn optimistic_wrap<'info>(
-        ctx: Context<'_, '_, '_, 'info, OptimisticWrap<'info>>,
+    pub fn flash_wrap<'info>(
+        ctx: Context<'_, '_, '_, 'info, FlashWrap<'info>>,
         principal: u64,
         exact_out: bool,
     ) -> Result<()> {
-        OptimisticWrap::handler(ctx, principal, exact_out)
+        FlashWrap::handler(ctx, principal, exact_out)
     }
 
     pub fn unwrap(ctx: Context<Unwrap>, principal: u64, exact_out: bool) -> Result<()> {
         Unwrap::handler(ctx, principal, exact_out)
     }
 
-    pub fn optimistic_unwrap<'info>(
-        ctx: Context<'_, '_, '_, 'info, OptimisticUnwrap<'info>>,
+    pub fn flash_unwrap<'info>(
+        ctx: Context<'_, '_, '_, 'info, FlashUnwrap<'info>>,
         principal: u64,
         exact_out: bool,
     ) -> Result<()> {
-        OptimisticUnwrap::handler(ctx, principal, exact_out)
+        FlashUnwrap::handler(ctx, principal, exact_out)
     }
 
     // Open instructions

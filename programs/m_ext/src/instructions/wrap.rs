@@ -140,7 +140,7 @@ impl Wrap<'_> {
 }
 
 #[derive(Accounts)]
-pub struct OptimisticWrap<'info> {
+pub struct FlashWrap<'info> {
     // TODO a couple accounts are not needed in this version. might make sense to copy and remove them:
     // - from_token_account
     // - token_authority -> will need an explicit wrap authority passed though, however not including means we reduce the risk of the callback since this user doesn't have to sign this call
@@ -150,7 +150,7 @@ pub struct OptimisticWrap<'info> {
     callback_program: UncheckedAccount<'info>,
 }
 
-impl<'info> OptimisticWrap<'info> {
+impl<'info> FlashWrap<'info> {
     fn validate(&self, principal: u64) -> Result<()> {
         let auth = match &self.common.wrap_authority {
             Some(auth) => auth.key,
@@ -198,7 +198,7 @@ impl<'info> OptimisticWrap<'info> {
             exact_out,
         )?;
 
-        // Mint the ext_principal to the to_token_account optimistically
+        // Mint the ext_principal to the to_token_account flashally
         mint_tokens(
             &ctx.accounts.common.to_ext_token_account, // to
             ext_principal,                             // amount
