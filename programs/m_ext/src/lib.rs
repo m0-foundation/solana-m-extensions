@@ -77,6 +77,10 @@ pub mod m_ext {
         ClaimFees::handler(ctx)
     }
 
+    pub fn migrate_m(ctx: Context<MigrateM>) -> Result<()> {
+        MigrateM::handler(ctx)
+    }
+
     // Wrap authority instructions
 
     pub fn wrap(ctx: Context<Wrap>, amount: u64) -> Result<()> {
