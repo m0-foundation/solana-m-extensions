@@ -55,6 +55,27 @@ cfg_if! {
                 8 // last_ext_index
             }
         }
+    } else if #[cfg(feature = "crank")] {
+       #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+        pub struct YieldConfig {
+            pub earn_authority: Pubkey,        // address that can distribute yield
+            pub index: u64,                    // most recent index that yield is being distributed for
+            pub timestamp: u64,                // timestamp of the most recent index update
+        }
+
+        impl YieldConfig {
+            pub fn space() -> usize {
+                32 + // earn_authority
+                8 + // index
+                8 // timestamp
+            }
+        }
+
+        pub mod earner;
+        pub mod earn_manager;
+
+        pub use earner::*;
+        pub use earn_manager::*;
     } else {
         #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
         pub struct YieldConfig {}

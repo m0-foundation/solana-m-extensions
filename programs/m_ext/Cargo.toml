@@ -19,6 +19,7 @@ idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 # yield features
 scaled-ui = []
 no-yield = []
+crank = []
 
 [dependencies]
 anchor-lang.workspace = true

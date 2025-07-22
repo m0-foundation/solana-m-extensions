@@ -14,10 +14,10 @@ pub use wrap::*;
 
 cfg_if::cfg_if!(
     if #[cfg(feature = "scaled-ui")] {
-        pub mod set_fee;
-        pub mod sync;
-
-        pub use set_fee::*;
-        pub use sync::*;
+        pub mod scaled_ui;
+        pub use scaled_ui::*;
+    } else if #[cfg(feature = "crank")] {
+        pub mod crank;
+        pub use crank::*;
     }
 );

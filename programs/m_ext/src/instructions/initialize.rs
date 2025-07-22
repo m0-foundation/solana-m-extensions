@@ -26,6 +26,8 @@ cfg_if! {
             constants::{INDEX_SCALE_F64, INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
             utils::conversion::{sync_multiplier, get_mint_extensions, get_scaled_ui_config},
         };
+    } else if #[cfg(feature = "crank")] {
+        use crate::constants::INDEX_SCALE_F64;
     }
 }
 
@@ -104,8 +106,9 @@ impl Initialize<'_> {
     // and initializes the Scaled UI multiplier to 1.0.
     // The ext_mint must have a supply of 0 to start.
     // The wrap authorities are validated and stored in the global account.
-    // The fee_bps is validated to be within the allowed range.
-    fn validate(&self, _fee_bps: u64) -> Result<()> {
+    // The fee_bps is used by the scaled-ui variant. It is validated to be within the allowed range.
+    // The earn_authority is only required for the crank variant.
+    fn validate(&self, _fee_bps: Option<u64>, _earn_authority: Option<Pubkey>) -> Result<()> {
         // Validate the ext_mint_authority PDA is the mint authority for the ext mint
         let ext_mint_authority = self.ext_mint_authority.key();
         if self.ext_mint.mint_authority.unwrap_or_default() != ext_mint_authority {
@@ -133,7 +136,12 @@ impl Initialize<'_> {
                 }
 
                 // Validate the fee_bps is within the allowed range
-                if _fee_bps > ONE_HUNDRED_PERCENT_U64 {
+                if _fee_bps.unwrap_or(0) > ONE_HUNDRED_PERCENT_U64 {
+                    return err!(ExtError::InvalidParam);
+                }
+            } else if #[cfg(feature = "crank")] {
+                // Validate the earn authority is provided
+                if _earn_authority.is_none() {
                     return err!(ExtError::InvalidParam);
                 }
             }
@@ -142,11 +150,12 @@ impl Initialize<'_> {
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(fee_bps))]
+    #[access_control(ctx.accounts.validate(fee_bps, earn_authority))]
     pub fn handler(
         ctx: Context<Initialize>,
         wrap_authorities: Vec<Pubkey>,
-        fee_bps: u64,
+        fee_bps: Option<u64>,
+        earn_authority: Option<Pubkey>,
     ) -> Result<()> {
         // Create hash set from wrap_authorities to ensure uniqueness
         let wrap_auth_set: HashSet<Pubkey> = wrap_authorities.clone().into_iter().collect();
@@ -162,9 +171,21 @@ impl Initialize<'_> {
                     earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
                 let m_multiplier: f64 = m_scaled_ui_config.new_multiplier.into();
                 yield_config = YieldConfig {
-                    fee_bps,
+                    fee_bps: fee_bps.unwrap_or(0),
                     last_m_index: (m_multiplier * INDEX_SCALE_F64) as u64,
                     last_ext_index: INDEX_SCALE_U64, // we set the extension index to 1.0 initially
+                };
+            } else if #[cfg(feature = "crank")] {
+               let m_scaled_ui_config =
+                    earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
+                let m_multiplier: f64 = m_scaled_ui_config.new_multiplier.into();
+                let timestamp: i64 = m_scaled_ui_config.new_multiplier_effective_timestamp.into();
+                let m_index: u64 = (INDEX_SCALE_F64 * m_multiplier).trunc() as u64;
+
+                yield_config = YieldConfig {
+                    earn_authority: earn_authority.unwrap_or_default(),
+                    index: m_index,
+                    timestamp: timestamp as u64,
                 };
             } else {
                 yield_config = YieldConfig {};

@@ -26,4 +26,6 @@ pub enum ExtError {
     InvalidInput,
     #[msg("Invalid amount")]
     InvalidAmount,
+    #[msg("Already claimed for user.")]
+    AlreadyClaimed,
 }
