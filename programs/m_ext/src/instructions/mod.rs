@@ -1,12 +1,14 @@
 pub mod claim_fees;
 pub mod initialize;
 pub mod manage_wrap_authority;
+pub mod quote;
 pub mod unwrap;
 pub mod wrap;
 
 pub use claim_fees::*;
 pub use initialize::*;
 pub use manage_wrap_authority::*;
+pub use quote::*;
 pub use unwrap::*;
 pub use wrap::*;
 

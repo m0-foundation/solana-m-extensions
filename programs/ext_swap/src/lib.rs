@@ -55,20 +55,31 @@ pub mod ext_swap {
 
     pub fn swap<'info>(
         ctx: Context<'_, '_, '_, 'info, Swap<'info>>,
-        amount: u64,
+        principal: u64,
+        exact_out: bool,
         remaining_accounts_split_idx: u8,
     ) -> Result<()> {
-        Swap::handler(ctx, amount, remaining_accounts_split_idx as usize)
+        Swap::handler(
+            ctx,
+            principal,
+            exact_out,
+            remaining_accounts_split_idx as usize,
+        )
     }
 
-    pub fn wrap<'info>(ctx: Context<'_, '_, '_, 'info, Wrap<'info>>, amount: u64) -> Result<()> {
-        Wrap::handler(ctx, amount)
+    pub fn wrap<'info>(
+        ctx: Context<'_, '_, '_, 'info, Wrap<'info>>,
+        principal: u64,
+        exact_out: bool,
+    ) -> Result<()> {
+        Wrap::handler(ctx, principal, exact_out)
     }
 
     pub fn unwrap<'info>(
         ctx: Context<'_, '_, '_, 'info, Unwrap<'info>>,
-        amount: u64,
+        principal: u64,
+        exact_out: bool,
     ) -> Result<()> {
-        Unwrap::handler(ctx, amount)
+        Unwrap::handler(ctx, principal, exact_out)
     }
 }

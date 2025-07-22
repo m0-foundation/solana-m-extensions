@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use m_ext::cpi::accounts::{Unwrap, Wrap};
+// use m_ext::instructions::{Unwrap, Wrap};
 use m_ext::state::{EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
 
 use crate::{
@@ -153,7 +154,7 @@ pub struct Swap<'info> {
 impl<'info> Swap<'info> {
     fn validate(
         &self,
-        from_principal: u64,
+        principal: u64,
         remaining_accounts: &[AccountInfo<'_>],
         remaining_accounts_split_idx: usize,
     ) -> Result<()> {
@@ -171,26 +172,66 @@ impl<'info> Swap<'info> {
             return err!(SwapError::InvalidIndex);
         }
 
-        if from_principal == 0 {
+        if principal == 0 {
             return err!(SwapError::InvalidAmount);
         }
 
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(from_principal, ctx.remaining_accounts, remaining_accounts_split_idx))]
+    #[access_control(ctx.accounts.validate(principal, ctx.remaining_accounts, remaining_accounts_split_idx))]
     pub fn handler(
         ctx: Context<'_, '_, '_, 'info, Self>,
-        from_principal: u64,
+        principal: u64,
+        exact_out: bool,
         remaining_accounts_split_idx: usize,
     ) -> Result<()> {
-        let m_pre_balance = ctx.accounts.intermediate_m_account.amount;
-        let to_pre_balance = ctx.accounts.to_token_account.amount;
+        // let m_pre_balance = ctx.accounts.intermediate_m_account.amount;
+        // let to_pre_balance = ctx.accounts.to_token_account.amount;
 
         // Optional remaining accounts passed to the instructions
         let remaining_accounts = ctx.remaining_accounts;
         let (unwrap_remaining_accounts, wrap_remaining_accounts) =
             remaining_accounts.split_at(remaining_accounts_split_idx);
+
+        // Get quotes for each operation
+        let (unwrap_principal, wrap_principal): (u64, u64) = if exact_out {
+            // CPI to the to_ext and get the input amount required for`principal` out
+            let m_principal_in = m_ext::cpi::quote(
+                CpiContext::new(
+                    ctx.accounts.to_ext_program.to_account_info(),
+                    m_ext::cpi::accounts::Quote {
+                        m_mint: ctx.accounts.m_mint.to_account_info(),
+                        ext_mint: ctx.accounts.to_mint.to_account_info(),
+                        global_account: ctx.accounts.to_global.to_account_info(),
+                    },
+                ),
+                m_ext::utils::quote::Op::Wrap,
+                principal,
+                true,
+            )?
+            .get();
+
+            (m_principal_in, principal)
+        } else {
+            // CPI to the from_ext and get the amount of m returned from the unwrap
+            let m_principal_out = m_ext::cpi::quote(
+                CpiContext::new(
+                    ctx.accounts.from_ext_program.to_account_info(),
+                    m_ext::cpi::accounts::Quote {
+                        m_mint: ctx.accounts.m_mint.to_account_info(),
+                        ext_mint: ctx.accounts.from_mint.to_account_info(),
+                        global_account: ctx.accounts.from_global.to_account_info(),
+                    },
+                ),
+                m_ext::utils::quote::Op::Unwrap,
+                principal,
+                false,
+            )?
+            .get();
+
+            (principal, m_principal_out)
+        };
 
         // Set swap program as authority if none provided
         let unwrap_authority = match &ctx.accounts.unwrap_authority {
@@ -198,6 +239,7 @@ impl<'info> Swap<'info> {
             None => ctx.accounts.swap_global.to_account_info(),
         };
 
+        // Execute the unwrap
         m_ext::cpi::unwrap(
             CpiContext::new_with_signer(
                 ctx.accounts.from_ext_program.to_account_info(),
@@ -218,12 +260,13 @@ impl<'info> Swap<'info> {
                 &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
             )
             .with_remaining_accounts(unwrap_remaining_accounts.to_vec()),
-            from_principal,
+            unwrap_principal,
+            exact_out,
         )?;
 
-        // Reload M balance and wrap difference
-        ctx.accounts.intermediate_m_account.reload()?;
-        let m_delta = ctx.accounts.intermediate_m_account.amount - m_pre_balance;
+        // // Reload M balance and wrap difference
+        // ctx.accounts.intermediate_m_account.reload()?;
+        // let m_delta = ctx.accounts.intermediate_m_account.amount - m_pre_balance;
 
         // Set swap program as authority if none provided
         let wrap_authority = match &ctx.accounts.wrap_authority {
@@ -231,6 +274,7 @@ impl<'info> Swap<'info> {
             None => ctx.accounts.swap_global.to_account_info(),
         };
 
+        // Execute the wrap
         m_ext::cpi::wrap(
             CpiContext::new_with_signer(
                 ctx.accounts.to_ext_program.to_account_info(),
@@ -251,13 +295,14 @@ impl<'info> Swap<'info> {
                 &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
             )
             .with_remaining_accounts(wrap_remaining_accounts.to_vec()),
-            m_delta,
+            wrap_principal,
+            exact_out,
         )?;
 
         // Reload and log amounts
-        ctx.accounts.to_token_account.reload()?;
-        let to_principal = ctx.accounts.to_token_account.amount - to_pre_balance;
-        msg!("{} -> {} M -> {}", from_principal, m_delta, to_principal);
+        // ctx.accounts.to_token_account.reload()?;
+        // let to_principal = ctx.accounts.to_token_account.amount - to_pre_balance;
+        // msg!("{} -> {} M -> {}", from_principal, m_delta, to_principal);
 
         // Close intermediate account
         ctx.accounts.intermediate_m_account.reload()?;

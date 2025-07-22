@@ -9,6 +9,7 @@ pub mod utils;
 use anchor_lang::prelude::*;
 
 use instructions::*;
+use utils::quote::Op;
 
 #[cfg(not(feature = "no-entrypoint"))]
 solana_security_txt::security_txt! {
@@ -79,12 +80,28 @@ pub mod m_ext {
 
     // Wrap authority instructions
 
-    pub fn wrap(ctx: Context<Wrap>, amount: u64) -> Result<()> {
-        Wrap::handler(ctx, amount)
+    pub fn wrap(ctx: Context<Wrap>, principal: u64, exact_out: bool) -> Result<()> {
+        Wrap::handler(ctx, principal, exact_out)
     }
 
-    pub fn unwrap(ctx: Context<Unwrap>, amount: u64) -> Result<()> {
-        Unwrap::handler(ctx, amount)
+    pub fn flash_wrap<'info>(
+        ctx: Context<'_, '_, '_, 'info, FlashWrap<'info>>,
+        principal: u64,
+        exact_out: bool,
+    ) -> Result<()> {
+        FlashWrap::handler(ctx, principal, exact_out)
+    }
+
+    pub fn unwrap(ctx: Context<Unwrap>, principal: u64, exact_out: bool) -> Result<()> {
+        Unwrap::handler(ctx, principal, exact_out)
+    }
+
+    pub fn flash_unwrap<'info>(
+        ctx: Context<'_, '_, '_, 'info, FlashUnwrap<'info>>,
+        principal: u64,
+        exact_out: bool,
+    ) -> Result<()> {
+        FlashUnwrap::handler(ctx, principal, exact_out)
     }
 
     // Open instructions
@@ -92,5 +109,14 @@ pub mod m_ext {
     #[cfg(feature = "scaled-ui")]
     pub fn sync(ctx: Context<Sync>) -> Result<()> {
         Sync::handler(ctx)
+    }
+
+    pub fn quote(
+        ctx: Context<Quote>,
+        operation: Op,
+        principal: u64,
+        exact_out: bool,
+    ) -> Result<u64> {
+        Quote::handler(ctx, operation, principal, exact_out)
     }
 }
