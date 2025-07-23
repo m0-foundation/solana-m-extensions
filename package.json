@@ -3,7 +3,12 @@
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
     "test": "make test-programs",
-    "build": "make build-programs"
+    "build": "make build-programs",
+    "cli:dev": "op run --account mzerolabs.1password.com --env-file='.env.dev' -- ts-node services/cli/main.ts",
+    "cli:prod": "op run --account mzerolabs.1password.com --env-file='.env.prod' -- ts-node services/cli/main.ts",
+    "deploy:dev": "op run --no-masking --account mzerolabs.1password.com --env-file='.env.dev' -- ts-node services/cli/deploy.ts",
+    "deploy:prod": "op run --no-masking --account mzerolabs.1password.com --env-file='.env.prod' -- ts-node services/cli/deploy.ts",
+    "make:dev": "source .env.dev && make"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
@@ -18,14 +23,23 @@
     "litesvm": "0.2.0"
   },
   "devDependencies": {
-    "@types/bn.js": "^5.1.0",
-    "@types/jest": "^29.0.3",
-    "@types/node": "^22.13.13",
-    "jest": "^29.0.3",
-    "nock": "^14.0.2",
-    "prettier": "^2.6.2",
-    "ts-jest": "^29.0.2",
-    "ts-node": "^10.9.2",
-    "typescript": "5"
+    "@coral-xyz/anchor": "catalog:",
+    "@m0-foundation/solana-m-sdk": "catalog:",
+    "@solana/spl-token": "catalog:",
+    "@solana/spl-token-metadata": "~0.1.6",
+    "@solana/web3.js": "catalog:",
+    "@types/bn.js": "catalog:",
+    "@types/jest": "~29.0.3",
+    "@types/node": "^22.15.32",
+    "anchor-litesvm": "~0.1.1",
+    "bn.js": "catalog:",
+    "fastestsmallesttextencoderdecoder": "catalog:",
+    "jest": "~29.0.3",
+    "litesvm": "~0.1.0",
+    "nock": "~14.0.2",
+    "prettier": "catalog:",
+    "ts-jest": "~29.0.2",
+    "ts-node": "~10.9.2",
+    "typescript": "catalog:"
   }
 }

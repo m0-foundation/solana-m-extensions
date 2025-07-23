@@ -10,10 +10,11 @@ build-programs:
 	@cp target/types/m_ext.ts target/types/no_yield.ts
 
 test-programs:
-	@yarn run jest --preset ts-jest --verbose tests/unit/**.test.ts
-	@cargo test
+	@pnpm jest --preset ts-jest --verbose tests/unit/**.test.ts; exit $$?
+	@cargo test; exit $$?
 
 define update-program-id
+ 	@echo "Updating program ID in m_ext/src/lib.rs to $(1)"
 	@sed -i '' 's/declare_id!("[^"]*")/declare_id!("$(1)")/' programs/m_ext/src/lib.rs
 endef
 

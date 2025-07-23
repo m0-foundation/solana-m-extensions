@@ -25,5 +25,5 @@ jobs:
         uses: ./.github/setup
 
       - name: Run tests
-        run: yarn test
+        run: pnpm test
         shell: bash
