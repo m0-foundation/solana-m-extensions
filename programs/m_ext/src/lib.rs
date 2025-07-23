@@ -60,11 +60,6 @@ pub mod m_ext {
         Initialize::handler(ctx, wrap_authorities, Some(fee_bps), None)
     }
 
-    #[cfg(feature = "no-yield")]
-    pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
-        Initialize::handler(ctx, wrap_authorities, None, None)
-    }
-
     #[cfg(feature = "crank")]
     pub fn initialize(
         ctx: Context<Initialize>,
@@ -72,6 +67,11 @@ pub mod m_ext {
         earn_authority: Pubkey,
     ) -> Result<()> {
         Initialize::handler(ctx, wrap_authorities, None, Some(earn_authority))
+    }
+
+    #[cfg(not(any(feature = "crank", feature = "scaled-ui")))]
+    pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
+        Initialize::handler(ctx, wrap_authorities, None, None)
     }
 
     #[cfg(feature = "scaled-ui")]
