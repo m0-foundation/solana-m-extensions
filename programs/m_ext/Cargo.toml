@@ -1,6 +1,6 @@
 [package]
 name = "m_ext"
-version = "0.1.0"
+version = "0.2.0"
 description = "M extension program with various yield distribution options chosen at compile time"
 edition = "2021"
 
