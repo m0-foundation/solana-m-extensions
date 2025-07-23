@@ -28,4 +28,6 @@ pub enum ExtError {
     InvalidAmount,
     #[msg("Already claimed for user.")]
     AlreadyClaimed,
+    #[msg("Failed to serialize account data.")]
+    SerializationError,
 }

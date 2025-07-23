@@ -36,6 +36,14 @@ const _: () = {
         1 => {}
         2.. => panic!("Only one yield distribution feature can be enabled at a time"),
     }
+
+    // There are no existing m_ext crank programs to migrate from V1, only wM
+    // Therefore, "migrate" + "crank" without "wm" is not a valid configuration
+    if cfg!(feature = "migrate") && cfg!(feature = "crank") && !cfg!(feature = "wm") {
+        panic!(
+            "Invalid feature configuration: 'migrate' and 'crank' cannot be enabled without 'wm'"
+        );
+    }
 };
 
 #[program]
@@ -112,6 +120,7 @@ pub mod m_ext {
         RemoveEarnManager::handler(ctx)
     }
 
+    #[cfg(feature = "migrate")]
     pub fn migrate_m(ctx: Context<MigrateM>) -> Result<()> {
         MigrateM::handler(ctx)
     }

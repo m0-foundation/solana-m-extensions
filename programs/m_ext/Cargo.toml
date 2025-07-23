@@ -21,6 +21,10 @@ scaled-ui = []
 no-yield = []
 crank = []
 
+# Migration feature flag
+migrate = []
+wm = ["crank", "migrate"]
+
 [dependencies]
 anchor-lang.workspace = true
 anchor-spl.workspace = true
