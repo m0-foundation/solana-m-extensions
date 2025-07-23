@@ -14,7 +14,9 @@ use std::collections::HashSet;
 // local dependencies
 use crate::{
     errors::ExtError,
-    state::{ExtGlobal, YieldConfig, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
+    state::{
+        ExtGlobalV2, YieldConfig, YieldVariant, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED,
+    },
 };
 
 // conditional dependencies
@@ -40,13 +42,13 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = admin,
-        space = ExtGlobal::size(
+        space = ExtGlobalV2::size(
             wrap_authorities.len()
         ),
         seeds = [EXT_GLOBAL_SEED],
         bump
     )]
-    pub global_account: Account<'info, ExtGlobal>,
+    pub global_account: Account<'info, ExtGlobalV2>,
 
     #[account(
         mint::token_program = m_token_program,
@@ -171,6 +173,7 @@ impl Initialize<'_> {
                     earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
                 let m_multiplier: f64 = m_scaled_ui_config.new_multiplier.into();
                 yield_config = YieldConfig {
+                    yield_variant: YieldVariant::ScaledUi,
                     fee_bps: fee_bps.unwrap_or(0),
                     last_m_index: (m_multiplier * INDEX_SCALE_F64) as u64,
                     last_ext_index: INDEX_SCALE_U64, // we set the extension index to 1.0 initially
@@ -183,17 +186,20 @@ impl Initialize<'_> {
                 let m_index: u64 = (INDEX_SCALE_F64 * m_multiplier).trunc() as u64;
 
                 yield_config = YieldConfig {
+                    yield_variant: YieldVariant::Crank,
                     earn_authority: earn_authority.unwrap_or_default(),
                     index: m_index,
                     timestamp: timestamp as u64,
                 };
             } else {
-                yield_config = YieldConfig {};
+                yield_config = YieldConfig {
+                    yield_variant: YieldVariant::NoYield,
+                };
             }
         }
 
-        // Initialize the ExtGlobal account
-        ctx.accounts.global_account.set_inner(ExtGlobal {
+        // Initialize the ExtGlobalV2 account
+        ctx.accounts.global_account.set_inner(ExtGlobalV2 {
             admin: ctx.accounts.admin.key(),
             ext_mint: ctx.accounts.ext_mint.key(),
             m_mint: ctx.accounts.m_mint.key(),

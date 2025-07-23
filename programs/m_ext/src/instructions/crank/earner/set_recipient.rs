@@ -3,7 +3,7 @@ use anchor_spl::token_interface::TokenAccount;
 
 use crate::{
     errors::ExtError,
-    state::{Earner, ExtGlobal, EARNER_SEED, EXT_GLOBAL_SEED},
+    state::{Earner, ExtGlobalV2, EARNER_SEED, EXT_GLOBAL_SEED},
 };
 
 #[derive(Accounts)]
@@ -20,7 +20,7 @@ pub struct SetRecipient<'info> {
         seeds = [EXT_GLOBAL_SEED],
         bump = global_account.bump,
     )]
-    pub global_account: Account<'info, ExtGlobal>,
+    pub global_account: Account<'info, ExtGlobalV2>,
 
     #[account(
         mut,

@@ -5,7 +5,7 @@ use cfg_if::cfg_if;
 pub const EXT_GLOBAL_SEED: &[u8] = b"global";
 
 #[account]
-pub struct ExtGlobal {
+pub struct ExtGlobalV2 {
     pub admin: Pubkey, // can update config values
     pub ext_mint: Pubkey,
     pub m_mint: Pubkey,
@@ -17,7 +17,7 @@ pub struct ExtGlobal {
     pub wrap_authorities: Vec<Pubkey>, // accounts permissioned to wrap/unwrap the ext_mint
 }
 
-impl ExtGlobal {
+impl ExtGlobalV2 {
     pub fn size(wrap_authorities: usize) -> usize {
         8 + // discriminator
         32 + // admin
@@ -39,10 +39,19 @@ pub const MINT_AUTHORITY_SEED: &[u8] = b"mint_authority";
 #[constant]
 pub const M_VAULT_SEED: &[u8] = b"m_vault";
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+#[repr(u8)]
+pub enum YieldVariant {
+    NoYield,
+    ScaledUi,
+    Crank,
+}
+
 cfg_if! {
     if #[cfg(feature = "scaled-ui")] {
         #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
         pub struct YieldConfig {
+            pub yield_variant: YieldVariant, // variant of yield config
             pub fee_bps: u64, // fee in basis points
             pub last_m_index: u64, // last m index
             pub last_ext_index: u64, // last ext index
@@ -50,6 +59,7 @@ cfg_if! {
 
         impl YieldConfig {
             pub fn space() -> usize {
+                1 + // yield_variant
                 8 + // fee_bps
                 8 + // last_m_index
                 8 // last_ext_index
@@ -58,6 +68,7 @@ cfg_if! {
     } else if #[cfg(feature = "crank")] {
        #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
         pub struct YieldConfig {
+            pub yield_variant: YieldVariant,   // variant of yield config
             pub earn_authority: Pubkey,        // address that can distribute yield
             pub index: u64,                    // most recent index that yield is being distributed for
             pub timestamp: u64,                // timestamp of the most recent index update
@@ -65,6 +76,7 @@ cfg_if! {
 
         impl YieldConfig {
             pub fn space() -> usize {
+                1 + // yield_variant
                 32 + // earn_authority
                 8 + // index
                 8 // timestamp
@@ -78,11 +90,13 @@ cfg_if! {
         pub use earn_manager::*;
     } else {
         #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
-        pub struct YieldConfig {}
+        pub struct YieldConfig {
+            pub yield_variant: YieldVariant, // variant of yield config
+        }
 
         impl YieldConfig {
             pub fn space() -> usize {
-                0 // no space needed for yield config in no-yield mode
+                1 // yield_variant
             }
         }
     }

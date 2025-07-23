@@ -7,7 +7,7 @@ use crate::{
     constants::ONE_HUNDRED_PERCENT_U64,
     errors::ExtError,
     state::{
-        EarnManager, Earner, ExtGlobal, EARNER_SEED, EARN_MANAGER_SEED, EXT_GLOBAL_SEED,
+        EarnManager, Earner, ExtGlobalV2, EARNER_SEED, EARN_MANAGER_SEED, EXT_GLOBAL_SEED,
         MINT_AUTHORITY_SEED, M_VAULT_SEED,
     },
     utils::token::mint_tokens,
@@ -26,7 +26,7 @@ pub struct ClaimFor<'info> {
         seeds = [EXT_GLOBAL_SEED],
         bump = global_account.bump,
     )]
-    pub global_account: Account<'info, ExtGlobal>,
+    pub global_account: Account<'info, ExtGlobalV2>,
 
     #[account(mut)]
     pub ext_mint: InterfaceAccount<'info, Mint>,

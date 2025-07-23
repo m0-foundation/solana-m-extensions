@@ -4,7 +4,7 @@ use earn::{constants::INDEX_SCALE_F64, utils::conversion::get_scaled_ui_config};
 
 use crate::{
     errors::ExtError,
-    state::{ExtGlobal, EXT_GLOBAL_SEED},
+    state::{ExtGlobalV2, EXT_GLOBAL_SEED},
 };
 
 #[derive(Accounts)]
@@ -22,7 +22,7 @@ pub struct Sync<'info> {
         bump = global_account.bump,
         has_one = m_mint @ ExtError::InvalidAccount,
     )]
-    pub global_account: Account<'info, ExtGlobal>,
+    pub global_account: Account<'info, ExtGlobalV2>,
 }
 
 impl Sync<'_> {

@@ -6,7 +6,7 @@ use spl_token_2022::extension::{BaseStateWithExtensions, StateWithExtensions};
 use crate::{
     constants::{INDEX_SCALE_F64, INDEX_SCALE_U64},
     errors::ExtError,
-    state::ExtGlobal,
+    state::ExtGlobalV2,
 };
 
 cfg_if! {
@@ -20,7 +20,7 @@ cfg_if! {
 #[allow(unused_variables)]
 pub fn sync_multiplier<'info>(
     ext_mint: &mut InterfaceAccount<'info, Mint>,
-    ext_global_account: &mut Account<'info, ExtGlobal>,
+    ext_global_account: &mut Account<'info, ExtGlobalV2>,
     m_mint: &InterfaceAccount<'info, Mint>,
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
@@ -194,7 +194,7 @@ cfg_if! {
 
 
         fn get_latest_multiplier_and_timestamp<'info>(
-            ext_global_account: &Account<'info, ExtGlobal>,
+            ext_global_account: &Account<'info, ExtGlobalV2>,
             m_mint: &InterfaceAccount<'info, Mint>,
         ) -> Result<(f64, f64, i64)> {
             let m_scaled_ui_config = get_scaled_ui_config(m_mint)?;

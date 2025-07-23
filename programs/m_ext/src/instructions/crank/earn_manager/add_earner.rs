@@ -6,7 +6,7 @@ use anchor_spl::token_interface::TokenAccount;
 use crate::{
     constants::ANCHOR_DISCRIMINATOR_SIZE,
     errors::ExtError,
-    state::{EarnManager, Earner, ExtGlobal, EARNER_SEED, EARN_MANAGER_SEED, EXT_GLOBAL_SEED},
+    state::{EarnManager, Earner, ExtGlobalV2, EARNER_SEED, EARN_MANAGER_SEED, EXT_GLOBAL_SEED},
 };
 
 #[derive(Accounts)]
@@ -26,7 +26,7 @@ pub struct AddEarner<'info> {
         seeds = [EXT_GLOBAL_SEED],
         bump = global_account.bump
     )]
-    pub global_account: Account<'info, ExtGlobal>,
+    pub global_account: Account<'info, ExtGlobalV2>,
 
     #[account(
         token::mint = global_account.ext_mint,

@@ -4,7 +4,7 @@ use anchor_lang::prelude::*;
 // local dependencies
 use crate::{
     errors::ExtError,
-    state::{ExtGlobal, EXT_GLOBAL_SEED},
+    state::{ExtGlobalV2, EXT_GLOBAL_SEED},
 };
 
 #[derive(Accounts)]
@@ -17,7 +17,7 @@ pub struct SetEarnAuthority<'info> {
         has_one = admin @ ExtError::NotAuthorized,
         bump = global_account.bump,
     )]
-    pub global_account: Account<'info, ExtGlobal>,
+    pub global_account: Account<'info, ExtGlobalV2>,
 }
 
 impl SetEarnAuthority<'_> {

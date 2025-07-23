@@ -4,7 +4,7 @@ use anchor_spl::token_interface::TokenAccount;
 use crate::{
     constants::{ANCHOR_DISCRIMINATOR_SIZE, ONE_HUNDRED_PERCENT_U64},
     errors::ExtError,
-    state::{EarnManager, ExtGlobal, EARN_MANAGER_SEED, EXT_GLOBAL_SEED},
+    state::{EarnManager, ExtGlobalV2, EARN_MANAGER_SEED, EXT_GLOBAL_SEED},
 };
 
 #[derive(Accounts)]
@@ -18,7 +18,7 @@ pub struct AddEarnManager<'info> {
         bump = global_account.bump,
         has_one = admin @ ExtError::NotAuthorized,
     )]
-    pub global_account: Account<'info, ExtGlobal>,
+    pub global_account: Account<'info, ExtGlobalV2>,
 
     #[account(
         init_if_needed,
