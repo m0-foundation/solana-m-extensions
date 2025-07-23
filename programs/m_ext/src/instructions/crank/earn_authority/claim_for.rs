@@ -1,6 +1,6 @@
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{mint_to, Mint, MintTo, Token2022, TokenAccount};
+use anchor_spl::token_interface::{mint_to, Mint, MintTo, Token2022, TokenAccount, TokenInterface};
 
 // local dependencies
 use crate::{
@@ -48,7 +48,7 @@ pub struct ClaimFor<'info> {
     #[account(
         associated_token::mint = global_account.m_mint,
         associated_token::authority = m_vault_account,
-        associated_token::token_program = token_2022,
+        associated_token::token_program = m_token_program,
     )]
     pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
 
@@ -83,7 +83,9 @@ pub struct ClaimFor<'info> {
     )]
     pub earn_manager_token_account: AccountInfo<'info>,
 
-    pub token_2022: Program<'info, Token2022>,
+    pub m_token_program: Program<'info, Token2022>,
+
+    pub ext_token_program: Interface<'info, TokenInterface>,
 }
 
 impl ClaimFor<'_> {
@@ -143,7 +145,7 @@ impl ClaimFor<'_> {
             &ctx.accounts.ext_mint,           // mint
             &ctx.accounts.ext_mint_authority, // authority
             mint_authority_seeds,             // authority seeds
-            &ctx.accounts.token_2022,         // token program
+            &ctx.accounts.ext_token_program,  // token program
         )?;
 
         emit!(RewardsClaim {
@@ -173,7 +175,7 @@ fn handle_fee(
     }
 
     // If the earn manager token account is not initialized, then no fee is taken
-    if ctx.accounts.earn_manager_token_account.owner != &Token2022::id()
+    if ctx.accounts.earn_manager_token_account.owner != &ctx.accounts.ext_token_program.key()
         || ctx.accounts.earn_manager_token_account.lamports() == 0
     {
         return Ok(0);
@@ -196,7 +198,7 @@ fn handle_fee(
     };
 
     let cpi_context = CpiContext::new_with_signer(
-        ctx.accounts.token_2022.to_account_info(),
+        ctx.accounts.ext_token_program.to_account_info(),
         mint_options,
         mint_authority_seeds,
     );

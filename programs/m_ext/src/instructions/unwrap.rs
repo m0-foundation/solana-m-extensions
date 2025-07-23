@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
+use anchor_spl::token_interface::{Mint, Token2022, TokenAccount, TokenInterface};
 
 use crate::{
     errors::ExtError,
@@ -74,7 +74,7 @@ pub struct Unwrap<'info> {
     // we have duplicate entries for the token2022 program since the interface needs to be consistent
     // but we want to leave open the possibility that either may not have to be token2022 in the future
     pub m_token_program: Program<'info, Token2022>,
-    pub ext_token_program: Program<'info, Token2022>,
+    pub ext_token_program: Interface<'info, TokenInterface>,
 }
 
 impl Unwrap<'_> {

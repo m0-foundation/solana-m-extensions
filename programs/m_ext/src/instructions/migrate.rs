@@ -64,7 +64,7 @@ pub struct MigrateM<'info> {
     pub m_earn_global_account: Account<'info, EarnGlobal>,
 
     #[account(
-        mint::token_program = token2022,
+        mint::token_program = m_token_program,
         mint::decimals = ext_mint.decimals,
         address = m_earn_global_account.m_mint,
     )]
@@ -88,7 +88,7 @@ pub struct MigrateM<'info> {
     #[account(
         associated_token::mint = new_m_mint,
         associated_token::authority = m_vault,
-        associated_token::token_program = token2022,
+        associated_token::token_program = m_token_program,
         constraint = new_vault_m_token_account.state == AccountState::Initialized @ ExtError::InvalidAccount,
     )]
     pub new_vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
@@ -96,11 +96,11 @@ pub struct MigrateM<'info> {
     #[account(
         associated_token::mint = old_m_mint,
         associated_token::authority = m_vault,
-        associated_token::token_program = token2022,
+        associated_token::token_program = m_token_program,
     )]
     pub old_vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    pub token2022: Program<'info, Token2022>,
+    pub m_token_program: Program<'info, Token2022>,
 
     pub system_program: Program<'info, System>,
 }

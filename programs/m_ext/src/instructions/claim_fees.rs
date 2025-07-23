@@ -1,6 +1,6 @@
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
+use anchor_spl::token_interface::{Mint, Token2022, TokenAccount, TokenInterface};
 
 // local dependencies
 use crate::{
@@ -64,7 +64,7 @@ pub struct ClaimFees<'info> {
     pub recipient_ext_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub m_token_program: Program<'info, Token2022>,
-    pub ext_token_program: Program<'info, Token2022>,
+    pub ext_token_program: Interface<'info, TokenInterface>,
 }
 
 impl ClaimFees<'_> {

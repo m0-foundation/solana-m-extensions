@@ -30,4 +30,6 @@ pub enum ExtError {
     AlreadyClaimed,
     #[msg("Failed to serialize account data.")]
     SerializationError,
+    #[msg("Invalid token program provided.")]
+    InvalidTokenProgram,
 }

@@ -4,7 +4,7 @@ use crate::{
     utils::conversion::sync_multiplier,
 };
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022};
+use anchor_spl::token_interface::{Mint, TokenInterface};
 
 #[derive(Accounts)]
 pub struct Sync<'info> {
@@ -32,7 +32,7 @@ pub struct Sync<'info> {
     )]
     pub ext_mint_authority: AccountInfo<'info>,
 
-    pub ext_token_program: Program<'info, Token2022>,
+    pub ext_token_program: Interface<'info, TokenInterface>,
 }
 
 impl Sync<'_> {

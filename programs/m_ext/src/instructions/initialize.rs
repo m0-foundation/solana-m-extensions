@@ -2,7 +2,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     token_2022::spl_token_2022::state::AccountState,
-    token_interface::{Mint, Token2022, TokenAccount},
+    token_interface::{Mint, Token2022, TokenAccount, TokenInterface},
 };
 use cfg_if::cfg_if;
 use earn::{
@@ -97,7 +97,7 @@ pub struct Initialize<'info> {
 
     pub m_token_program: Program<'info, Token2022>, // we have duplicate entries for the token2022 program bc the M token program could change in the future
 
-    pub ext_token_program: Program<'info, Token2022>,
+    pub ext_token_program: Interface<'info, TokenInterface>,
 
     pub system_program: Program<'info, System>,
 }
@@ -124,6 +124,11 @@ impl Initialize<'_> {
 
         cfg_if! {
             if #[cfg(feature = "scaled-ui")] {
+                // Validate that the ext token program is token2022
+                if self.ext_token_program.key() != spl_token_2022::ID {
+                    return err!(ExtError::InvalidTokenProgram);
+                }
+
                 // Validate that the ext mint has the ScaledUiAmount extension and
                 // that the ext mint authority is the extension authority
                 let extensions = get_mint_extensions(&self.ext_mint)?;
