@@ -73,13 +73,11 @@ pub struct Swap<'info> {
     )]
     pub to_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
-        init_if_needed,
-        payer = signer,
         associated_token::mint = m_mint,
-        associated_token::authority = signer,
+        associated_token::authority = swap_global,
         associated_token::token_program = m_token_program,
     )]
-    pub intermediate_m_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub swap_m_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /*
      * Authorities
@@ -184,7 +182,7 @@ impl<'info> Swap<'info> {
         from_principal: u64,
         remaining_accounts_split_idx: usize,
     ) -> Result<()> {
-        let m_pre_balance = ctx.accounts.intermediate_m_account.amount;
+        let m_pre_balance = ctx.accounts.swap_m_account.amount;
         let to_pre_balance = ctx.accounts.to_token_account.amount;
 
         // Optional remaining accounts passed to the instructions
@@ -209,7 +207,7 @@ impl<'info> Swap<'info> {
                     global_account: ctx.accounts.from_global.to_account_info(),
                     m_vault: ctx.accounts.from_m_vault_auth.to_account_info(),
                     ext_mint_authority: ctx.accounts.from_mint_authority.to_account_info(),
-                    to_m_token_account: ctx.accounts.intermediate_m_account.to_account_info(),
+                    to_m_token_account: ctx.accounts.swap_m_account.to_account_info(),
                     vault_m_token_account: ctx.accounts.from_m_vault.to_account_info(),
                     from_ext_token_account: ctx.accounts.from_token_account.to_account_info(),
                     m_token_program: ctx.accounts.m_token_program.to_account_info(),
@@ -222,8 +220,8 @@ impl<'info> Swap<'info> {
         )?;
 
         // Reload M balance and wrap difference
-        ctx.accounts.intermediate_m_account.reload()?;
-        let m_delta = ctx.accounts.intermediate_m_account.amount - m_pre_balance;
+        ctx.accounts.swap_m_account.reload()?;
+        let m_delta = ctx.accounts.swap_m_account.amount - m_pre_balance;
 
         // Set swap program as authority if none provided
         let wrap_authority = match &ctx.accounts.wrap_authority {
@@ -242,7 +240,7 @@ impl<'info> Swap<'info> {
                     global_account: ctx.accounts.to_global.to_account_info(),
                     m_vault: ctx.accounts.to_m_vault_auth.to_account_info(),
                     ext_mint_authority: ctx.accounts.to_mint_authority.to_account_info(),
-                    from_m_token_account: ctx.accounts.intermediate_m_account.to_account_info(),
+                    from_m_token_account: ctx.accounts.swap_m_account.to_account_info(),
                     vault_m_token_account: ctx.accounts.to_m_vault.to_account_info(),
                     to_ext_token_account: ctx.accounts.to_token_account.to_account_info(),
                     m_token_program: ctx.accounts.m_token_program.to_account_info(),
@@ -258,21 +256,6 @@ impl<'info> Swap<'info> {
         ctx.accounts.to_token_account.reload()?;
         let to_principal = ctx.accounts.to_token_account.amount - to_pre_balance;
         msg!("{} -> {} M -> {}", from_principal, m_delta, to_principal);
-
-        // Close intermediate account
-        ctx.accounts.intermediate_m_account.reload()?;
-        if ctx.accounts.intermediate_m_account.amount == 0
-            && ctx.accounts.intermediate_m_account.owner == ctx.accounts.signer.key()
-        {
-            anchor_spl::token_interface::close_account(CpiContext::new(
-                ctx.accounts.m_token_program.to_account_info(),
-                anchor_spl::token_interface::CloseAccount {
-                    account: ctx.accounts.intermediate_m_account.to_account_info(),
-                    destination: ctx.accounts.signer.to_account_info(),
-                    authority: ctx.accounts.signer.to_account_info(),
-                },
-            ))?;
-        }
 
         Ok(())
     }
