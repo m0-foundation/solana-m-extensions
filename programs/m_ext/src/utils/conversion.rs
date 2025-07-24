@@ -1,12 +1,12 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022};
+use anchor_spl::token_interface::{Mint, TokenInterface};
 use cfg_if::cfg_if;
 use spl_token_2022::extension::{BaseStateWithExtensions, StateWithExtensions};
 
 use crate::{
     constants::{INDEX_SCALE_F64, INDEX_SCALE_U64},
     errors::ExtError,
-    state::ExtGlobal,
+    state::ExtGlobalV2,
 };
 
 cfg_if! {
@@ -20,14 +20,24 @@ cfg_if! {
 #[allow(unused_variables)]
 pub fn sync_multiplier<'info>(
     ext_mint: &mut InterfaceAccount<'info, Mint>,
-    ext_global_account: &mut Account<'info, ExtGlobal>,
+    ext_global_account: &mut Account<'info, ExtGlobalV2>,
     m_mint: &InterfaceAccount<'info, Mint>,
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
-    token_program: &Program<'info, Token2022>,
+    token_program: &Interface<'info, TokenInterface>,
 ) -> Result<f64> {
     cfg_if! {
         if #[cfg(feature = "scaled-ui")] {
+            // Require the token program to be the token2022 program
+            // We checked this on the Initialize instruction
+            // but since we're CPIing into the provided program here,
+            // and this could be used by any instruction
+            // (which may not have checked ext_mint's token program),
+            // we check again as a safety measure
+            if token_program.key() != spl_token_2022::ID {
+                return err!(ExtError::InvalidTokenProgram);
+            }
+
             // Get the current index and timestamp from the m_mint and cached values
             let (m_multiplier, ext_multiplier, timestamp): (f64, f64, i64) =
                 get_latest_multiplier_and_timestamp(ext_global_account, m_mint)?;
@@ -194,7 +204,7 @@ cfg_if! {
 
 
         fn get_latest_multiplier_and_timestamp<'info>(
-            ext_global_account: &Account<'info, ExtGlobal>,
+            ext_global_account: &Account<'info, ExtGlobalV2>,
             m_mint: &InterfaceAccount<'info, Mint>,
         ) -> Result<(f64, f64, i64)> {
             let m_scaled_ui_config = get_scaled_ui_config(m_mint)?;

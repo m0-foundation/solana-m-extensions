@@ -8,6 +8,10 @@ build-programs:
 	@cp target/deploy/m_ext.so target/deploy/no_yield.so
 	@cp target/idl/m_ext.json target/idl/no_yield.json
 	@cp target/types/m_ext.ts target/types/no_yield.ts
+	anchor build -p m_ext -- --features crank --no-default-features
+	@cp target/deploy/m_ext.so target/deploy/crank.so
+	@cp target/idl/m_ext.json target/idl/crank.json
+	@cp target/types/m_ext.ts target/types/crank.ts
 
 test-programs:
 	@pnpm jest --preset ts-jest --verbose tests/unit/**.test.ts; exit $$?

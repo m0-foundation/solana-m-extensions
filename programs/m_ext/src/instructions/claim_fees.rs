@@ -1,11 +1,11 @@
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
+use anchor_spl::token_interface::{Mint, Token2022, TokenAccount, TokenInterface};
 
 // local dependencies
 use crate::{
     errors::ExtError,
-    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
+    state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
         conversion::{amount_to_principal_down, principal_to_amount_up, sync_multiplier},
         token::mint_tokens,
@@ -24,7 +24,7 @@ pub struct ClaimFees<'info> {
         has_one = ext_mint @ ExtError::InvalidMint,
         bump = global_account.bump,
     )]
-    pub global_account: Account<'info, ExtGlobal>,
+    pub global_account: Account<'info, ExtGlobalV2>,
 
     #[account(mint::token_program = m_token_program)]
     pub m_mint: InterfaceAccount<'info, Mint>,
@@ -64,7 +64,7 @@ pub struct ClaimFees<'info> {
     pub recipient_ext_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub m_token_program: Program<'info, Token2022>,
-    pub ext_token_program: Program<'info, Token2022>,
+    pub ext_token_program: Interface<'info, TokenInterface>,
 }
 
 impl ClaimFees<'_> {

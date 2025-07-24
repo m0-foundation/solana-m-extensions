@@ -1,10 +1,10 @@
 use crate::{
     errors::ExtError,
-    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED},
+    state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED},
     utils::conversion::sync_multiplier,
 };
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022};
+use anchor_spl::token_interface::{Mint, TokenInterface};
 
 #[derive(Accounts)]
 pub struct Sync<'info> {
@@ -15,7 +15,7 @@ pub struct Sync<'info> {
         has_one = m_mint @ ExtError::InvalidMint,
         has_one = ext_mint @ ExtError::InvalidMint,
     )]
-    pub global_account: Account<'info, ExtGlobal>,
+    pub global_account: Account<'info, ExtGlobalV2>,
 
     pub m_mint: InterfaceAccount<'info, Mint>,
 
@@ -32,7 +32,7 @@ pub struct Sync<'info> {
     )]
     pub ext_mint_authority: AccountInfo<'info>,
 
-    pub ext_token_program: Program<'info, Token2022>,
+    pub ext_token_program: Interface<'info, TokenInterface>,
 }
 
 impl Sync<'_> {

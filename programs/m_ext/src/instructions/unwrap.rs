@@ -1,9 +1,9 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
+use anchor_spl::token_interface::{Mint, Token2022, TokenAccount, TokenInterface};
 
 use crate::{
     errors::ExtError,
-    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
+    state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
         conversion::{amount_to_principal_down, principal_to_amount_down, sync_multiplier},
         token::{burn_tokens, transfer_tokens_from_program},
@@ -30,7 +30,7 @@ pub struct Unwrap<'info> {
         has_one = m_mint @ ExtError::InvalidAccount,
         has_one = ext_mint @ ExtError::InvalidAccount,
     )]
-    pub global_account: Account<'info, ExtGlobal>,
+    pub global_account: Account<'info, ExtGlobalV2>,
 
     /// CHECK: This account is validated by the seed, it stores no data
     #[account(
@@ -74,7 +74,7 @@ pub struct Unwrap<'info> {
     // we have duplicate entries for the token2022 program since the interface needs to be consistent
     // but we want to leave open the possibility that either may not have to be token2022 in the future
     pub m_token_program: Program<'info, Token2022>,
-    pub ext_token_program: Program<'info, Token2022>,
+    pub ext_token_program: Interface<'info, TokenInterface>,
 }
 
 impl Unwrap<'_> {

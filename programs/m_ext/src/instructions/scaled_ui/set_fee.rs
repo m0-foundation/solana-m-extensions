@@ -1,12 +1,12 @@
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022};
+use anchor_spl::token_interface::{Mint, TokenInterface};
 
 // local dependencies
 use crate::{
     constants::ONE_HUNDRED_PERCENT_U64,
     errors::ExtError,
-    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED},
+    state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED},
     utils::conversion::sync_multiplier,
 };
 
@@ -22,7 +22,7 @@ pub struct SetFee<'info> {
         has_one = ext_mint @ ExtError::InvalidMint,
         bump = global_account.bump,
     )]
-    pub global_account: Account<'info, ExtGlobal>,
+    pub global_account: Account<'info, ExtGlobalV2>,
 
     pub m_mint: InterfaceAccount<'info, Mint>,
 
@@ -39,7 +39,7 @@ pub struct SetFee<'info> {
     )]
     pub ext_mint_authority: AccountInfo<'info>,
 
-    pub ext_token_program: Program<'info, Token2022>,
+    pub ext_token_program: Interface<'info, TokenInterface>,
 }
 
 impl SetFee<'_> {
