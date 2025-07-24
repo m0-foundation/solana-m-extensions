@@ -7,6 +7,7 @@ import {
   PublicKey,
   SystemProgram,
   Transaction,
+  TransactionInstruction,
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
@@ -20,6 +21,7 @@ import {
   getAssociatedTokenAddressSync,
   getMintLen,
   getOrCreateAssociatedTokenAccount,
+  getTokenMetadata,
   LENGTH_SIZE,
   TOKEN_2022_PROGRAM_ID,
   TYPE_SIZE,
@@ -28,6 +30,7 @@ import {
   createInitializeInstruction,
   createUpdateAuthorityInstruction,
   createUpdateFieldInstruction,
+  Field,
   pack,
   TokenMetadata,
 } from "@solana/spl-token-metadata";
@@ -652,6 +655,132 @@ async function main() {
       if (confirmation.value.err) {
         throw new Error(`Transaction not confirmed: ${confirmation.value.err}`);
       }
+    });
+
+  program
+    .command("update-mint")
+    .option("-n, --name <string>", "Token Name")
+    .option("-s, --symbol <string>", "Token Symbol")
+    .option("-u, --uri <string>", "Token metadata URI")
+    .option("-f, --field <key:value>", "Metadata field")
+    .action(async ({ name, symbol, uri, field }) => {
+      const [mint] = keysFromEnv(["EXT_MINT_KEYPAIR"]);
+      const auth = new PublicKey(process.env.SQUADS_MULTISIG!);
+
+      const metadata = await getTokenMetadata(
+        connection,
+        mint.publicKey,
+        "confirmed",
+        TOKEN_2022_PROGRAM_ID
+      );
+      if (!metadata) {
+        throw new Error(
+          `No metadata found for mint ${mint.publicKey.toBase58()}`
+        );
+      }
+
+      const currentSize = pack(metadata).length;
+      const instructions: TransactionInstruction[] = [];
+
+      if (name) {
+        console.log(`Updating token name to: ${name}`);
+        metadata.name = name;
+
+        instructions.push(
+          createUpdateFieldInstruction({
+            programId: TOKEN_2022_PROGRAM_ID,
+            metadata: mint.publicKey,
+            updateAuthority: auth,
+            field: Field.Name,
+            value: name,
+          })
+        );
+      }
+
+      if (symbol) {
+        console.log(`Updating token symbol to: ${symbol}`);
+        metadata.symbol = symbol;
+
+        instructions.push(
+          createUpdateFieldInstruction({
+            programId: TOKEN_2022_PROGRAM_ID,
+            metadata: mint.publicKey,
+            updateAuthority: auth,
+            field: Field.Symbol,
+            value: symbol,
+          })
+        );
+      }
+
+      if (uri) {
+        console.log(`Updating token metadata to: ${uri}`);
+        metadata.uri = uri;
+
+        instructions.push(
+          createUpdateFieldInstruction({
+            programId: TOKEN_2022_PROGRAM_ID,
+            metadata: mint.publicKey,
+            updateAuthority: auth,
+            field: Field.Uri,
+            value: uri,
+          })
+        );
+      }
+
+      if (field) {
+        const idx = (field as string).search(":");
+        const key = (field as string).substring(0, idx);
+        const value = (field as string).substring(idx + 1);
+
+        console.log(`Adding additional metadata field: ${key}=${value}`);
+        metadata.additionalMetadata.push([key, value]);
+
+        instructions.push(
+          createUpdateFieldInstruction({
+            programId: TOKEN_2022_PROGRAM_ID,
+            metadata: mint.publicKey,
+            updateAuthority: auth,
+            field: key,
+            value: value,
+          })
+        );
+      }
+
+      // rent for additional metadata size
+      const newSize = pack(metadata).length;
+
+      if (newSize > currentSize) {
+        const accountInfo = await connection.getAccountInfo(mint.publicKey);
+        const lamports = await connection.getMinimumBalanceForRentExemption(
+          accountInfo!.data.length + newSize - currentSize
+        );
+
+        const diff = lamports - accountInfo!.lamports;
+
+        if (diff > 0) {
+          console.log(
+            `Mint needs ${diff} lamports to cover additional metadata size`
+          );
+
+          instructions.push(
+            SystemProgram.transfer({
+              fromPubkey: auth,
+              toPubkey: mint.publicKey,
+              lamports: diff,
+            })
+          );
+        }
+      }
+
+      const tx = new Transaction().add(...instructions);
+      tx.feePayer = auth;
+      tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+      const b = tx.serialize({ verifySignatures: false });
+      console.log("Transaction:", {
+        b64: b.toString("base64"),
+        b58: bs58.encode(b),
+      });
     });
 
   await program.parseAsync(process.argv);
