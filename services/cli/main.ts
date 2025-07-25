@@ -73,7 +73,7 @@ async function main() {
   const connection = new Connection(process.env.RPC_URL ?? "");
 
   program.command("print-extensions").action(() => {
-    const [usdk, usdky] = keysFromEnv(["KAST_USDK", "KAST_USDKY"]);
+    const [usdk, usdky] = keysFromEnv(["USDK", "USDKY"]);
 
     const addresses: { [key: string]: PublicKey } = {
       "USDK program": usdk.publicKey,
@@ -510,8 +510,8 @@ async function main() {
       const [owner, wM, ext1, ext2] = keysFromEnv([
         "PAYER_KEYPAIR",
         "M0_WM",
-        "KAST_USDK",
-        "KAST_USDKY",
+        "USDK",
+        "USDKY",
       ]);
       const ixs = [
         ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 250_000 }),
