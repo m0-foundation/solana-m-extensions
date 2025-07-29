@@ -46,6 +46,7 @@ import {
 } from "../test-utils";
 import { MExt as ScaledUIExt } from "../../target/types/scaled_ui";
 import { MExt as NoYieldExt } from "../../target/types/no_yield";
+import { MExt as CrankExt } from "../../target/types/crank";
 
 export enum Comparison {
   Equal,
@@ -58,19 +59,32 @@ export enum Comparison {
 // Type definitions for accounts to make it easier to do comparisons
 
 export enum Variant {
-  ScaledUiAmount = "scaled_ui",
   NoYield = "no_yield",
+  ScaledUi = "scaled_ui",
+  Crank = "crank",
 }
 
-type MExt = ScaledUIExt | NoYieldExt;
+type MExt = NoYieldExt | ScaledUIExt | CrankExt;
 
-export type YieldConfig<V extends Variant> = V extends Variant.ScaledUiAmount
+type YieldVariant = "noYield" | "scaledUi" | "crank";
+
+export type YieldConfig<V extends Variant> = V extends Variant.ScaledUi
   ? {
+      yieldVariant: YieldVariant;
       feeBps?: BN;
       lastMIndex?: BN;
       lastExtIndex?: BN;
     }
-  : {};
+  : V extends Variant.Crank
+  ? {
+      yieldVariant: YieldVariant;
+      earnAuthority?: PublicKey;
+      index?: BN;
+      timestamp?: BN;
+    }
+  : {
+      yieldVariant: YieldVariant;
+    };
 
 export type ExtGlobal<V extends Variant> = {
   admin?: PublicKey;
@@ -89,7 +103,7 @@ const PROGRAM_ID = new PublicKey(
 );
 
 // Test harness for the MExt program that encapsulates all the necessary setup and helper functions to test a given program variant
-export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
+export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
   public variant: V;
   public svm: LiteSVM;
   public provider: LiteSVMProvider;
@@ -99,6 +113,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   public admin: Keypair;
   public mMint: Keypair;
   public extMint: Keypair;
+  public extTokenProgram: PublicKey;
   public mMintAuthority: Keypair;
   public earnAuthority: Keypair;
   public wrapAuthority: Keypair;
@@ -106,7 +121,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   public nonWrapAuthority: Keypair;
   public mEarnerList: PublicKey[] = [];
 
-  constructor(variant: V, addresses: PublicKey[]) {
+  constructor(variant: V, addresses: PublicKey[], use2022: boolean = true) {
     this.variant = variant;
     const M_EXT_IDL = require(`../../target/idl/${variant}.json`);
 
@@ -141,6 +156,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     this.admin = new Keypair();
     this.mMint = new Keypair();
     this.extMint = new Keypair();
+    this.extTokenProgram = use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
     this.mMintAuthority = new Keypair();
     this.earnAuthority = new Keypair();
     this.wrapAuthority = new Keypair();
@@ -166,12 +182,22 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
 
     // Create the Ext token mint
     switch (this.variant) {
-      case Variant.ScaledUiAmount:
+      case Variant.NoYield:
+        await this.createMint(
+          this.extMint,
+          this.getExtMintAuthority(),
+          this.extTokenProgram === TOKEN_2022_PROGRAM_ID
+        );
+        break;
+      case Variant.ScaledUi:
         await this.createScaledUiMint(this.extMint, this.getExtMintAuthority());
         break;
-      case Variant.NoYield:
-        await this.createMint(this.extMint, this.getExtMintAuthority());
-        break;
+      case Variant.Crank:
+        await this.createMint(
+          this.extMint,
+          this.getExtMintAuthority(),
+          this.extTokenProgram === TOKEN_2022_PROGRAM_ID
+        );
       default:
         throw new Error("Unsupported variant for MExt");
     }
@@ -828,12 +854,12 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   }
 
   public async getNewMultiplier(newIndex: BN): Promise<number> {
-    if (this.variant === Variant.NoYield) {
+    if (this.variant !== Variant.ScaledUi) {
       return 1.0;
     }
 
-    const yieldConfig: YieldConfig<Variant.ScaledUiAmount> = (
-      await this.ext.account.extGlobal.fetch(this.getExtGlobalAccount())
+    const yieldConfig: YieldConfig<Variant.ScaledUi> = (
+      await this.ext.account.extGlobalV2.fetch(this.getExtGlobalAccount())
     ).yieldConfig;
 
     return (
@@ -844,12 +870,12 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   }
 
   public async getCurrentMultiplier(): Promise<number> {
-    if (this.variant === Variant.NoYield) {
+    if (this.variant !== Variant.ScaledUi) {
       return 1.0;
     }
 
-    const yieldConfig: YieldConfig<Variant.ScaledUiAmount> = (
-      await this.ext.account.extGlobal.fetch(this.getExtGlobalAccount())
+    const yieldConfig: YieldConfig<Variant.ScaledUi> = (
+      await this.ext.account.extGlobalV2.fetch(this.getExtGlobalAccount())
     ).yieldConfig;
 
     return yieldConfig.lastExtIndex!.toNumber() / 1e12;
@@ -892,7 +918,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   }
 
   public async expectExtGlobalState(expected: ExtGlobal<V>) {
-    const state = await this.ext.account.extGlobal.fetch(
+    const state = await this.ext.account.extGlobalV2.fetch(
       this.getExtGlobalAccount()
     );
 
@@ -904,11 +930,19 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
 
     if (expected.yieldConfig) {
       switch (this.variant) {
-        case Variant.ScaledUiAmount:
-          this.expectScaledUiYieldConfig(state.yieldConfig);
-          break;
         case Variant.NoYield:
-          expect(state.yieldConfig).toEqual({});
+          expect(state.yieldConfig).toEqual({
+            yieldVariant: "noYield",
+          });
+          break;
+        case Variant.ScaledUi:
+          this.expectScaledUiYieldConfig(
+            state.yieldConfig,
+            expected.yieldConfig
+          );
+          break;
+        case Variant.Crank:
+          this.expectCrankYieldConfig(state.yieldConfig, expected.yieldConfig);
           break;
         default:
           throw new Error("Unsupported variant for yield config");
@@ -921,22 +955,41 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       expect(state.extMintAuthorityBump).toEqual(expected.extMintAuthorityBump);
   }
 
-  private expectScaledUiYieldConfig<V extends Variant.ScaledUiAmount>(
-    yieldConfig: YieldConfig<V>
+  private expectScaledUiYieldConfig<V extends Variant.ScaledUi>(
+    actual: YieldConfig<V>,
+    expected: YieldConfig<V>
   ) {
-    if (yieldConfig.feeBps) {
-      expect(yieldConfig.feeBps.toString()).toEqual(
-        yieldConfig.feeBps.toString()
+    expect(actual.yieldVariant!).toEqual("scaledUi"); // scaled ui amount variant
+    if (expected.feeBps) {
+      expect(actual.feeBps!.toString()).toEqual(expected.feeBps.toString());
+    }
+    if (expected.lastMIndex) {
+      expect(actual.lastMIndex!.toString()).toEqual(
+        expected.lastMIndex.toString()
       );
     }
-    if (yieldConfig.lastMIndex) {
-      expect(yieldConfig.lastMIndex.toString()).toEqual(
-        yieldConfig.lastMIndex.toString()
+    if (expected.lastExtIndex) {
+      expect(actual.lastExtIndex!.toString()).toEqual(
+        expected.lastExtIndex.toString()
       );
     }
-    if (yieldConfig.lastExtIndex) {
-      expect(yieldConfig.lastExtIndex.toString()).toEqual(
-        yieldConfig.lastExtIndex.toString()
+  }
+
+  private expectCrankYieldConfig<V extends Variant.Crank>(
+    actual: YieldConfig<V>,
+    expected: YieldConfig<V>
+  ) {
+    expect(actual.yieldVariant!).toEqual("crank"); // crank variant
+
+    if (expected.earnAuthority) {
+      expect(actual.earnAuthority!).toEqual(expected.earnAuthority);
+    }
+    if (expected.index) {
+      expect(actual.index!.toString()).toEqual(expected.index.toString());
+    }
+    if (expected.timestamp) {
+      expect(actual.timestamp!.toString()).toEqual(
+        expected.timestamp.toString()
       );
     }
   }
@@ -986,7 +1039,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       await this.getATA(this.mMint.publicKey, this.getMVault())
     );
 
-    this.variant === Variant.ScaledUiAmount
+    this.variant === Variant.ScaledUi
       ? expect(BigInt(mVaultBalance.toString())).toBeGreaterThan(
           BigInt(extSupply.sub(BN.min(new BN(2), extSupply)).toString())
         ) // allow for a rounding error of 2 for scaled ui due to precision issues
@@ -1186,23 +1239,43 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   }
   // Helper functions for executing MExt instructions
 
-  public async initializeExt(wrapAuthorities: PublicKey[], fee_bps?: BN) {
+  public async initializeExt(
+    wrapAuthorities: PublicKey[],
+    feeBps?: BN,
+    earnAuthority?: PublicKey
+  ) {
     switch (this.variant) {
-      case Variant.ScaledUiAmount:
-        if (!fee_bps) {
+      case Variant.ScaledUi:
+        if (!feeBps) {
           throw new Error("fee_bps is required for Scaled UI variant");
         }
         // Send the transaction
         await this.ext.methods
-          .initialize(wrapAuthorities, fee_bps)
+          .initialize(wrapAuthorities, feeBps)
           .accounts({
             admin: this.admin.publicKey,
             mMint: this.mMint.publicKey,
             extMint: this.extMint.publicKey,
+            extTokenProgram: this.extTokenProgram,
           })
           .signers([this.admin])
           .rpc();
         break;
+      case Variant.Crank:
+        if (!earnAuthority) {
+          throw new Error("earnAuthority is required for Crank variant");
+        }
+
+        await this.ext.methods
+          .initialize(wrapAuthorities, earnAuthority)
+          .accounts({
+            admin: this.admin.publicKey,
+            mMint: this.mMint.publicKey,
+            extMint: this.extMint.publicKey,
+            extTokenProgram: this.extTokenProgram,
+          })
+          .signers([this.admin])
+          .rpc();
       case Variant.NoYield:
         // Send the transaction
         await this.ext.methods
@@ -1211,6 +1284,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
             admin: this.admin.publicKey,
             mMint: this.mMint.publicKey,
             extMint: this.extMint.publicKey,
+            extTokenProgram: this.extTokenProgram,
           })
           .signers([this.admin])
           .rpc();
@@ -1293,6 +1367,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
           : this.ext.programId,
         fromMTokenAccount,
         toExtTokenAccount,
+        extTokenProgram: this.extTokenProgram,
       })
       .signers(
         wrapAuthority ? [tokenAuthority, wrapAuthority] : [tokenAuthority]
@@ -1355,6 +1430,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
           : this.ext.programId,
         toMTokenAccount,
         fromExtTokenAccount,
+        extTokenProgram: this.extTokenProgram,
       })
       .signers(
         wrapAuthority ? [tokenAuthority, wrapAuthority] : [tokenAuthority]
@@ -1365,12 +1441,34 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   }
 
   public async sync(): Promise<PublicKey> {
-    if (this.variant === Variant.NoYield) {
-      throw new Error("sync is not supported for No Yield variant");
+    switch (this.variant) {
+      case Variant.NoYield:
+        throw new Error("sync is not supported for No Yield variant");
+        break;
+      case Variant.ScaledUi:
+        // Sync is open to any address
+        await this.ext.methods
+          .sync()
+          .accounts({
+            extTokenProgram: this.extTokenProgram,
+          })
+          .signers([])
+          .rpc();
+        break;
+      case Variant.Crank:
+        // For Crank variant, we have to use the earn authority to sync
+        await this.ext.methods
+          .sync()
+          .accounts({
+            earnAuthority: this.earnAuthority.publicKey,
+            extTokenProgram: this.extTokenProgram,
+          })
+          .signers([this.earnAuthority])
+          .rpc();
+        break;
+      default:
+        throw new Error("Unsupported variant for sync");
     }
-
-    // Send the instruction
-    await this.ext.methods.sync().accounts({}).signers([]).rpc();
 
     return this.getExtGlobalAccount();
   }

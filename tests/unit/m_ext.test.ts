@@ -16,7 +16,7 @@ const initialSupply = new BN(100_000_000); // 100 tokens with 6 decimals
 const initialIndex = new BN(1_100_000_000_000); // 1.1
 const claimCooldown = new BN(0); // None
 
-const VARIANTS: Variant[] = [Variant.ScaledUiAmount, Variant.NoYield];
+const VARIANTS: Variant[] = [Variant.NoYield, Variant.ScaledUi, Variant.Crank];
 
 // Implement test cases for all variants
 // Most are the same, but allows conditional tests when required for different variants
@@ -101,6 +101,7 @@ for (const variant of VARIANTS) {
                 admin: $.nonAdmin.publicKey,
                 mMint: $.mMint.publicKey,
                 extMint: wrongMint.publicKey,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.nonAdmin])
               .rpc(),
@@ -125,6 +126,7 @@ for (const variant of VARIANTS) {
                 admin: $.nonAdmin.publicKey,
                 mMint: $.mMint.publicKey,
                 extMint: badMint.publicKey,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.nonAdmin])
               .rpc(),
@@ -151,38 +153,6 @@ for (const variant of VARIANTS) {
                 mMint: $.mMint.publicKey,
                 extMint: $.extMint.publicKey,
                 mEarnGlobalAccount: mEarnGlobalAccount,
-              })
-              .signers([$.nonAdmin])
-              .rpc()
-          );
-        });
-
-        // given the m_earner_account is not the required PDA
-        // it reverts with a seeds constraint (or other account error)
-        test("m_earner_account is incorrect - reverts", async () => {
-          // Change the m earner account
-          const mEarnerAccount = PublicKey.unique();
-          if (
-            mEarnerAccount.equals(
-              $.getMEarnerAccount(
-                await $.getATA($.mMint.publicKey, $.getMVault())
-              )
-            )
-          )
-            return;
-
-          // Attempt to send transaction
-          // Expect error (could be one of several "SeedsConstraint", "AccountOwnedByWrongProgram", "AccountNotInitialized")
-          await $.expectSystemError(
-            (variant === Variant.NoYield
-              ? $.ext.methods.initialize([])
-              : $.ext.methods.initialize([], new BN(0))
-            )
-              .accountsPartial({
-                admin: $.nonAdmin.publicKey,
-                mMint: $.mMint.publicKey,
-                extMint: $.extMint.publicKey,
-                mEarnerAccount: mEarnerAccount,
               })
               .signers([$.nonAdmin])
               .rpc()
@@ -231,6 +201,7 @@ for (const variant of VARIANTS) {
                 admin: $.nonAdmin.publicKey,
                 mMint: $.mMint.publicKey,
                 extMint: wrongMint.publicKey,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.nonAdmin])
               .rpc(),
@@ -255,6 +226,7 @@ for (const variant of VARIANTS) {
                 admin: $.nonAdmin.publicKey,
                 mMint: $.mMint.publicKey,
                 extMint: $.extMint.publicKey,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.nonAdmin])
               .rpc(),
@@ -313,6 +285,7 @@ for (const variant of VARIANTS) {
                 admin: $.admin.publicKey,
                 mMint: $.mMint.publicKey,
                 extMint: $.extMint.publicKey,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.admin])
               .rpc();
@@ -326,7 +299,9 @@ for (const variant of VARIANTS) {
               bump,
               mVaultBump,
               extMintAuthorityBump,
-              yieldConfig: {},
+              yieldConfig: {
+                yieldVariant: "noYield",
+              },
               wrapAuthorities,
             });
 
@@ -355,7 +330,7 @@ for (const variant of VARIANTS) {
         //   [X] the multiplier on the ext mint is initialized to m index
         //   [X] the timestamp on the ext mint is set to the m timestamp
 
-        if (variant === Variant.ScaledUiAmount) {
+        if (variant === Variant.ScaledUi) {
           // given the ext_mint does not have the scaled ui amount extension
           // it reverts with a InvalidMint error
           test("ext_mint does not have the scaled ui amount extension - reverts", async () => {
@@ -371,6 +346,7 @@ for (const variant of VARIANTS) {
                   admin: $.nonAdmin.publicKey,
                   mMint: $.mMint.publicKey,
                   extMint: wrongMint.publicKey,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.nonAdmin])
                 .rpc(),
@@ -393,6 +369,7 @@ for (const variant of VARIANTS) {
                   admin: $.nonAdmin.publicKey,
                   mMint: $.mMint.publicKey,
                   extMint: wrongMint.publicKey,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.nonAdmin])
                 .rpc(),
@@ -443,6 +420,7 @@ for (const variant of VARIANTS) {
                 admin: $.admin.publicKey,
                 mMint: $.mMint.publicKey,
                 extMint: $.extMint.publicKey,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.admin])
               .rpc();
@@ -458,6 +436,7 @@ for (const variant of VARIANTS) {
               extMintAuthorityBump,
               wrapAuthorities,
               yieldConfig: {
+                yieldVariant: "scaledUi",
                 feeBps,
                 lastMIndex: initialIndex,
                 lastExtIndex: new BN(1e12),
@@ -846,32 +825,6 @@ for (const variant of VARIANTS) {
           );
         });
 
-        // given the m earner account does not match the derived one
-        // it reverts with a ConstraintSeeds / AccountNotInitialized error
-        test("m earn global account does not match derived pubkey - reverts", async () => {
-          // Change the m earn global account
-          const mEarnGlobalAccount = PublicKey.unique();
-          if (mEarnGlobalAccount.equals($.getEarnGlobalAccount())) return;
-
-          const recipientExtTokenAccount = await $.getATA(
-            $.extMint.publicKey,
-            $.admin.publicKey
-          );
-
-          // Attempt to send the transaction
-          await $.expectSystemError(
-            $.ext.methods
-              .claimFees()
-              .accountsPartial({
-                admin: $.admin.publicKey,
-                mEarnGlobalAccount,
-                recipientExtTokenAccount,
-              })
-              .signers([$.admin])
-              .rpc()
-          );
-        });
-
         // given the recipient token account is not a token account for the ext mint
         // it reverts with a ConstraintTokenMint error
         test("recipient token account is not for ext mint - reverts", async () => {
@@ -909,7 +862,7 @@ for (const variant of VARIANTS) {
         //       [X] given the m vault does not have excess collateral
         //         [X] it completes but doesn't transfer any tokens
 
-        if (variant === Variant.ScaledUiAmount) {
+        if (variant === Variant.ScaledUi) {
           // given all accounts are correct
           // given the multiplier is not synced
           // it syncs the multiplier to the current
@@ -1335,6 +1288,7 @@ for (const variant of VARIANTS) {
             // Verify fee bps was updated
             await $.expectExtGlobalState({
               yieldConfig: {
+                yieldVariant: "scaledUi",
                 feeBps: newFee,
                 lastExtIndex: new BN(Math.floor(multiplier * 1e12)),
                 lastMIndex: newIndex,
@@ -1362,6 +1316,7 @@ for (const variant of VARIANTS) {
             // Verify fee bps was updated
             await $.expectExtGlobalState({
               yieldConfig: {
+                yieldVariant: "scaledUi",
                 feeBps: newFee,
                 lastExtIndex: new BN(Math.floor(multiplier * 1e12)),
                 lastMIndex: startIndex,
@@ -1562,6 +1517,7 @@ for (const variant of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
                 .rpc()
@@ -1607,6 +1563,7 @@ for (const variant of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount: toExtTokenAccount,
                   toExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
@@ -1627,6 +1584,7 @@ for (const variant of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   toExtTokenAccount: fromMTokenAccount,
                   fromMTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
@@ -1657,6 +1615,7 @@ for (const variant of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.nonWrapAuthority])
                 .rpc(),
@@ -1683,6 +1642,7 @@ for (const variant of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
                 .rpc()
@@ -1698,6 +1658,7 @@ for (const variant of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
@@ -1736,7 +1697,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount
             );
             const toExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.getTokenUiBalance(toExtTokenAccount)
                 : await $.getTokenBalance(toExtTokenAccount);
 
@@ -1748,6 +1709,7 @@ for (const variant of VARIANTS) {
                 wrapAuthority: $.ext.programId,
                 fromMTokenAccount,
                 toExtTokenAccount,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
               .rpc();
@@ -1761,7 +1723,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount,
               vaultMTokenAccountBalance.add(wrapAmount)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.ScaledUi
               ? await $.expectTokenUiBalance(
                   toExtTokenAccount,
                   toExtTokenAccountBalance.add(wrapAmount),
@@ -1789,7 +1751,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount
             );
             const toExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.getTokenUiBalance(toExtTokenAccount)
                 : await $.getTokenBalance(toExtTokenAccount);
 
@@ -1816,7 +1778,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount,
               vaultMTokenAccountBalance.add(wrapAmount)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.ScaledUi
               ? await $.expectTokenUiBalance(
                   toExtTokenAccount,
                   toExtTokenAccountBalance.add(wrapAmount),
@@ -1850,7 +1812,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount
             );
             const toExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.getTokenUiBalance(toExtTokenAccount)
                 : await $.getTokenBalance(toExtTokenAccount);
 
@@ -1877,7 +1839,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount,
               vaultMTokenAccountBalance.add(wrapAmount)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.ScaledUi
               ? await $.expectTokenUiBalance(
                   toExtTokenAccount,
                   toExtTokenAccountBalance.add(wrapAmount),
@@ -1931,6 +1893,7 @@ for (const variant of VARIANTS) {
                   wrapAuthority: $.nonWrapAuthority.publicKey,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.nonWrapAuthority])
                 .rpc(),
@@ -1957,6 +1920,7 @@ for (const variant of VARIANTS) {
                   wrapAuthority: $.wrapAuthority.publicKey,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.nonWrapAuthority, $.wrapAuthority])
                 .rpc()
@@ -1994,7 +1958,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount
             );
             const toExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.getTokenUiBalance(toExtTokenAccount)
                 : await $.getTokenBalance(toExtTokenAccount);
 
@@ -2006,6 +1970,7 @@ for (const variant of VARIANTS) {
                 wrapAuthority: $.wrapAuthority.publicKey,
                 fromMTokenAccount,
                 toExtTokenAccount,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.nonAdmin, $.wrapAuthority])
               .rpc();
@@ -2019,7 +1984,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount,
               vaultMTokenAccountBalance.add(wrapAmount)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.ScaledUi
               ? await $.expectTokenUiBalance(
                   toExtTokenAccount,
                   toExtTokenAccountBalance.add(wrapAmount),
@@ -2057,7 +2022,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount
             );
             const toExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.getTokenUiBalance(toExtTokenAccount)
                 : await $.getTokenBalance(toExtTokenAccount);
 
@@ -2084,7 +2049,7 @@ for (const variant of VARIANTS) {
               vaultMTokenAccount,
               vaultMTokenAccountBalance.add(wrapAmount)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.ScaledUi
               ? await $.expectTokenUiBalance(
                   toExtTokenAccount,
                   toExtTokenAccountBalance.add(wrapAmount),
@@ -2190,7 +2155,7 @@ for (const variant of VARIANTS) {
                 vaultMTokenAccount
               );
               const toExtTokenAccountBalance =
-                variant === Variant.ScaledUiAmount
+                variant === Variant.ScaledUi
                   ? await $.getTokenUiBalance(toExtTokenAccount)
                   : await $.getTokenBalance(toExtTokenAccount);
 
@@ -2206,6 +2171,7 @@ for (const variant of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
                 .rpc();
@@ -2219,7 +2185,7 @@ for (const variant of VARIANTS) {
                 vaultMTokenAccount,
                 vaultMTokenAccountBalance.add(wrapAmount)
               );
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.expectTokenUiBalance(
                     toExtTokenAccount,
                     toExtTokenAccountBalance.add(wrapAmount),
@@ -2256,7 +2222,7 @@ for (const variant of VARIANTS) {
                 vaultMTokenAccount
               );
               const toExtTokenAccountBalance =
-                variant === Variant.ScaledUiAmount
+                variant === Variant.ScaledUi
                   ? await $.getTokenUiBalance(toExtTokenAccount)
                   : await $.getTokenBalance(toExtTokenAccount);
 
@@ -2272,6 +2238,7 @@ for (const variant of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
                 .rpc();
@@ -2285,7 +2252,7 @@ for (const variant of VARIANTS) {
                 vaultMTokenAccount,
                 vaultMTokenAccountBalance.add(wrapAmount)
               );
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.expectTokenUiBalance(
                     toExtTokenAccount,
                     toExtTokenAccountBalance.add(wrapAmount),
@@ -2322,7 +2289,7 @@ for (const variant of VARIANTS) {
                 vaultMTokenAccount
               );
               const toExtTokenAccountBalance =
-                variant === Variant.ScaledUiAmount
+                variant === Variant.ScaledUi
                   ? await $.getTokenUiBalance(toExtTokenAccount)
                   : await $.getTokenBalance(toExtTokenAccount);
 
@@ -2338,6 +2305,7 @@ for (const variant of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
                 .rpc();
@@ -2351,7 +2319,7 @@ for (const variant of VARIANTS) {
                 vaultMTokenAccount,
                 vaultMTokenAccountBalance.add(wrapAmount)
               );
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.expectTokenUiBalance(
                     toExtTokenAccount,
                     toExtTokenAccountBalance.add(wrapAmount),
@@ -2397,7 +2365,7 @@ for (const variant of VARIANTS) {
                 vaultMTokenAccount
               );
               const toExtTokenAccountBalance =
-                variant === Variant.ScaledUiAmount
+                variant === Variant.ScaledUi
                   ? await $.getTokenUiBalance(toExtTokenAccount)
                   : await $.getTokenBalance(toExtTokenAccount);
 
@@ -2413,6 +2381,7 @@ for (const variant of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
                 .rpc();
@@ -2431,7 +2400,7 @@ for (const variant of VARIANTS) {
                 vaultMTokenAccount,
                 vaultMTokenAccountBalance.add(wrapAmount)
               );
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.expectTokenUiBalance(
                     toExtTokenAccount,
                     toExtTokenAccountBalance
@@ -2475,7 +2444,7 @@ for (const variant of VARIANTS) {
                 vaultMTokenAccount
               );
               const toExtTokenAccountBalance =
-                variant === Variant.ScaledUiAmount
+                variant === Variant.ScaledUi
                   ? await $.getTokenUiBalance(toExtTokenAccount)
                   : await $.getTokenBalance(toExtTokenAccount);
 
@@ -2491,6 +2460,7 @@ for (const variant of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
                 .rpc();
@@ -2509,7 +2479,7 @@ for (const variant of VARIANTS) {
                 vaultMTokenAccount,
                 vaultMTokenAccountBalance.add(wrapAmount)
               );
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.expectTokenUiBalance(
                     toExtTokenAccount,
                     toExtTokenAccountBalance
@@ -2553,7 +2523,7 @@ for (const variant of VARIANTS) {
                 vaultMTokenAccount
               );
               const toExtTokenAccountBalance =
-                variant === Variant.ScaledUiAmount
+                variant === Variant.ScaledUi
                   ? await $.getTokenUiBalance(toExtTokenAccount)
                   : await $.getTokenBalance(toExtTokenAccount);
 
@@ -2569,6 +2539,7 @@ for (const variant of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
                 .rpc();
@@ -2587,7 +2558,7 @@ for (const variant of VARIANTS) {
                 vaultMTokenAccount,
                 vaultMTokenAccountBalance.add(wrapAmount)
               );
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.expectTokenUiBalance(
                     toExtTokenAccount,
                     toExtTokenAccountBalance
@@ -2753,6 +2724,7 @@ for (const variant of VARIANTS) {
                   unwrapAuthority: $.ext.programId,
                   fromExtTokenAccount,
                   toMTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
                 .rpc()
@@ -2803,6 +2775,7 @@ for (const variant of VARIANTS) {
                   unwrapAuthority: $.ext.programId,
                   toMTokenAccount: fromExtTokenAccount,
                   fromExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
@@ -2823,6 +2796,7 @@ for (const variant of VARIANTS) {
                   unwrapAuthority: $.ext.programId,
                   fromExtTokenAccount: toMTokenAccount,
                   toMTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
@@ -2851,6 +2825,7 @@ for (const variant of VARIANTS) {
                   unwrapAuthority: $.ext.programId,
                   fromExtTokenAccount,
                   toMTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.nonWrapAuthority])
                 .rpc(),
@@ -2865,7 +2840,7 @@ for (const variant of VARIANTS) {
           test("Not enough ext tokens, unwraps user's total balance - success", async () => {
             // Get the balance of the from ext token account
             const fromExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.getTokenUiBalance(
                     fromExtTokenAccount,
                     await $.getCurrentMultiplier()
@@ -2896,6 +2871,7 @@ for (const variant of VARIANTS) {
                 unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
               .rpc();
@@ -2924,6 +2900,7 @@ for (const variant of VARIANTS) {
                   unwrapAuthority: $.ext.programId,
                   fromExtTokenAccount,
                   toMTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
@@ -2956,7 +2933,7 @@ for (const variant of VARIANTS) {
 
             // Cache initial balances
             const fromExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.getTokenUiBalance(fromExtTokenAccount)
                 : await $.getTokenBalance(fromExtTokenAccount);
             const vaultMTokenAccountBalance = await $.getTokenBalance(
@@ -2974,12 +2951,13 @@ for (const variant of VARIANTS) {
                 unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
               .rpc();
 
             // Confirm updated balances
-            variant === Variant.ScaledUiAmount
+            variant === Variant.ScaledUi
               ? await $.expectTokenUiBalance(
                   fromExtTokenAccount,
                   fromExtTokenAccountBalance.sub(unwrapAmount),
@@ -3012,7 +2990,7 @@ for (const variant of VARIANTS) {
           test("Unwrap to wrap authority account - success", async () => {
             // Cache initial balances
             const fromExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.getTokenUiBalance(fromExtTokenAccount)
                 : await $.getTokenBalance(fromExtTokenAccount);
             const vaultMTokenAccountBalance = await $.getTokenBalance(
@@ -3051,7 +3029,7 @@ for (const variant of VARIANTS) {
               Comparison.GreaterThanOrEqual,
               new BN(2)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.ScaledUi
               ? await $.expectTokenUiBalance(
                   fromExtTokenAccount,
                   fromExtTokenAccountBalance.sub(unwrapAmount),
@@ -3077,7 +3055,7 @@ for (const variant of VARIANTS) {
 
             // Cache initial balances
             const fromExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.getTokenUiBalance(fromExtTokenAccount)
                 : await $.getTokenBalance(fromExtTokenAccount);
             const vaultMTokenAccountBalance = await $.getTokenBalance(
@@ -3099,6 +3077,7 @@ for (const variant of VARIANTS) {
                 unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
               .rpc();
@@ -3116,7 +3095,7 @@ for (const variant of VARIANTS) {
               Comparison.GreaterThanOrEqual,
               new BN(2)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.ScaledUi
               ? await $.expectTokenUiBalance(
                   fromExtTokenAccount,
                   fromExtTokenAccountBalance.sub(unwrapAmount),
@@ -3152,6 +3131,7 @@ for (const variant of VARIANTS) {
                   unwrapAuthority: $.wrapAuthority.publicKey,
                   fromExtTokenAccount,
                   toMTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.nonWrapAuthority])
                 .rpc()
@@ -3181,6 +3161,7 @@ for (const variant of VARIANTS) {
                   unwrapAuthority: $.nonAdmin.publicKey,
                   fromExtTokenAccount,
                   toMTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.nonWrapAuthority, $.nonAdmin])
                 .rpc(),
@@ -3208,7 +3189,7 @@ for (const variant of VARIANTS) {
 
             // Get the balance of the from ext token account
             const fromExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.getTokenUiBalance(
                     fromExtTokenAccount,
                     await $.getCurrentMultiplier()
@@ -3233,6 +3214,7 @@ for (const variant of VARIANTS) {
                 unwrapAuthority: $.wrapAuthority.publicKey,
                 fromExtTokenAccount,
                 toMTokenAccount,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.nonWrapAuthority, $.wrapAuthority])
               .rpc();
@@ -3278,7 +3260,7 @@ for (const variant of VARIANTS) {
 
             // Cache initial balances
             const fromExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.getTokenUiBalance(fromExtTokenAccount)
                 : await $.getTokenBalance(fromExtTokenAccount);
             const vaultMTokenAccountBalance = await $.getTokenBalance(
@@ -3300,6 +3282,7 @@ for (const variant of VARIANTS) {
                 unwrapAuthority: $.wrapAuthority.publicKey,
                 fromExtTokenAccount,
                 toMTokenAccount,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.nonAdmin, $.wrapAuthority])
               .rpc();
@@ -3327,7 +3310,7 @@ for (const variant of VARIANTS) {
 
             // Cache initial balances
             const fromExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.getTokenUiBalance(fromExtTokenAccount)
                 : await $.getTokenBalance(fromExtTokenAccount);
             const vaultMTokenAccountBalance = await $.getTokenBalance(
@@ -3349,6 +3332,7 @@ for (const variant of VARIANTS) {
                 unwrapAuthority: $.wrapAuthority.publicKey,
                 fromExtTokenAccount,
                 toMTokenAccount,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.nonWrapAuthority, $.wrapAuthority])
               .rpc();
@@ -3366,7 +3350,7 @@ for (const variant of VARIANTS) {
               Comparison.GreaterThanOrEqual,
               new BN(2)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.ScaledUi
               ? await $.expectTokenUiBalance(
                   fromExtTokenAccount,
                   fromExtTokenAccountBalance.sub(unwrapAmount),
@@ -3400,7 +3384,7 @@ for (const variant of VARIANTS) {
             );
 
             // Calculate the expected multipler after the new index push
-            if (variant === Variant.ScaledUiAmount) {
+            if (variant === Variant.ScaledUi) {
               newMultiplier = await $.getNewMultiplier(newIndex);
             }
           });
@@ -3434,7 +3418,7 @@ for (const variant of VARIANTS) {
               toMTokenAccount
             );
             const fromExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.getTokenUiBalance(fromExtTokenAccount, newMultiplier)
                 : await $.getTokenBalance(fromExtTokenAccount);
 
@@ -3450,6 +3434,7 @@ for (const variant of VARIANTS) {
                 unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
               .rpc();
@@ -3467,7 +3452,7 @@ for (const variant of VARIANTS) {
               Comparison.GreaterThanOrEqual,
               new BN(2)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.ScaledUi
               ? await $.expectTokenUiBalance(
                   fromExtTokenAccount,
                   fromExtTokenAccountBalance.sub(unwrapAmount),
@@ -3507,7 +3492,7 @@ for (const variant of VARIANTS) {
               toMTokenAccount
             );
             const fromExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.getTokenUiBalance(fromExtTokenAccount, newMultiplier)
                 : await $.getTokenBalance(fromExtTokenAccount);
 
@@ -3523,6 +3508,7 @@ for (const variant of VARIANTS) {
                 unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
               .rpc();
@@ -3540,7 +3526,7 @@ for (const variant of VARIANTS) {
               Comparison.GreaterThanOrEqual,
               new BN(2)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.ScaledUi
               ? await $.expectTokenUiBalance(
                   fromExtTokenAccount,
                   fromExtTokenAccountBalance.sub(unwrapAmount),
@@ -3579,7 +3565,7 @@ for (const variant of VARIANTS) {
               toMTokenAccount
             );
             const fromExtTokenAccountBalance =
-              variant === Variant.ScaledUiAmount
+              variant === Variant.ScaledUi
                 ? await $.getTokenUiBalance(fromExtTokenAccount, newMultiplier)
                 : await $.getTokenBalance(fromExtTokenAccount);
 
@@ -3595,6 +3581,7 @@ for (const variant of VARIANTS) {
                 unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
+                extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
               .rpc();
@@ -3612,7 +3599,7 @@ for (const variant of VARIANTS) {
               Comparison.GreaterThanOrEqual,
               new BN(2)
             );
-            variant === Variant.ScaledUiAmount
+            variant === Variant.ScaledUi
               ? await $.expectTokenUiBalance(
                   fromExtTokenAccount,
                   fromExtTokenAccountBalance.sub(unwrapAmount),
@@ -3677,8 +3664,6 @@ for (const variant of VARIANTS) {
           });
 
           // test cases
-          // [X] given m earner account does not match the derived PDA
-          //   [X] it reverts with an InvalidAccount error
           // [X] given the ext mint account does not match the one stored in the global account
           //   [X] it reverts with an InvalidMint error
           // [X] given the ext mint authority account does match the derived PDA
@@ -3690,28 +3675,6 @@ for (const variant of VARIANTS) {
           //     [X] it reverts with an InsufficientCollateral error
           //   [X] given the m vault has received yield to match the latest M index
           //     [X] it updates the scaled ui config on the ext mint to match the m index
-
-          // given m earner account does not match the derived PDA
-          // it reverts with an ConstraintSeeds / AccountNotInitialized error
-          test("M earn global account does not match derived account - reverts", async () => {
-            // Change the m earn global account
-            const mEarnGlobalAccount = PublicKey.unique();
-            if (mEarnGlobalAccount.equals($.getEarnGlobalAccount())) {
-              return;
-            }
-
-            // Attempt to send the transaction
-            // Expect an invalid account error (though could be others like not initialized)
-            await $.expectSystemError(
-              $.ext.methods
-                .sync()
-                .accountsPartial({
-                  mEarnGlobalAccount,
-                })
-                .signers([])
-                .rpc()
-            );
-          });
 
           // given the ext mint account does not match the one stored in the global account
           // it reverts with an InvalidMint error
@@ -3727,6 +3690,7 @@ for (const variant of VARIANTS) {
                 .sync()
                 .accountsPartial({
                   extMint: newMint.publicKey,
+                  extTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([])
                 .rpc(),
@@ -3750,6 +3714,7 @@ for (const variant of VARIANTS) {
                 .sync()
                 .accountsPartial({
                   extMintAuthority,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([])
                 .rpc(),
@@ -3793,7 +3758,13 @@ for (const variant of VARIANTS) {
             );
 
             // Send the instruction
-            await $.ext.methods.sync().accounts({}).signers([]).rpc();
+            await $.ext.methods
+              .sync()
+              .accounts({
+                extTokenProgram: $.extTokenProgram,
+              })
+              .signers([])
+              .rpc();
 
             // Confirm the scaled ui config on the ext mint matches the m index
             const multiplier = await $.getCurrentMultiplier();
@@ -3827,7 +3798,13 @@ for (const variant of VARIANTS) {
             );
 
             // Send the instruction
-            await $.ext.methods.sync().accounts({}).signers([]).rpc();
+            await $.ext.methods
+              .sync()
+              .accounts({
+                extTokenProgram: $.extTokenProgram,
+              })
+              .signers([])
+              .rpc();
 
             // Confirm the scaled ui config on the ext mint matches the m index
             await $.expectScaledUiAmountConfig($.extMint.publicKey, {
