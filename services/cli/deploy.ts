@@ -18,7 +18,7 @@ const opts: shell.ExecOptions & { async: false } = {
   program
     .command("deploy-program")
     .option("-t, --type <type>", "Yield type", "scaled-ui")
-    .option("-e, --extension <name>", "Extension program ID", "KAST_USDK")
+    .option("-e, --extension <name>", "Extension program ID", "USDK")
     .option("-c, --computePrice <number>", "Compute price", "300000")
     .action(({ type, extension, computePrice }) => {
       const [pid] = keysFromEnv([extension]);
@@ -53,7 +53,7 @@ const opts: shell.ExecOptions & { async: false } = {
   program
     .command("init-idl")
     .option("-t, --type <type>", "Yield type", "scaled-ui")
-    .option("-e, --extension <name>", "Extension program ID", "KAST_USDKY")
+    .option("-e, --extension <name>", "Extension program ID", "USDKY")
     .action(({ type, extension }) => {
       const [pid] = keysFromEnv([extension]);
       const pubkey = pid.publicKey.toBase58();
@@ -67,7 +67,7 @@ const opts: shell.ExecOptions & { async: false } = {
   program
     .command("upgrade-program")
     .option("-t, --type <type>", "Yield type", "scaled-ui")
-    .option("-e, --extension <name>", "Extension program ID", "KAST_USDK")
+    .option("-e, --extension <name>", "Extension program ID", "USDK")
     .option("-c, --computePrice <number>", "Compute price", "300000")
     .option("-s, --swapProgram", "Update swap program", false)
     .option("-a, --squadsAuth", "If Squads multisig is the auth", false)
@@ -92,7 +92,7 @@ const opts: shell.ExecOptions & { async: false } = {
   program
     .command("verify-pda-txn")
     .option("-t, --type <type>", "Yield type", "scaled-ui")
-    .option("-e, --extension <name>", "Extension program ID", "KAST_USDK")
+    .option("-e, --extension <name>", "Extension program ID", "USDK")
     .option(
       "-h, --hash <name>",
       "Commit hash",
@@ -106,7 +106,7 @@ const opts: shell.ExecOptions & { async: false } = {
 
   program
     .command("submit-verify-job")
-    .option("-e, --extension <name>", "Extension program ID", "KAST_USDK")
+    .option("-e, --extension <name>", "Extension program ID", "USDK")
     .action(({ type, extension, hash }) => {
       const [pid] = keysFromEnv([extension]);
       const pubkey = pid.publicKey.toBase58();
