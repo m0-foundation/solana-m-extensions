@@ -51,6 +51,7 @@ pub struct Wrap<'info> {
     )]
     pub m_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
+        mut,
         token::mint = to_mint,
         token::token_program = to_token_program,
     )]
