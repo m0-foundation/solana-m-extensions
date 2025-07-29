@@ -10,7 +10,6 @@ use crate::{
 
 #[derive(Accounts)]
 pub struct Swap<'info> {
-    #[account(mut)]
     pub signer: Signer<'info>,
 
     // Required if the swap program is not whitelisted on the extension

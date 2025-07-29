@@ -8,7 +8,6 @@ use crate::state::{SwapGlobal, GLOBAL_SEED};
 
 #[derive(Accounts)]
 pub struct Wrap<'info> {
-    #[account(mut)]
     pub signer: Signer<'info>,
 
     // Required if the swap program is not whitelisted on the extension
