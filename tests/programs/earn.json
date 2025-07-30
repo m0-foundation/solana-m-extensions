@@ -1,10 +1,10 @@
 {
-  "address": "MzeRokYa9o1ZikH6XHRiSS5nD8mNjZyHpLCBRTBSY4c",
+  "address": "mz2vDzjbQDUDXBH6FPF5s4odCJ4y8YLE5QWaZ8XdZ9Z",
   "metadata": {
     "name": "earn",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "spec": "0.1.0",
-    "description": "Created with Anchor"
+    "description": "Earner management and yield distribution program for M"
   },
   "instructions": [
     {
@@ -28,27 +28,20 @@
           }
         },
         {
-          "name": "user_token_account"
+          "name": "m_mint",
+          "relations": ["global_account"]
         },
         {
-          "name": "earner_account",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [101, 97, 114, 110, 101, 114]
-              },
-              {
-                "kind": "account",
-                "path": "user_token_account"
-              }
-            ]
-          }
+          "name": "user_token_account",
+          "writable": true
         },
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
         }
       ],
       "args": [
@@ -67,105 +60,6 @@
           }
         }
       ]
-    },
-    {
-      "name": "claim_for",
-      "discriminator": [245, 67, 97, 44, 59, 223, 144, 1],
-      "accounts": [
-        {
-          "name": "earn_authority",
-          "signer": true,
-          "relations": ["global_account"]
-        },
-        {
-          "name": "global_account",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [103, 108, 111, 98, 97, 108]
-              }
-            ]
-          }
-        },
-        {
-          "name": "mint",
-          "writable": true,
-          "relations": ["global_account"]
-        },
-        {
-          "name": "token_authority_account",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116, 111, 107, 101, 110, 95, 97, 117, 116, 104, 111, 114, 105,
-                  116, 121
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "user_token_account",
-          "writable": true
-        },
-        {
-          "name": "earner_account",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [101, 97, 114, 110, 101, 114]
-              },
-              {
-                "kind": "account",
-                "path": "earner_account.user_token_account",
-                "account": "Earner"
-              }
-            ]
-          }
-        },
-        {
-          "name": "token_program"
-        },
-        {
-          "name": "mint_multisig"
-        }
-      ],
-      "args": [
-        {
-          "name": "snapshot_balance",
-          "type": "u64"
-        }
-      ]
-    },
-    {
-      "name": "complete_claims",
-      "discriminator": [125, 214, 249, 213, 173, 230, 32, 109],
-      "accounts": [
-        {
-          "name": "earn_authority",
-          "signer": true,
-          "relations": ["global_account"]
-        },
-        {
-          "name": "global_account",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [103, 108, 111, 98, 97, 108]
-              }
-            ]
-          }
-        }
-      ],
-      "args": []
     },
     {
       "name": "initialize",
@@ -189,24 +83,121 @@
           }
         },
         {
-          "name": "mint"
+          "name": "m_mint"
+        },
+        {
+          "name": "portal_token_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116, 111, 107, 101, 110, 95, 97, 117, 116, 104, 111, 114, 105,
+                  116, 121
+                ]
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                11, 134, 236, 24, 28, 212, 197, 201, 132, 233, 6, 43, 19, 242,
+                178, 222, 123, 159, 91, 94, 104, 232, 67, 73, 35, 29, 102, 20,
+                205, 243, 249, 159
+              ]
+            }
+          }
+        },
+        {
+          "name": "ext_swap_global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [103, 108, 111, 98, 97, 108]
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                5, 60, 242, 167, 56, 11, 17, 54, 97, 114, 227, 114, 39, 167,
+                101, 13, 161, 190, 235, 218, 112, 220, 127, 89, 126, 174, 151,
+                23, 37, 130, 35, 190
+              ]
+            }
+          }
+        },
+        {
+          "name": "portal_m_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "portal_token_authority"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "m_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140, 151, 37, 143, 78, 36, 137, 241, 187, 61, 16, 41, 20, 142,
+                13, 131, 11, 90, 19, 153, 218, 255, 16, 132, 4, 142, 123, 216,
+                219, 233, 248, 89
+              ]
+            }
+          }
+        },
+        {
+          "name": "ext_swap_m_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "ext_swap_global"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "m_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140, 151, 37, 143, 78, 36, 137, 241, 187, 61, 16, 41, 20, 142,
+                13, 131, 11, 90, 19, 153, 218, 255, 16, 132, 4, 142, 123, 216,
+                219, 233, 248, 89
+              ]
+            }
+          }
         },
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
         }
       ],
       "args": [
         {
-          "name": "earn_authority",
-          "type": "pubkey"
-        },
-        {
-          "name": "initial_index",
-          "type": "u64"
-        },
-        {
-          "name": "claim_cooldown",
+          "name": "current_index",
           "type": "u64"
         }
       ]
@@ -232,8 +223,13 @@
           }
         },
         {
-          "name": "mint",
+          "name": "m_mint",
+          "writable": true,
           "relations": ["global_account"]
+        },
+        {
+          "name": "token_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
         }
       ],
       "args": [
@@ -270,25 +266,23 @@
           }
         },
         {
-          "name": "earner_account",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [101, 97, 114, 110, 101, 114]
-              },
-              {
-                "kind": "account",
-                "path": "earner_account.user_token_account",
-                "account": "Earner"
-              }
-            ]
-          }
+          "name": "m_mint",
+          "relations": ["global_account"]
         },
         {
           "name": "user_token_account",
-          "relations": ["earner_account"]
+          "docs": [
+            "We originally allowed this account to be validated later and potentially be closed,",
+            "but this is not necessary anymore since if the account is closed, it will be frozen",
+            "when re-initialized. Therefore, closing a token account is equivalent to removing an earner.",
+            "For this reason, we also know that if there is a thawed token account, it went through the",
+            "add registrar earner flow and thus the owner is the original since we required it to be immutable."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
         }
       ],
       "args": [
@@ -313,84 +307,18 @@
           }
         }
       ]
-    },
-    {
-      "name": "set_claim_cooldown",
-      "discriminator": [165, 71, 98, 121, 209, 241, 183, 47],
-      "accounts": [
-        {
-          "name": "admin",
-          "signer": true,
-          "relations": ["global_account"]
-        },
-        {
-          "name": "global_account",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [103, 108, 111, 98, 97, 108]
-              }
-            ]
-          }
-        }
-      ],
-      "args": [
-        {
-          "name": "claim_cooldown",
-          "type": "u64"
-        }
-      ]
-    },
-    {
-      "name": "set_earn_authority",
-      "discriminator": [241, 163, 124, 135, 107, 230, 22, 157],
-      "accounts": [
-        {
-          "name": "admin",
-          "signer": true,
-          "relations": ["global_account"]
-        },
-        {
-          "name": "global_account",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [103, 108, 111, 98, 97, 108]
-              }
-            ]
-          }
-        }
-      ],
-      "args": [
-        {
-          "name": "new_earn_authority",
-          "type": "pubkey"
-        }
-      ]
     }
   ],
   "accounts": [
     {
-      "name": "Earner",
-      "discriminator": [236, 126, 51, 96, 46, 225, 103, 207]
-    },
-    {
-      "name": "Global",
-      "discriminator": [167, 232, 232, 177, 200, 108, 114, 127]
+      "name": "EarnGlobal",
+      "discriminator": [229, 50, 25, 132, 207, 93, 185, 23]
     }
   ],
   "events": [
     {
       "name": "IndexUpdate",
       "discriminator": [8, 115, 122, 188, 54, 206, 122, 87]
-    },
-    {
-      "name": "RewardsClaim",
-      "discriminator": [84, 168, 212, 108, 203, 10, 250, 107]
     }
   ],
   "errors": [
@@ -453,39 +381,31 @@
       "code": 6011,
       "name": "MutableOwner",
       "msg": "Token account owner is required to be immutable."
+    },
+    {
+      "code": 6012,
+      "name": "InvalidMint",
+      "msg": "Invalid Mint."
+    },
+    {
+      "code": 6013,
+      "name": "MathOverflow",
+      "msg": "Math overflow error."
+    },
+    {
+      "code": 6014,
+      "name": "MathUnderflow",
+      "msg": "Math underflow error."
+    },
+    {
+      "code": 6015,
+      "name": "TypeConversionError",
+      "msg": "Type conversion error."
     }
   ],
   "types": [
     {
-      "name": "Earner",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "last_claim_index",
-            "type": "u64"
-          },
-          {
-            "name": "last_claim_timestamp",
-            "type": "u64"
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          },
-          {
-            "name": "user",
-            "type": "pubkey"
-          },
-          {
-            "name": "user_token_account",
-            "type": "pubkey"
-          }
-        ]
-      }
-    },
-    {
-      "name": "Global",
+      "name": "EarnGlobal",
       "type": {
         "kind": "struct",
         "fields": [
@@ -494,40 +414,16 @@
             "type": "pubkey"
           },
           {
-            "name": "earn_authority",
+            "name": "m_mint",
             "type": "pubkey"
           },
           {
-            "name": "mint",
+            "name": "portal_authority",
             "type": "pubkey"
           },
           {
-            "name": "index",
-            "type": "u64"
-          },
-          {
-            "name": "timestamp",
-            "type": "u64"
-          },
-          {
-            "name": "claim_cooldown",
-            "type": "u64"
-          },
-          {
-            "name": "max_supply",
-            "type": "u64"
-          },
-          {
-            "name": "max_yield",
-            "type": "u64"
-          },
-          {
-            "name": "distributed",
-            "type": "u64"
-          },
-          {
-            "name": "claim_complete",
-            "type": "bool"
+            "name": "ext_swap_global_account",
+            "type": "pubkey"
           },
           {
             "name": "earner_merkle_root",
@@ -536,16 +432,8 @@
             }
           },
           {
-            "name": "portal_authority",
-            "type": "pubkey"
-          },
-          {
             "name": "bump",
             "type": "u8"
-          },
-          {
-            "name": "earner_rate",
-            "type": "u16"
           }
         ]
       }
@@ -561,15 +449,7 @@
           },
           {
             "name": "ts",
-            "type": "u64"
-          },
-          {
-            "name": "supply",
-            "type": "u64"
-          },
-          {
-            "name": "max_yield",
-            "type": "u64"
+            "type": "i64"
           }
         ]
       }
@@ -591,55 +471,13 @@
           }
         ]
       }
-    },
-    {
-      "name": "RewardsClaim",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "token_account",
-            "type": "pubkey"
-          },
-          {
-            "name": "recipient_token_account",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          },
-          {
-            "name": "ts",
-            "type": "u64"
-          },
-          {
-            "name": "index",
-            "type": "u64"
-          },
-          {
-            "name": "fee",
-            "type": "u64"
-          }
-        ]
-      }
     }
   ],
   "constants": [
     {
-      "name": "EARNER_SEED",
-      "type": "bytes",
-      "value": "[101, 97, 114, 110, 101, 114]"
-    },
-    {
       "name": "GLOBAL_SEED",
       "type": "bytes",
       "value": "[103, 108, 111, 98, 97, 108]"
-    },
-    {
-      "name": "TOKEN_AUTHORITY_SEED",
-      "type": "bytes",
-      "value": "[116, 111, 107, 101, 110, 95, 97, 117, 116, 104, 111, 114, 105, 116, 121]"
     }
   ]
 }

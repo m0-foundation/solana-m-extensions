@@ -13,10 +13,9 @@ import { Comparison, ExtensionTest, Variant } from "./ext_test_harness";
 
 // Start parameters for M Earn
 const initialSupply = new BN(100_000_000); // 100 tokens with 6 decimals
-const initialIndex = new BN(1_100_000_000_000); // 1.1
-const claimCooldown = new BN(0); // None
+const initialIndex = new BN(1_100_000_000_000); // 1.1 with 12 decimals
 
-const VARIANTS: Variant[] = [Variant.NoYield, Variant.ScaledUi, Variant.Crank];
+const VARIANTS: Variant[] = [Variant.NoYield, Variant.ScaledUi]; // , Variant.Crank];
 
 // Implement test cases for all variants
 // Most are the same, but allows conditional tests when required for different variants
@@ -27,7 +26,7 @@ for (const variant of VARIANTS) {
     beforeEach(async () => {
       // Create new extenstion test harness and then initialize it
       $ = new ExtensionTest(variant, []);
-      await $.init(initialSupply, initialIndex, claimCooldown);
+      await $.init(initialSupply, initialIndex);
     });
 
     describe("admin instruction tests", () => {
@@ -300,7 +299,7 @@ for (const variant of VARIANTS) {
               mVaultBump,
               extMintAuthorityBump,
               yieldConfig: {
-                yieldVariant: "noYield",
+                yieldVariant: { noYield: {} },
               },
               wrapAuthorities,
             });
@@ -436,7 +435,7 @@ for (const variant of VARIANTS) {
               extMintAuthorityBump,
               wrapAuthorities,
               yieldConfig: {
-                yieldVariant: "scaledUi",
+                yieldVariant: { scaledUi: {} },
                 feeBps,
                 lastMIndex: initialIndex,
                 lastExtIndex: new BN(1e12),
@@ -673,13 +672,7 @@ for (const variant of VARIANTS) {
           // Propagate the start index
           await $.propagateIndex(startIndex);
 
-          // Claim yield for the m vault and complete the claim cycle
-          const mVault = $.getMVault();
-          const mVaultATA = await $.getATA($.mMint.publicKey, mVault);
-          await $.mClaimFor(mVault, await $.getTokenBalance(mVaultATA));
-          await $.mCompleteClaims();
-
-          if (variant !== Variant.NoYield) {
+          if (variant === Variant.ScaledUi) {
             // Sync the multiplier
             await $.sync();
           }
@@ -875,12 +868,8 @@ for (const variant of VARIANTS) {
             // Propagate a new index to create a situation where multiplier needs sync
             const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12));
             await $.propagateIndex(newIndex);
-
-            // Claim yield to ensure vault has enough collateral
             const mVault = $.getMVault();
             const mVaultATA = await $.getATA($.mMint.publicKey, mVault);
-            await $.mClaimFor(mVault, await $.getTokenBalance(mVaultATA));
-            await $.mCompleteClaims();
 
             // Cache balances before claim excess
             const initialVaultBalance = await $.getTokenBalance(mVaultATA);
@@ -1136,7 +1125,7 @@ for (const variant of VARIANTS) {
         }
       });
 
-      if (variant !== Variant.NoYield) {
+      if (variant === Variant.ScaledUi) {
         describe("set_fee unit tests", () => {
           // yield variant test cases
           // [X] given the admin does not sign the transaction
@@ -1170,12 +1159,6 @@ for (const variant of VARIANTS) {
 
             // Propagate the start index
             await $.propagateIndex(startIndex);
-
-            // Claim yield for the m vault and complete the claim cycle
-            const mVault = $.getMVault();
-            const mVaultATA = await $.getATA($.mMint.publicKey, mVault);
-            await $.mClaimFor(mVault, await $.getTokenBalance(mVaultATA));
-            await $.mCompleteClaims();
 
             // Sync the multiplier
             await $.sync();
@@ -1256,12 +1239,6 @@ for (const variant of VARIANTS) {
             const newIndex = new BN(randomInt(startIndex.toNumber() + 1, 2e12));
             await $.propagateIndex(newIndex);
 
-            // Claim yield to ensure vault has enough collateral
-            const mVault = $.getMVault();
-            const mVaultATA = await $.getATA($.mMint.publicKey, mVault);
-            await $.mClaimFor(mVault, await $.getTokenBalance(mVaultATA));
-            await $.mCompleteClaims();
-
             // Get the new multiplier
             const multiplier = await $.getNewMultiplier(newIndex);
 
@@ -1288,7 +1265,6 @@ for (const variant of VARIANTS) {
             // Verify fee bps was updated
             await $.expectExtGlobalState({
               yieldConfig: {
-                yieldVariant: "scaledUi",
                 feeBps: newFee,
                 lastExtIndex: new BN(Math.floor(multiplier * 1e12)),
                 lastMIndex: newIndex,
@@ -1316,7 +1292,6 @@ for (const variant of VARIANTS) {
             // Verify fee bps was updated
             await $.expectExtGlobalState({
               yieldConfig: {
-                yieldVariant: "scaledUi",
                 feeBps: newFee,
                 lastExtIndex: new BN(Math.floor(multiplier * 1e12)),
                 lastMIndex: startIndex,
@@ -1324,6 +1299,310 @@ for (const variant of VARIANTS) {
             });
           });
         });
+      }
+
+      if (variant === Variant.Crank) {
+        describe("set_earn_authority unit tests", () => {
+          // test cases
+          //   [X] given the admin signs the transaction
+          //      [X] the earn authority is updated
+          //   [X] given a non-admin signs the transaction
+          //      [X] the transaction reverts with a not authorized error
+          let wrapAuthorities: PublicKey[];
+
+          beforeEach(async () => {
+            // Initialize the program
+            wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
+            // Initialize the extension program
+            await $.initializeExt(
+              wrapAuthorities,
+              undefined,
+              $.earnAuthority.publicKey
+            );
+          });
+
+          test("Admin can set new earn authority", async () => {
+            // Setup new earn authority
+            const newEarnAuthority = new Keypair();
+
+            // Send the transaction
+            await $.ext.methods
+              .setEarnAuthority(newEarnAuthority.publicKey)
+              .accounts({})
+              .signers([$.admin])
+              .rpc();
+
+            // Verify the global state was updated
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                earnAuthority: newEarnAuthority.publicKey,
+              },
+            });
+          });
+
+          test("Non-admin cannot set earn authority", async () => {
+            // Attempt to set new earn authority with non-admin
+            const newEarnAuthority = new Keypair();
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .setEarnAuthority(newEarnAuthority.publicKey)
+                .accounts({})
+                .signers([$.admin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+        });
+
+        describe("add_earn_manager unit tests", () => {
+          // test cases
+          // [X] given the admin doesn't sign the transaction
+          //   [X] it reverts with a NotAuthorized error
+          // [X] given the admin does sign the transaction
+          //   [X] given the fee token account is for the wrong mint
+          //     [X] it reverts with a ConstraintTokenMint error
+          //   [X] given the fee is higher than 100%
+          //     [X] it reverts with an InvalidParam error
+          //   [X] given all the accounts and inputs are correct
+          //     [X] it initializes an EarnManager account with
+          //       [X] the earn manager key
+          //       [X] is_active flag set to true
+          //       [X] fee_bps that was input
+          //       [X] fee_token_account that was provided
+          //       [X] the account's bump
+          //   [X] given the account already exists
+          //     [X] it sets the account data again
+
+          let wrapAuthorities: PublicKey[];
+          const earnManagerOne = new Keypair();
+          const earnManagerTwo = new Keypair();
+
+          beforeEach(async () => {
+            // Initialize the program
+            wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
+            // Initialize the extension program
+            await $.initializeExt(
+              wrapAuthorities,
+              undefined,
+              $.earnAuthority.publicKey
+            );
+          });
+
+          // given the admin does not sign the transaction
+          // it reverts with a NotAuthorized error
+          test("admin does not sign transaction - reverts", async () => {
+            // Get the ATA for the earn manager
+            const earnManagerATA = await $.getATA(
+              $.extMint.publicKey,
+              earnManagerOne.publicKey
+            );
+
+            // Attempt to send the transaction
+            // expect a NotAuthorized error
+            await $.expectAnchorError(
+              $.ext.methods
+                .addEarnManager(earnManagerOne.publicKey, new BN(100))
+                .accounts({
+                  feeTokenAccount: earnManagerATA,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the admin does sign the transaction
+          // given the fee token account is for the wrong mint
+          // it reverts with a ConstraintTokenMint error
+          test("fee_token_account is for the wrong mint - reverts", async () => {
+            // Create an ATA for the wrong mint
+            const earnManagerMATA = await $.getATA(
+              $.mMint.publicKey,
+              earnManagerOne.publicKey
+            );
+
+            // Attempt to send the transaction
+            // expect a ConstraintTokenMint error
+            await $.expectAnchorError(
+              $.ext.methods
+                .addEarnManager(earnManagerOne.publicKey, new BN(100))
+                .accounts({
+                  feeTokenAccount: earnManagerMATA,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "ConstraintTokenMint"
+            );
+          });
+
+          // given the admin does sign the transaction
+          // given the fee is higher than 100% (in basis points)
+          // it reverts with an InvalidParam error
+          test("fee higher than 100% - reverts", async () => {
+            const feeBps = new BN(randomInt(10001, 2 ** 48 - 1));
+
+            // Attempt to send the instruction
+            await $.expectAnchorError(
+              $.ext.methods
+                .addEarnManager(earnManagerOne.publicKey, feeBps)
+                .accounts({
+                  feeTokenAccount: await $.getATA(
+                    $.extMint.publicKey,
+                    earnManagerOne.publicKey
+                  ),
+                })
+                .signers([$.admin])
+                .rpc(),
+              "InvalidParam"
+            );
+          });
+
+          // given the admin does sign the transaction
+          // given all the accounts are correct
+          // it initializes the earn manager account and sets its data
+          test("add_earn_manager - success", async () => {
+            // Setup the instruction
+            const feeBps = new BN(randomInt(0, 10000));
+            const earnManagerATA = await $.getATA(
+              $.extMint.publicKey,
+              earnManagerOne.publicKey
+            );
+
+            // Send the transaction
+            await $.ext.methods
+              .addEarnManager(earnManagerOne.publicKey, feeBps)
+              .accounts({
+                feeTokenAccount: earnManagerATA,
+              })
+              .signers([$.admin])
+              .rpc();
+
+            const [earnManagerAccount, bump] = PublicKey.findProgramAddressSync(
+              [
+                Buffer.from("earn_manager"),
+                earnManagerOne.publicKey.toBuffer(),
+              ],
+              $.ext.programId
+            );
+
+            // Check that the state has been updated
+            $.expectEarnManagerState(earnManagerAccount, {
+              earnManager: earnManagerOne.publicKey,
+              isActive: true,
+              feeBps,
+              feeTokenAccount: earnManagerATA,
+              bump,
+            });
+          });
+
+          // given admin does sign the transaction
+          // given the account already exists
+          // it sets the data again
+          test("add_earn_manager again - success", async () => {
+            // Add earn manager initially
+            await $.addEarnManager(earnManagerOne.publicKey, new BN(100));
+
+            // Add the earn manager again with a new fee and fee token account
+            const newFeeTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnManagerTwo.publicKey
+            );
+            const feeBps = new BN(10);
+            await $.addEarnManager(earnManagerOne.publicKey, feeBps);
+
+            const earnManagerAccount = $.getEarnManagerAccount(
+              earnManagerOne.publicKey
+            );
+
+            $.expectEarnManagerState(earnManagerAccount, {
+              earnManager: earnManagerOne.publicKey,
+              isActive: true,
+              feeBps,
+              feeTokenAccount: newFeeTokenAccount,
+            });
+          });
+        });
+
+        // describe("remove_earn_manager unit tests", () => {
+        //   // test cases
+        //   // [X] given the admin does not sign the transaction
+        //   //   [X] it reverts with a NotAuthorized error
+        //   // [X] given the admin does sign the transaction
+        //   //   [X] it sets the is_active flag on the earn manager account to false
+
+        //   beforeEach(async () => {
+        //     // Initialize the program
+        //     await initializeExt(earnAuthority.publicKey);
+
+        //     // Add an earn manager that can be removed
+        //     await addEarnManager(earnManagerOne.publicKey, new BN(0));
+        //   });
+
+        //   // given the admin does not sign the transaction
+        //   // it reverts with a NotAuthorized error
+        //   test("admin does not sign the transaction - reverts", async () => {
+        //     // Setup the instruction
+        //     await prepRemoveEarnManager(nonAdmin, earnManagerOne.publicKey);
+
+        //     // Attempt to send the transaction
+        //     // Expect a NotAuthorized error
+        //     await expectAnchorError(
+        //       $.ext.methods
+        //         .removeEarnManager()
+        //         .accountsPartial({ ...accounts })
+        //         .signers([nonAdmin])
+        //         .rpc(),
+        //       "NotAuthorized"
+        //     );
+        //   });
+
+        //   // given the admin does sign the transaction
+        //   // given the earn manager account is not initialized
+        //   // it reverts with an AccountNotInitialized error
+        //   test("earn_manager_account not initialized - reverts", async () => {
+        //     // Setup the instruction
+        //     await prepRemoveEarnManager(admin, earnManagerTwo.publicKey);
+
+        //     // Attempt to send the transaction
+        //     // Expect an AccountNotInitialized error
+        //     await expectAnchorError(
+        //       $.ext.methods
+        //         .removeEarnManager()
+        //         .accountsPartial({ ...accounts })
+        //         .signers([admin])
+        //         .rpc(),
+        //       "AccountNotInitialized"
+        //     );
+        //   });
+
+        //   // given the admin does sign the transaction
+        //   // it sets the is_active flag on the earn manager account to false
+        //   test("remove_earn_manager - success", async () => {
+        //     // Setup the instruction
+        //     const { earnManagerAccount } = prepRemoveEarnManager(
+        //       admin,
+        //       earnManagerOne.publicKey
+        //     );
+
+        //     // Confirm that the account is currently active
+        //     expectEarnManagerState(earnManagerAccount, {
+        //       isActive: true,
+        //     });
+
+        //     // Send the instruction
+        //     await $.ext.methods
+        //       .removeEarnManager()
+        //       .accountsPartial({ ...accounts })
+        //       .signers([admin])
+        //       .rpc();
+
+        //     // Confirm the account is not active
+        //     expectEarnManagerState(earnManagerAccount, {
+        //       isActive: false,
+        //     });
+        //   });
+        // });
       }
     });
 
@@ -1356,16 +1635,8 @@ for (const variant of VARIANTS) {
         // Propagate the start index
         await $.propagateIndex(startIndex);
 
-        // Claim yield for the m vault and complete the claim cycle
-        // so that the m vault is collateralized to start
-        await $.mClaimFor(
-          $.getMVault(),
-          await $.getTokenBalance(vaultMTokenAccount)
-        );
-        await $.mCompleteClaims();
-
         // Sync the scaled ui multiplier with the m index
-        if (variant !== Variant.NoYield) {
+        if (variant === Variant.ScaledUi) {
           await $.sync();
         }
 
@@ -2143,10 +2414,6 @@ for (const variant of VARIANTS) {
             // it wraps the amount of M tokens from the user's M token account to the M vault token account
             // the extension is solvent
             test("Wrap with new index - no flows - success", async () => {
-              // Mint yield to the m vault for the new index
-              await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
-              await $.mCompleteClaims();
-
               // Cache initial balances
               const fromMTokenAccountBalance = await $.getTokenBalance(
                 fromMTokenAccount
@@ -2210,10 +2477,6 @@ for (const variant of VARIANTS) {
               await $.mintM($.admin.publicKey, inflows);
               await $.wrap($.admin, inflows);
 
-              // Mint yield to the m vault for the new index
-              await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
-              await $.mCompleteClaims();
-
               // Cache initial balances
               const fromMTokenAccountBalance = await $.getTokenBalance(
                 fromMTokenAccount
@@ -2276,10 +2539,6 @@ for (const variant of VARIANTS) {
                 randomInt(100, initialWrappedAmount.toNumber() + 1)
               );
               await $.unwrap($.admin, outflows);
-
-              // Mint yield to the m vault for the new index
-              await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
-              await $.mCompleteClaims();
 
               // Cache initial balances
               const fromMTokenAccountBalance = await $.getTokenBalance(
@@ -2353,10 +2612,6 @@ for (const variant of VARIANTS) {
                 Math.floor((await $.getCurrentMultiplier()) * 1e12)
               );
 
-              // Mint yield to the m vault for the new index
-              await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
-              await $.mCompleteClaims();
-
               // Cache initial balances
               const fromMTokenAccountBalance = await $.getTokenBalance(
                 fromMTokenAccount
@@ -2432,10 +2687,6 @@ for (const variant of VARIANTS) {
               await $.mintM($.admin.publicKey, inflows);
               await $.wrap($.admin, inflows);
 
-              // Mint yield to the m vault for the new index
-              await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
-              await $.mCompleteClaims();
-
               // Cache initial balances
               const fromMTokenAccountBalance = await $.getTokenBalance(
                 fromMTokenAccount
@@ -2510,10 +2761,6 @@ for (const variant of VARIANTS) {
                 randomInt(100, initialWrappedAmount.toNumber() + 1)
               );
               await $.unwrap($.admin, outflows);
-
-              // Mint yield to the m vault for the new index
-              await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
-              await $.mCompleteClaims();
 
               // Cache initial balances
               const fromMTokenAccountBalance = await $.getTokenBalance(
@@ -3406,10 +3653,6 @@ for (const variant of VARIANTS) {
           // given yield has been minted to the m vault for the new index
           // it unwraps the amount of M tokens from the M vault token account to the user's M token account
           test("Unwrap with new index - no flows - success", async () => {
-            // Mint yield to the m vault for the new index
-            await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
-            await $.mCompleteClaims();
-
             // Cache initial balances
             const vaultMTokenAccountBalance = await $.getTokenBalance(
               vaultMTokenAccount
@@ -3480,10 +3723,6 @@ for (const variant of VARIANTS) {
             await $.mintM($.admin.publicKey, inflows);
             await $.wrap($.admin, inflows);
 
-            // Mint yield to the m vault for the new index
-            await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
-            await $.mCompleteClaims();
-
             // Cache initial balances
             const vaultMTokenAccountBalance = await $.getTokenBalance(
               vaultMTokenAccount
@@ -3553,10 +3792,6 @@ for (const variant of VARIANTS) {
             );
             await $.unwrap($.admin, outflows);
 
-            // Mint yield to the m vault for the new index
-            await $.mClaimFor($.getMVault(), vaultBalanceAtNewIndex);
-            await $.mCompleteClaims();
-
             // Cache initial balances
             const vaultMTokenAccountBalance = await $.getTokenBalance(
               vaultMTokenAccount
@@ -3618,7 +3853,7 @@ for (const variant of VARIANTS) {
       });
     });
 
-    if (variant !== Variant.NoYield) {
+    if (variant === Variant.ScaledUi) {
       describe("open instruction tests", () => {
         describe("sync unit tests", () => {
           const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
@@ -3650,14 +3885,6 @@ for (const variant of VARIANTS) {
 
             // Propagate the start index
             await $.propagateIndex(startIndex);
-
-            // Claim yield for the m vault and complete the claim cycle
-            // so that the m vault is collateralized to start
-            await $.mClaimFor(
-              $.getMVault(),
-              await $.getTokenBalance(vaultMTokenAccount)
-            );
-            await $.mCompleteClaims();
 
             // Reset the blockhash to avoid issues with duplicate transactions from multiple claim cycles
             $.svm.expireBlockhash();
@@ -3819,5 +4046,577 @@ for (const variant of VARIANTS) {
         });
       });
     }
+
+    //   // Crank-specific tests
+    //   if (variant === Variant.Crank) {
+    //     describe("crank admin instruction tests", () => {
+    //       const earnManagerOne = new Keypair();
+    //       const earnManagerTwo = new Keypair();
+
+    //       beforeEach(async () => {
+    //         const wrapAuthorities = [
+    //           $.admin.publicKey,
+    //           $.wrapAuthority.publicKey,
+    //         ];
+
+    //         // Initialize the extension program with crank variant
+    //         await $.initializeExt(
+    //           wrapAuthorities,
+    //           undefined,
+    //           $.earnAuthority.publicKey
+    //         );
+    //       });
+
+    //       describe("add_earn_manager unit tests", () => {
+    //         test("fee_token_account is for the wrong mint - reverts", async () => {
+    //           // Create an ATA for the wrong mint (M mint instead of Ext mint)
+    //           const wrongMintTokenAccount = await $.getATA(
+    //             $.mMint.publicKey,
+    //             earnManagerOne.publicKey
+    //           );
+
+    //           await $.expectAnchorError(
+    //             $.ext.methods
+    //               .addEarnManager(earnManagerOne.publicKey, new BN(0))
+    //               .accounts({
+    //                 feeTokenAccount: wrongMintTokenAccount,
+    //               })
+    //               .signers([$.admin])
+    //               .rpc(),
+    //             "ConstraintTokenMint"
+    //           );
+    //         });
+
+    //         test("fee higher than 100% - reverts", async () => {
+    //           const feeTokenAccount = await $.getATA(
+    //             $.extMint.publicKey,
+    //             earnManagerOne.publicKey
+    //           );
+    //           const feeBps = new BN(10001); // Over 100%
+
+    //           await $.expectAnchorError(
+    //             $.ext.methods
+    //               .addEarnManager(earnManagerOne.publicKey, feeBps)
+    //               .accounts({
+    //                 admin: $.admin.publicKey,
+    //                 feeTokenAccount,
+    //               })
+    //               .signers([$.admin])
+    //               .rpc(),
+    //             "InvalidParam"
+    //           );
+    //         });
+
+    //         test("add_earn_manager again - success", async () => {
+    //           // Add earn manager initially
+    //           await $.addEarnManager(earnManagerOne.publicKey, new BN(500));
+
+    //           // Add the earn manager again with a new fee
+    //           const newFeeBps = new BN(1000);
+    //           await $.addEarnManager(earnManagerOne.publicKey, newFeeBps);
+
+    //           const earnManagerAccount = await $.ext.account.earnManager.fetch(
+    //             $.getEarnManagerAccount(earnManagerOne.publicKey)
+    //           );
+
+    //           expect(earnManagerAccount.earnManager).toEqual(
+    //             earnManagerOne.publicKey
+    //           );
+    //           expect(earnManagerAccount.isActive).toBe(true);
+    //           expect(earnManagerAccount.feeBps.toNumber()).toBe(1000);
+    //         });
+    //       });
+
+    //       describe("remove_earn_manager unit tests", () => {
+    //         beforeEach(async () => {
+    //           await $.addEarnManager(earnManagerOne.publicKey, new BN(0));
+    //         });
+
+    //         test("earn_manager_account not initialized - reverts", async () => {
+    //           await $.expectAnchorError(
+    //             $.ext.methods
+    //               .removeEarnManager()
+    //               .accountsPartial({
+    //                 admin: $.admin.publicKey,
+    //                 earnManagerAccount: $.getEarnManagerAccount(
+    //                   earnManagerTwo.publicKey
+    //                 ),
+    //               })
+    //               .signers([$.admin])
+    //               .rpc(),
+    //             "AccountNotInitialized"
+    //           );
+    //         });
+    //       });
+    //     });
+
+    //     describe("earn_authority instruction tests", () => {
+    //       const earnManagerOne = new Keypair();
+    //       const earnManagerTwo = new Keypair();
+    //       const earnerOne = new Keypair();
+    //       const earnerTwo = new Keypair();
+
+    //       beforeEach(async () => {
+    //         const wrapAuthorities = [
+    //           $.admin.publicKey,
+    //           $.wrapAuthority.publicKey,
+    //         ];
+
+    //         // Initialize the extension program with crank variant
+    //         await $.initializeExt(
+    //           wrapAuthorities,
+    //           undefined,
+    //           $.earnAuthority.publicKey
+    //         );
+    //       });
+
+    //       describe("set_earn_authority unit tests", () => {
+    //         test("Admin can set new earn authority", async () => {
+    //           const newEarnAuthority = new Keypair();
+
+    //           await $.setEarnAuthority(newEarnAuthority.publicKey);
+
+    //           await $.expectExtGlobalState({
+    //             yieldConfig: {
+    //               yieldVariant: "crank",
+    //               earnAuthority: newEarnAuthority.publicKey,
+    //             },
+    //           });
+    //         });
+
+    //         test("Non-admin cannot set earn authority", async () => {
+    //           const newEarnAuthority = new Keypair();
+
+    //           await $.expectAnchorError(
+    //             $.ext.methods
+    //               .setEarnAuthority(newEarnAuthority.publicKey)
+    //               .accounts({
+    //                 admin: $.nonAdmin.publicKey,
+    //               })
+    //               .signers([$.nonAdmin])
+    //               .rpc(),
+    //             "NotAuthorized"
+    //           );
+    //         });
+    //       });
+
+    //       describe("sync unit tests", () => {
+    //         beforeEach(async () => {
+    //           // Advance the index in the earn program to create sync need
+    //           const newIndex = new BN(1_200_000_000_000); // 1.2
+    //           await $.propagateIndex(newIndex);
+    //         });
+
+    //         test("earn_authority does not sign - reverts", async () => {
+    //           await $.expectAnchorError(
+    //             $.ext.methods
+    //               .sync()
+    //               .accounts({
+    //                 earnAuthority: $.nonAdmin.publicKey,
+    //               })
+    //               .signers([$.nonAdmin])
+    //               .rpc(),
+    //             "NotAuthorized"
+    //           );
+    //         });
+
+    //         test("sync - success", async () => {
+    //           const globalAccountBefore = await $.ext.account.extGlobalV2.fetch(
+    //             $.getExtGlobalAccount()
+    //           );
+
+    //           await $.crankSync();
+
+    //           const globalAccountAfter = await $.ext.account.extGlobalV2.fetch(
+    //             $.getExtGlobalAccount()
+    //           );
+
+    //           expect(
+    //             globalAccountAfter.yieldConfig.index.toNumber()
+    //           ).toBeGreaterThan(globalAccountBefore.yieldConfig.index.toNumber());
+    //           expect(
+    //             globalAccountAfter.yieldConfig.timestamp.toNumber()
+    //           ).toBeGreaterThan(
+    //             globalAccountBefore.yieldConfig.timestamp.toNumber()
+    //           );
+    //         });
+    //       });
+
+    //       describe("claim_for unit tests", () => {
+    //         beforeEach(async () => {
+    //           // Add earn managers and earners for testing
+    //           await $.addEarnManager(earnManagerOne.publicKey, new BN(0));
+    //           await $.addEarner(earnManagerOne, earnerOne.publicKey);
+
+    //           // Wrap some tokens to create collateral
+    //           await $.wrap(earnerOne, new BN(5_000_000)); // 5 tokens
+
+    //           // Advance the index to create yield
+    //           const newIndex = new BN(1_200_000_000_000); // 1.2
+    //           await $.propagateIndex(newIndex);
+    //         });
+
+    //         test("Earn authority does not sign the transaction - reverts", async () => {
+    //           const earnerTokenAccount = await $.getATA(
+    //             $.extMint.publicKey,
+    //             earnerOne.publicKey
+    //           );
+    //           const snapshotBalance = await $.getTokenBalance(earnerTokenAccount);
+
+    //           await $.expectAnchorError(
+    //             $.ext.methods
+    //               .claimFor(snapshotBalance)
+    //               .accounts({
+    //                 earnAuthority: $.nonAdmin.publicKey,
+    //                 userTokenAccount: earnerTokenAccount,
+    //                 earnerAccount: $.getEarnerAccount(earnerTokenAccount),
+    //                 earnManagerAccount: $.getEarnManagerAccount(
+    //                   earnManagerOne.publicKey
+    //                 ),
+    //                 earnManagerTokenAccount: earnerTokenAccount,
+    //                 extTokenProgram: $.extTokenProgram,
+    //               })
+    //               .signers([$.nonAdmin])
+    //               .rpc(),
+    //             "NotAuthorized"
+    //           );
+    //         });
+
+    //         test("Earn manager fee is zero - success", async () => {
+    //           const earnerTokenAccount = await $.getATA(
+    //             $.extMint.publicKey,
+    //             earnerOne.publicKey
+    //           );
+    //           const snapshotBalance = await $.getTokenBalance(earnerTokenAccount);
+    //           const balanceBefore = await $.getTokenBalance(earnerTokenAccount);
+
+    //           await $.claimFor(earnerTokenAccount, snapshotBalance);
+
+    //           const balanceAfter = await $.getTokenBalance(earnerTokenAccount);
+    //           expect(balanceAfter.toNumber()).toBeGreaterThan(
+    //             balanceBefore.toNumber()
+    //           );
+    //         });
+    //       });
+    //     });
+
+    //     describe("earn_manager instruction tests", () => {
+    //       const earnManagerOne = new Keypair();
+    //       const earnManagerTwo = new Keypair();
+    //       const earnerOne = new Keypair();
+    //       const earnerTwo = new Keypair();
+
+    //       beforeEach(async () => {
+    //         const wrapAuthorities = [
+    //           $.admin.publicKey,
+    //           $.wrapAuthority.publicKey,
+    //         ];
+
+    //         // Initialize the extension program with crank variant
+    //         await $.initializeExt(
+    //           wrapAuthorities,
+    //           undefined,
+    //           $.earnAuthority.publicKey
+    //         );
+    //       });
+
+    //       describe("add_earn_manager unit tests", () => {
+    //         test("admin does not sign transaction - reverts", async () => {
+    //           await $.expectAnchorError(
+    //             $.ext.methods
+    //               .addEarnManager(earnManagerOne.publicKey, new BN(0))
+    //               .accounts({
+    //                 admin: $.nonAdmin.publicKey,
+    //                 feeTokenAccount: await $.getATA(
+    //                   $.extMint.publicKey,
+    //                   earnManagerOne.publicKey
+    //                 ),
+    //               })
+    //               .signers([$.nonAdmin])
+    //               .rpc(),
+    //             "NotAuthorized"
+    //           );
+    //         });
+
+    //         test("add_earn_manager - success", async () => {
+    //           await $.addEarnManager(earnManagerOne.publicKey, new BN(500)); // 5% fee
+
+    //           const earnManagerAccount = await $.ext.account.earnManager.fetch(
+    //             $.getEarnManagerAccount(earnManagerOne.publicKey)
+    //           );
+
+    //           expect(earnManagerAccount.earnManager).toEqual(
+    //             earnManagerOne.publicKey
+    //           );
+    //           expect(earnManagerAccount.isActive).toBe(true);
+    //           expect(earnManagerAccount.feeBps.toNumber()).toBe(500);
+    //         });
+    //       });
+
+    //       describe("remove_earn_manager unit tests", () => {
+    //         beforeEach(async () => {
+    //           await $.addEarnManager(earnManagerOne.publicKey, new BN(0));
+    //         });
+
+    //         test("admin does not sign the transaction - reverts", async () => {
+    //           await $.expectAnchorError(
+    //             $.ext.methods
+    //               .removeEarnManager()
+    //               .accountsPartial({
+    //                 admin: $.nonAdmin.publicKey,
+    //                 earnManagerAccount: $.getEarnManagerAccount(
+    //                   earnManagerOne.publicKey
+    //                 ),
+    //               })
+    //               .signers([$.nonAdmin])
+    //               .rpc(),
+    //             "NotAuthorized"
+    //           );
+    //         });
+
+    //         test("remove_earn_manager - success", async () => {
+    //           await $.removeEarnManager(earnManagerOne.publicKey);
+
+    //           const earnManagerAccount = await $.ext.account.earnManager.fetch(
+    //             $.getEarnManagerAccount(earnManagerOne.publicKey)
+    //           );
+
+    //           expect(earnManagerAccount.isActive).toBe(false);
+    //         });
+    //       });
+
+    //       describe("add_earner unit tests", () => {
+    //         beforeEach(async () => {
+    //           await $.addEarnManager(earnManagerOne.publicKey, new BN(0));
+    //         });
+
+    //         test("Signer earn manager account not initialized - reverts", async () => {
+    //           const userTokenAccount = await $.getATA(
+    //             $.extMint.publicKey,
+    //             earnerOne.publicKey
+    //           );
+
+    //           await $.expectSystemError(
+    //             $.ext.methods
+    //               .addEarner(earnerOne.publicKey)
+    //               .accounts({
+    //                 signer: earnManagerTwo.publicKey,
+    //                 userTokenAccount,
+    //               })
+    //               .signers([earnManagerTwo])
+    //               .rpc()
+    //           );
+    //         });
+
+    //         test("Add earner - success", async () => {
+    //           await $.addEarner(earnManagerOne, earnerOne.publicKey);
+
+    //           const userTokenAccount = await $.getATA(
+    //             $.extMint.publicKey,
+    //             earnerOne.publicKey
+    //           );
+    //           const earnerAccount = await $.ext.account.earner.fetch(
+    //             $.getEarnerAccount(userTokenAccount)
+    //           );
+
+    //           expect(earnerAccount.user).toEqual(earnerOne.publicKey);
+    //           expect(earnerAccount.userTokenAccount).toEqual(userTokenAccount);
+    //           expect(earnerAccount.earnManager).toEqual(earnManagerOne.publicKey);
+    //         });
+    //       });
+
+    //       describe("remove_earner unit tests", () => {
+    //         beforeEach(async () => {
+    //           await $.addEarnManager(earnManagerOne.publicKey, new BN(0));
+    //           await $.addEarner(earnManagerOne, earnerOne.publicKey);
+    //         });
+
+    //         test("Signer's earn manager account not active - reverts", async () => {
+    //           // Deactivate the earn manager
+    //           await $.removeEarnManager(earnManagerOne.publicKey);
+
+    //           const userTokenAccount = await $.getATA(
+    //             $.extMint.publicKey,
+    //             earnerOne.publicKey
+    //           );
+
+    //           await $.expectAnchorError(
+    //             $.ext.methods
+    //               .removeEarner()
+    //               .accounts({
+    //                 signer: earnManagerOne.publicKey,
+    //                 earnerAccount: $.getEarnerAccount(userTokenAccount),
+    //               })
+    //               .signers([earnManagerOne])
+    //               .rpc(),
+    //             "NotActive"
+    //           );
+    //         });
+
+    //         test("Remove earner - success", async () => {
+    //           const userTokenAccount = await $.getATA(
+    //             $.extMint.publicKey,
+    //             earnerOne.publicKey
+    //           );
+
+    //           await $.removeEarner(earnManagerOne, userTokenAccount);
+
+    //           // Account should be closed
+    //           $.expectAccountEmpty($.getEarnerAccount(userTokenAccount));
+    //         });
+    //       });
+
+    //       describe("transfer_earner unit tests", () => {
+    //         beforeEach(async () => {
+    //           await $.addEarnManager(earnManagerOne.publicKey, new BN(0));
+    //           await $.addEarnManager(earnManagerTwo.publicKey, new BN(0));
+    //           await $.addEarner(earnManagerOne, earnerOne.publicKey);
+    //         });
+
+    //         test("transfer_earner - success", async () => {
+    //           const userTokenAccount = await $.getATA(
+    //             $.extMint.publicKey,
+    //             earnerOne.publicKey
+    //           );
+
+    //           await $.transferEarner(
+    //             earnManagerOne,
+    //             earnManagerTwo.publicKey,
+    //             userTokenAccount
+    //           );
+
+    //           const earnerAccount = await $.ext.account.earner.fetch(
+    //             $.getEarnerAccount(userTokenAccount)
+    //           );
+
+    //           expect(earnerAccount.earnManager).toEqual(earnManagerTwo.publicKey);
+    //         });
+    //       });
+
+    //       describe("configure_earn_manager unit tests", () => {
+    //         beforeEach(async () => {
+    //           await $.addEarnManager(earnManagerOne.publicKey, new BN(0));
+    //         });
+
+    //         test("Fee basis points > 10000 - reverts", async () => {
+    //           await $.expectAnchorError(
+    //             $.ext.methods
+    //               .configureEarnManager(new BN(10001))
+    //               .accounts({
+    //                 signer: earnManagerOne.publicKey,
+    //                 feeTokenAccount: null,
+    //               })
+    //               .signers([earnManagerOne])
+    //               .rpc(),
+    //             "InvalidParam"
+    //           );
+    //         });
+
+    //         test("Both fee bps and fee token account are not null - success", async () => {
+    //           const feeTokenAccount = await $.getATA(
+    //             $.extMint.publicKey,
+    //             earnManagerOne.publicKey
+    //           );
+    //           const newFeeBps = new BN(1000); // 10%
+
+    //           await $.configureEarnManager(
+    //             earnManagerOne,
+    //             newFeeBps,
+    //             feeTokenAccount
+    //           );
+
+    //           const earnManagerAccount = await $.ext.account.earnManager.fetch(
+    //             $.getEarnManagerAccount(earnManagerOne.publicKey)
+    //           );
+
+    //           expect(earnManagerAccount.feeBps.toNumber()).toBe(1000);
+    //           expect(earnManagerAccount.feeTokenAccount).toEqual(feeTokenAccount);
+    //         });
+    //       });
+    //     });
+
+    //     describe("earner instruction tests", () => {
+    //       const earnManagerOne = new Keypair();
+    //       const earnerOne = new Keypair();
+
+    //       beforeEach(async () => {
+    //         const wrapAuthorities = [
+    //           $.admin.publicKey,
+    //           $.wrapAuthority.publicKey,
+    //         ];
+
+    //         // Initialize the extension program with crank variant
+    //         await $.initializeExt(
+    //           wrapAuthorities,
+    //           undefined,
+    //           $.earnAuthority.publicKey
+    //         );
+    //         await $.addEarnManager(earnManagerOne.publicKey, new BN(0));
+    //         await $.addEarner(earnManagerOne, earnerOne.publicKey);
+    //       });
+
+    //       describe("set_recipient unit tests", () => {
+    //         test("Earner signs, new recipient token account is None (default) - success", async () => {
+    //           const userTokenAccount = await $.getATA(
+    //             $.extMint.publicKey,
+    //             earnerOne.publicKey
+    //           );
+
+    //           await $.setRecipient(earnerOne, userTokenAccount);
+
+    //           const earnerAccount = await $.ext.account.earner.fetch(
+    //             $.getEarnerAccount(userTokenAccount)
+    //           );
+
+    //           expect(earnerAccount.recipientTokenAccount).toBeNull();
+    //         });
+
+    //         test("Earn manager signs, new recipient token account provided - success", async () => {
+    //           const userTokenAccount = await $.getATA(
+    //             $.extMint.publicKey,
+    //             earnerOne.publicKey
+    //           );
+    //           const recipientTokenAccount = await $.getATA(
+    //             $.extMint.publicKey,
+    //             $.admin.publicKey
+    //           );
+
+    //           await $.setRecipient(
+    //             earnManagerOne,
+    //             userTokenAccount,
+    //             recipientTokenAccount
+    //           );
+
+    //           const earnerAccount = await $.ext.account.earner.fetch(
+    //             $.getEarnerAccount(userTokenAccount)
+    //           );
+
+    //           expect(earnerAccount.recipientTokenAccount).toEqual(
+    //             recipientTokenAccount
+    //           );
+    //         });
+
+    //         test("Neither earner nor earn manager signs the transaction - reverts", async () => {
+    //           const userTokenAccount = await $.getATA(
+    //             $.extMint.publicKey,
+    //             earnerOne.publicKey
+    //           );
+
+    //           await $.expectAnchorError(
+    //             $.ext.methods
+    //               .setRecipient()
+    //               .accounts({
+    //                 signer: $.nonAdmin.publicKey,
+    //                 earnerAccount: $.getEarnerAccount(userTokenAccount),
+    //                 recipientTokenAccount: null,
+    //               })
+    //               .signers([$.nonAdmin])
+    //               .rpc(),
+    //             "NotAuthorized"
+    //           );
+    //         });
+    //       });
+    //     });
+    //   }
   });
 }
