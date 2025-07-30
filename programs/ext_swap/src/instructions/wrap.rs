@@ -1,5 +1,4 @@
 use anchor_lang::prelude::*;
-use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use m_ext::cpi::accounts::Wrap as ExtWrap;
 use m_ext::state::{EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
@@ -9,7 +8,6 @@ use crate::state::{SwapGlobal, GLOBAL_SEED};
 
 #[derive(Accounts)]
 pub struct Wrap<'info> {
-    #[account(mut)]
     pub signer: Signer<'info>,
 
     // Required if the swap program is not whitelisted on the extension
@@ -52,11 +50,9 @@ pub struct Wrap<'info> {
     )]
     pub m_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
-        init_if_needed,
-        payer = signer,
-        associated_token::mint = to_mint,
-        associated_token::authority = signer,
-        associated_token::token_program = to_token_program,
+        mut,
+        token::mint = to_mint,
+        token::token_program = to_token_program,
     )]
     pub to_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
@@ -100,7 +96,6 @@ pub struct Wrap<'info> {
      */
     /// CHECK: checked against whitelisted extensions
     pub to_ext_program: UncheckedAccount<'info>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
