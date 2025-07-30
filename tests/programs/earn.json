@@ -83,7 +83,8 @@
           }
         },
         {
-          "name": "m_mint"
+          "name": "m_mint",
+          "writable": true
         },
         {
           "name": "portal_token_authority",

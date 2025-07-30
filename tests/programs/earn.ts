@@ -90,6 +90,7 @@ export type Earn = {
         },
         {
           name: "mMint";
+          writable: true;
         },
         {
           name: "portalTokenAuthority";

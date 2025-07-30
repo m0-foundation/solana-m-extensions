@@ -658,7 +658,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
       ),
       createInitializePermanentDelegateInstruction(
         mint.publicKey,
-        this.admin.publicKey,
+        earnAuth,
         TOKEN_2022_PROGRAM_ID
       ),
       createInitializeMintInstruction(
