@@ -10,7 +10,7 @@ use crate::{
         EarnManager, Earner, ExtGlobalV2, EARNER_SEED, EARN_MANAGER_SEED, EXT_GLOBAL_SEED,
         MINT_AUTHORITY_SEED, M_VAULT_SEED,
     },
-    utils::token::mint_tokens,
+    utils::{conversion::principal_to_amount_down, token::mint_tokens},
 };
 
 #[derive(Accounts)]
@@ -22,11 +22,14 @@ pub struct ClaimFor<'info> {
 
     #[account(
         mut,
+        has_one = m_mint @ ExtError::InvalidAccount,
         has_one = ext_mint @ ExtError::InvalidAccount,
         seeds = [EXT_GLOBAL_SEED],
         bump = global_account.bump,
     )]
     pub global_account: Account<'info, ExtGlobalV2>,
+
+    pub m_mint: InterfaceAccount<'info, Mint>,
 
     #[account(mut)]
     pub ext_mint: InterfaceAccount<'info, Mint>,
@@ -114,7 +117,13 @@ impl ClaimFor<'_> {
 
         // Validate that the newly minted rewards will not make the extension undercollateralized
         let ext_supply = ctx.accounts.ext_mint.supply;
-        let ext_collateral = ctx.accounts.vault_m_token_account.amount;
+
+        // Calculate the amount of M tokens in the vault from the principal
+        let m_config = earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
+        let ext_collateral = principal_to_amount_down(
+            ctx.accounts.vault_m_token_account.amount,
+            m_config.new_multiplier.into(),
+        )?;
 
         if ext_supply + rewards > ext_collateral {
             return err!(ExtError::InsufficientCollateral);
