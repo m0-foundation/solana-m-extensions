@@ -99,7 +99,7 @@ export type ExtGlobal<V extends Variant> = {
 };
 
 export type EarnManager = {
-  earnManager: PublicKey;
+  earnManager?: PublicKey;
   isActive: boolean;
   feeBps?: BN;
   feeTokenAccount?: PublicKey | null;
@@ -238,7 +238,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
         TOKEN_2022_PROGRAM_ID
       )
     ).amount;
-
+    // try {
     switch (op) {
       case Comparison.GreaterThan:
         expect(balance).toBeGreaterThan(BigInt(expectedBalance.toString()));
@@ -287,6 +287,14 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
         }
         break;
     }
+    // } catch (e) {
+    //   console.log("balance comparison error:", e);
+    //   // Create a new error without BigInt values for serialization
+    //   const error = e as Error;
+    //   const serializableError = new Error(error.message);
+    //   serializableError.stack = error.stack;
+    //   throw serializableError;
+    // }
   }
 
   public async expectTokenUiBalance(
@@ -295,24 +303,22 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
     op: Comparison = Comparison.Equal,
     tolerance?: BN
   ) {
-    const rawBalance = (
-      await getAccount(
-        this.provider.connection,
-        tokenAccount,
-        undefined,
-        TOKEN_2022_PROGRAM_ID
-      )
-    ).amount;
+    const account = await getAccount(
+      this.provider.connection,
+      tokenAccount,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
 
-    const multiplier = (
-      await this.getScaledUiAmountConfig(this.extMint.publicKey)
-    ).multiplier;
+    const multiplier = (await this.getScaledUiAmountConfig(account.mint))
+      .multiplier;
 
     const scale = 1e12;
 
     const uiBalance =
-      (rawBalance * BigInt(Math.floor(multiplier * scale))) / BigInt(scale);
+      (account.amount * BigInt(Math.floor(multiplier * scale))) / BigInt(scale);
 
+    // try {
     switch (op) {
       case Comparison.GreaterThan:
         expect(uiBalance).toBeGreaterThan(BigInt(expectedBalance.toString()));
@@ -363,6 +369,14 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
         }
         break;
     }
+    // } catch (e) {
+    //   console.log("balance comparison error:", e);
+    //   // Create a new error without BigInt values for serialization
+    //   const error = e as Error;
+    //   const serializableError = new Error(error.message);
+    //   serializableError.stack = error.stack;
+    //   throw serializableError;
+    // }
   }
 
   public async createATA(
@@ -749,15 +763,15 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
       this.mMint.publicKey,
       toATA,
       this.mMintAuthority.publicKey,
-      BigInt(amount.toString()),
+      amount.toNumber(),
       6,
-      [this.admin],
+      undefined,
       TOKEN_2022_PROGRAM_ID
     );
 
     let tx = new Transaction();
     tx.add(mintToInstruction);
-    await this.provider.sendAndConfirm!(tx, [this.admin]);
+    await this.provider.sendAndConfirm!(tx, [this.mMintAuthority]);
   }
 
   public async getTokenBalance(tokenAccount: PublicKey) {
@@ -813,6 +827,46 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
     return new BN(
       Math.floor(Number(mintInfo.supply) * (await this.getCurrentMultiplier()))
     );
+  }
+
+  public async toUiAmount(mint: PublicKey, principal: BN): Promise<BN> {
+    const mintInfo = await getMint(
+      this.provider.connection,
+      mint,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
+    if (!mintInfo) {
+      throw new Error("Mint not found");
+    }
+
+    const scaledUiAmountConfig = await this.getScaledUiAmountConfig(mint);
+    const scale = new BN(1e12);
+    const multiplier = scaledUiAmountConfig.multiplier;
+
+    return principal
+      .mul(new BN(Math.floor(multiplier * scale.toNumber())))
+      .div(scale);
+  }
+
+  public async toPrincipal(mint: PublicKey, uiAmount: BN): Promise<BN> {
+    const mintInfo = await getMint(
+      this.provider.connection,
+      mint,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
+    if (!mintInfo) {
+      throw new Error("Mint not found");
+    }
+
+    const scaledUiAmountConfig = await this.getScaledUiAmountConfig(mint);
+    const scale = new BN(1e12);
+    const multiplier = scaledUiAmountConfig.multiplier;
+
+    return uiAmount
+      .mul(scale)
+      .div(new BN(Math.floor(multiplier * scale.toNumber())));
   }
 
   public async approve(
@@ -898,15 +952,6 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
     );
 
     return mVault;
-  }
-
-  public getMEarnerAccount(tokenAccount: PublicKey): PublicKey {
-    const [earnerAccount] = PublicKey.findProgramAddressSync(
-      [Buffer.from("earner"), tokenAccount.toBuffer()],
-      this.earn.programId
-    );
-
-    return earnerAccount;
   }
 
   public async getNewMultiplier(newIndex: BN): Promise<number> {
@@ -1107,15 +1152,15 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
 
   public async expectExtSolvent() {
     const extSupply = await this.getTokenSupply(this.extMint.publicKey);
-    const mVaultBalance = await this.getTokenBalance(
+    const mVaultUiBalance = await this.getTokenUiBalance(
       await this.getATA(this.mMint.publicKey, this.getMVault())
     );
 
     this.variant === Variant.ScaledUi
-      ? expect(BigInt(mVaultBalance.toString())).toBeGreaterThan(
+      ? expect(BigInt(mVaultUiBalance.toString())).toBeGreaterThan(
           BigInt(extSupply.sub(BN.min(new BN(2), extSupply)).toString())
         ) // allow for a rounding error of 2 for scaled ui due to precision issues
-      : expect(BigInt(mVaultBalance.toString())).toBeGreaterThanOrEqual(
+      : expect(BigInt(mVaultUiBalance.toString())).toBeGreaterThanOrEqual(
           BigInt(extSupply.toString())
         );
   }
@@ -1208,10 +1253,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
       .rpc();
   }
 
-  public async addMEarner(
-    earner: PublicKey,
-    earnerTokenAccount?: PublicKey
-  ): Promise<PublicKey> {
+  public async addMEarner(earner: PublicKey, earnerTokenAccount?: PublicKey) {
     // Check that the earner is not already in the list
     if (this.mEarnerList.map((e) => e.toBase58()).includes(earner.toBase58())) {
       throw new Error("Earner already exists in the list");
@@ -1237,17 +1279,12 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
     // Add the earner to the earn program
     const { proof } = earnerMerkleTree.getInclusionProof(earner);
     await this.addRegistrarEarner(earner, proof, tokenAccount);
-
-    // Get the earner account address
-    const earnerAccount = this.getMEarnerAccount(tokenAccount);
-
-    return earnerAccount;
   }
 
   public async removeMEarner(
     earner: PublicKey,
     earnerTokenAccount?: PublicKey
-  ): Promise<void> {
+  ) {
     // Check that the earner is in the list
     if (
       !this.mEarnerList.map((e) => e.toBase58()).includes(earner.toBase58())
@@ -1278,11 +1315,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
   }
   // Helper functions for executing MExt instructions
 
-  public async initializeExt(
-    wrapAuthorities: PublicKey[],
-    feeBps?: BN,
-    earnAuthority?: PublicKey
-  ) {
+  public async initializeExt(wrapAuthorities: PublicKey[], feeBps?: BN) {
     switch (this.variant) {
       case Variant.ScaledUi:
         if (!feeBps) {
@@ -1301,12 +1334,8 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
           .rpc();
         break;
       case Variant.Crank:
-        if (!earnAuthority) {
-          throw new Error("earnAuthority is required for Crank variant");
-        }
-
         await this.ext.methods
-          .initialize(wrapAuthorities, earnAuthority)
+          .initialize(wrapAuthorities, this.earnAuthority.publicKey)
           .accounts({
             admin: this.admin.publicKey,
             mMint: this.mMint.publicKey,
@@ -1315,6 +1344,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
           })
           .signers([this.admin])
           .rpc();
+        break;
       case Variant.NoYield:
         // Send the transaction
         await this.ext.methods
@@ -1525,6 +1555,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
       .accountsPartial({
         admin: this.admin.publicKey,
         recipientExtTokenAccount,
+        extTokenProgram: this.extTokenProgram,
       })
       .signers([this.admin])
       .rpc();
@@ -1567,7 +1598,8 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
 
     await this.ext.methods
       .addEarnManager(earnManager, feeBps)
-      .accounts({
+      .accountsPartial({
+        admin: this.admin.publicKey,
         feeTokenAccount: feeTokenATA,
       })
       .signers([this.admin])
