@@ -1,5 +1,5 @@
 import { BN } from "@coral-xyz/anchor";
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, getMint } from "@solana/spl-token";
 import { randomInt } from "crypto";
 
@@ -4404,6 +4404,968 @@ for (const variant of VARIANTS) {
 
     // Crank-specific tests
     if (variant === Variant.Crank) {
+      describe("earn_authority instruction tests", () => {
+        const newIndex = new BN(1_200_000_000_000); // 1.2
+        let startTime: BN;
+        const mintAmount = new BN(100_000_000);
+        const earnManagerOne = new Keypair();
+        const earnManagerTwo = new Keypair();
+        const earnerOne = new Keypair();
+        const earnerTwo = new Keypair();
+
+        beforeEach(async () => {
+          // Airdrop SOL to the earn managers and earners to pay for transactions
+          for (const account of [
+            earnManagerOne,
+            earnManagerTwo,
+            earnerOne,
+            earnerTwo,
+          ]) {
+            $.svm.airdrop(account.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
+          }
+
+          // Initialize the program
+          await $.initializeExt(
+            [$.admin.publicKey, $.wrapAuthority.publicKey],
+            undefined
+          );
+
+          // Add an earn manager to create earner accounts
+          // Set the fee to zero initially
+          await $.addEarnManager(earnManagerOne.publicKey, new BN(0));
+
+          // Add the earners as M earners so they can receive and wrap M tokens
+          await $.addMEarner(earnerOne.publicKey);
+          await $.addMEarner(earnerTwo.publicKey);
+
+          // Mint M tokens to the earners and then wrap it to Ext tokens
+          await $.mintM(earnerOne.publicKey, mintAmount);
+          await $.mintM(earnerTwo.publicKey, mintAmount);
+
+          // Propagate the initial index again to update the max M supply during the interval so max yield is sufficient
+          // Under normal operation, this happens on any bridge transaction and when yield is distributed
+          // However, we are minting tokens here for testing so it is not reflected, therefore, we have to pretend this is a bridge.
+          await $.propagateIndex(initialIndex);
+
+          // Add earner one as an ext earner so there is outstanding yield once it is synced
+          await $.addEarner(earnManagerOne, earnerOne.publicKey);
+
+          // Wrap the M tokens to Ext tokens to deposit them in the M vault
+          await $.wrap(earnerOne, mintAmount, $.wrapAuthority);
+          await $.wrap(earnerTwo, mintAmount, $.wrapAuthority);
+
+          startTime = $.currentTime();
+
+          // Warp time forward an hour
+          $.warp(new BN(3600), true);
+
+          // Update the index on the Earn program
+          await $.propagateIndex(newIndex);
+        });
+
+        describe("sync unit tests", () => {
+          // test cases
+          // [X] given the earn authority does not sign the transaction
+          //   [X] it reverts with a NotAuthorized error
+          // [X] given the earn authority does sign the transaction
+          //   [X] given the global_account does not match the seeds
+          //     [X] it reverts with an InvalidAccount error
+          //   [X] given all accounts are correct
+          //     [X] it updates the ExtGlobal index and timestamp to the current index and timestamp on the M Earn Global account
+
+          // given the earn authority does not sign the transaction
+          // it reverts with a NotAuthorized error
+          test("earn_authority does not sign - reverts", async () => {
+            // Attempt to send the transaction
+            // Expect it to revert with a NotAuthorized error
+            await $.expectAnchorError(
+              $.ext.methods
+                .sync()
+                .accountsPartial({
+                  earnAuthority: $.nonAdmin.publicKey,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the earn authority does sign the transaction
+          // given the global_account does not match the seeds
+          // it reverts with a variety of errors (AccountNotInitialized, AccountOwnedByWrongProgram, InvalidAccount)
+          test("global_account is invalid - reverts", async () => {
+            // Use an incorrect account
+            const globalAccount = $.getExtGlobalAccount();
+            const wrongAccount = PublicKey.unique();
+            if (globalAccount == wrongAccount) return;
+
+            // Attempt to send the transaction
+            // Expect it to revert with an error
+            await $.expectSystemError(
+              $.ext.methods
+                .sync()
+                .accountsPartial({
+                  earnAuthority: $.earnAuthority.publicKey,
+                  globalAccount: wrongAccount,
+                })
+                .signers([$.earnAuthority])
+                .rpc()
+            );
+          });
+
+          // given the earn authority does sign the transaction
+          // given all the accounts are correct
+          // it updates the index and timestamp of the ExtGlobal account
+          test("sync - success", async () => {
+            // Confirm the state of the ExtGlobal account before the sync
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                yieldVariant: { crank: {} },
+                index: initialIndex,
+                timestamp: startTime,
+              },
+            });
+
+            // Send the transaction
+            await $.ext.methods
+              .sync()
+              .accountsPartial({ earnAuthority: $.earnAuthority.publicKey })
+              .signers([$.earnAuthority])
+              .rpc();
+
+            // Expect the ExtGlobal state to be updated
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                yieldVariant: { crank: {} },
+                index: newIndex,
+                timestamp: $.currentTime(),
+              },
+            });
+          });
+        });
+
+        describe("claim_for unit tests", () => {
+          // test cases
+          // [X] given the earn authority does not sign the transaction
+          //   [X] it reverts with a NotAuthorized error
+          // [X] given the earn authority does sign the transaction
+          //   [X] given the wrong ext_mint account is provided
+          //     [X] it reverts with an error (could be various depending on the account)
+          //   [X] given the wrong earn manager account is provided for an earner
+          //     [X] it reverts with a ConstraintSeeds error
+          //   [X] given the wrong token account is provided for the M vault
+          //     [X] it reverts with a ConstraintAssociated error
+          //   [X] given the earn manager token account does not match the token account stored on the earn manager account
+          //     [X] it reverts with an InvalidAccount error
+          //   [X] given the earner does not have a recipient token account defined
+          //     [X] given the user token account does not match the one defined on the earner account
+          //       [X] it reverts with an InvalidAccount error
+          //     [X] given the user token account matches the one defined on the earner account
+          //       [X] it mints yield to the user token account
+          //   [X] given the earner does have a recipient token account defined
+          //     [X] given the user token account does not match the recipient token account
+          //       [X] it reverts with an InvalidAccount error
+          //     [X] given the user token account matches the recipient token account
+          //       [X] it mints yield to the recipient token account
+          //   [X] given the accounts are all correct
+          //     [X] given the earner's last claim index is greater than or equal to the current global index
+          //       [X] it reverts with an AlreadyClaimed error
+          //     [X] given the earn manager has zero fee
+          //       [X] it mints all of the rewards to the earner's token account
+          //     [X] given the earn manager is not active and has a non-zero fee
+          //       [X] it mints all of the rewards to the earner's token account
+          //     [X] given the earn manager is active and has a non-zero fee
+          //       [ ] given the earn manager's fee token account is closed
+          //         [X] it mints all of the rewards to the earner's token account
+          //       [X] given the fee on the current yield rounds to zero
+          //         [X] it mints all of the rewards to the earner's token account
+          //       [X] given the fee does not round to zero
+          //         [X] it mints the fee to the earn manager's token account and the remaining rewards
+          //             to the earner's token account
+
+          beforeEach(async () => {
+            // Sync the latest index from the M earn program to have yield to claim
+            await $.sync();
+
+            // Add earner two as an earner after the sync so it does not have any yield to claim
+            await $.addEarner(earnManagerOne, earnerTwo.publicKey);
+          });
+
+          // given the earn authority does not sign the transaction
+          // it reverts with a NotAuthorized error
+          test("Earn authority does not sign the transaction - reverts", async () => {
+            const balance = await $.getTokenBalance(
+              await $.getATA($.extMint.publicKey, earnerOne.publicKey)
+            );
+
+            // Attempt to send the transaction
+            // Expect a NotAuthorized error
+            await $.expectAnchorError(
+              $.ext.methods
+                .claimFor(balance)
+                .accountsPartial({
+                  earnAuthority: $.nonAdmin.publicKey,
+                  earnerAccount: $.getEarnerAccount(earnerOne.publicKey),
+                  earnManagerAccount: $.getEarnManagerAccount(
+                    earnManagerOne.publicKey
+                  ),
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the wrong ext mint account is provided
+          // it reverts with a InvalidAccount error
+          test("Ext mint account is invalid - reverts", async () => {
+            const wrongMint = PublicKey.unique();
+            if (wrongMint.equals($.extMint.publicKey)) return;
+
+            // Attempt to send the transaction
+            // Expect revert
+            await $.expectSystemError(
+              $.ext.methods
+                .claimFor(
+                  await $.getTokenBalance(
+                    await $.getATA($.extMint.publicKey, earnerOne.publicKey)
+                  )
+                )
+                .accountsPartial({
+                  earnAuthority: $.earnAuthority.publicKey,
+                  earnerAccount: $.getEarnerAccount(earnerOne.publicKey),
+                  earnManagerAccount: $.getEarnManagerAccount(
+                    earnManagerOne.publicKey
+                  ),
+                  extMint: wrongMint,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.earnAuthority])
+                .rpc()
+            );
+          });
+
+          // given the wrong earn manager account is provided for an earner
+          // it reverts with a ConstraintSeeds error
+          test("Earn manager account is invalid - reverts", async () => {
+            // Add another earn manager
+            await $.addEarnManager(earnManagerTwo.publicKey, new BN(0));
+
+            // Attempt send the transaction
+            // Expect revert
+            await $.expectAnchorError(
+              $.ext.methods
+                .claimFor(
+                  await $.getTokenBalance(
+                    await $.getATA($.extMint.publicKey, earnerOne.publicKey)
+                  )
+                )
+                .accountsPartial({
+                  earnAuthority: $.earnAuthority.publicKey,
+                  earnerAccount: $.getEarnerAccount(earnerOne.publicKey),
+                  earnManagerAccount: $.getEarnManagerAccount(
+                    earnManagerTwo.publicKey
+                  ),
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.earnAuthority])
+                .rpc(),
+              "ConstraintSeeds"
+            );
+          });
+
+          // given the M vault token account is not the M vault's ATA
+          // it reverts with a ConstraintAssociated error
+          test("M Vault token account is invalid - reverts", async () => {
+            // Create a non-ATA token account for the M vault
+            const { tokenAccount: invalidMVaultTokenAccount } =
+              await $.createTokenAccount($.mMint.publicKey, $.getMVault());
+
+            // Attempt to send the transaction
+            // Expect revert with a ConstraintAssociated error
+            await $.expectAnchorError(
+              $.ext.methods
+                .claimFor(
+                  await $.getTokenBalance(
+                    await $.getATA($.extMint.publicKey, earnerOne.publicKey)
+                  )
+                )
+                .accountsPartial({
+                  earnAuthority: $.earnAuthority.publicKey,
+                  earnerAccount: $.getEarnerAccount(earnerOne.publicKey),
+                  earnManagerAccount: $.getEarnManagerAccount(
+                    earnManagerOne.publicKey
+                  ),
+                  vaultMTokenAccount: invalidMVaultTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.earnAuthority])
+                .rpc(),
+              "ConstraintAssociated"
+            );
+          });
+
+          // given the earn manager token account does not match token account stored on the earn manager account
+          // it reverts with an InvalidAccount error
+          test("Earn manager token account is invalid - reverts", async () => {
+            // Create a new token account for the earn manager that doesn't match the one stored
+            const { tokenAccount: invalidEarnManagerTokenAccount } =
+              await $.createTokenAccount(
+                $.extMint.publicKey,
+                earnManagerOne.publicKey
+              );
+
+            // Attempt to send the transaction
+            // Expect revert with an InvalidAccount error
+            await $.expectAnchorError(
+              $.ext.methods
+                .claimFor(
+                  await $.getTokenBalance(
+                    await $.getATA($.extMint.publicKey, earnerOne.publicKey)
+                  )
+                )
+                .accountsPartial({
+                  earnAuthority: $.earnAuthority.publicKey,
+                  earnerAccount: $.getEarnerAccount(earnerOne.publicKey),
+                  earnManagerAccount: $.getEarnManagerAccount(
+                    earnManagerOne.publicKey
+                  ),
+                  earnManagerTokenAccount: invalidEarnManagerTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.earnAuthority])
+                .rpc(),
+              "InvalidAccount"
+            );
+          });
+
+          // given the earner does not have a recipient token account defined
+          // given the user token account does not match the user token account on the earner account
+          // it reverts with an InvalidAccount error
+          test("Earner has no recipient account, token account doesn't match - reverts", async () => {
+            // Create a new token account for the earner that doesn't match the one stored
+            const { tokenAccount: invalidUserTokenAccount } =
+              await $.createTokenAccount(
+                $.extMint.publicKey,
+                earnerOne.publicKey
+              );
+
+            // Attempt to send the transaction
+            // Expect revert with an InvalidAccount error
+            await $.expectAnchorError(
+              $.ext.methods
+                .claimFor(await $.getTokenBalance(invalidUserTokenAccount))
+                .accountsPartial({
+                  earnAuthority: $.earnAuthority.publicKey,
+                  earnerAccount: $.getEarnerAccount(earnerOne.publicKey),
+                  earnManagerAccount: $.getEarnManagerAccount(
+                    earnManagerOne.publicKey
+                  ),
+                  userTokenAccount: invalidUserTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.earnAuthority])
+                .rpc(),
+              "InvalidAccount"
+            );
+          });
+
+          // given the earner does not have a recipient token account defined
+          // given the user token account matches
+          // it mints the yield to the user token account
+          test("Earner has no recipient account, token account matches - success", async () => {
+            const earnerATA = await $.getATA(
+              $.extMint.publicKey,
+              earnerOne.publicKey
+            );
+            const earnerAccount = $.getEarnerAccount(earnerOne.publicKey);
+
+            // Check that the last claim index and the last claim timestamp are the initial values
+            await $.expectEarnerState(earnerAccount, {
+              lastClaimIndex: initialIndex,
+              lastClaimTimestamp: startTime,
+            });
+
+            // Get the initial balance for the earner ata
+            const initialBalance = await $.getTokenBalance(earnerATA);
+
+            // Calculate the expected new balance
+            // Note: earn manager fee is 0, so it all goes to the earner
+            const expectedBalance = initialBalance
+              .mul(newIndex)
+              .div(initialIndex);
+
+            // Send the instruction
+            await $.ext.methods
+              .claimFor(initialBalance)
+              .accountsPartial({
+                earnAuthority: $.earnAuthority.publicKey,
+                earnerAccount: $.getEarnerAccount(earnerOne.publicKey),
+                earnManagerAccount: $.getEarnManagerAccount(
+                  earnManagerOne.publicKey
+                ),
+                userTokenAccount: earnerATA,
+                extTokenProgram: $.extTokenProgram,
+              })
+              .signers([$.earnAuthority])
+              .rpc();
+
+            // Check the new balance matches the expected balance
+            await $.expectTokenBalance(earnerATA, expectedBalance);
+
+            // Check the earner account is updated
+            await $.expectEarnerState(earnerAccount, {
+              lastClaimIndex: newIndex,
+              lastClaimTimestamp: $.currentTime(),
+            });
+          });
+
+          test("Earner has recipient account, token account does not match - reverts", async () => {
+            // Set the earner's recipient account to the yield recipients ATA
+            const yieldRecipient = new Keypair();
+            const yieldRecipientATA = await $.getATA(
+              $.extMint.publicKey,
+              yieldRecipient.publicKey
+            );
+            await $.setRecipient(earnerOne, yieldRecipientATA);
+
+            // Setup the instruction with the earner's ATA as the user token account
+            const earnerATA = await $.getATA(
+              $.extMint.publicKey,
+              earnerOne.publicKey
+            );
+
+            // Attempt to send the transaction
+            // Expect revert with an InvalidAccount error
+            await $.expectAnchorError(
+              $.ext.methods
+                .claimFor(await $.getTokenBalance(earnerATA))
+                .accountsPartial({
+                  earnAuthority: $.earnAuthority.publicKey,
+                  earnerAccount: $.getEarnerAccount(earnerOne.publicKey),
+                  earnManagerAccount: $.getEarnManagerAccount(
+                    earnManagerOne.publicKey
+                  ),
+                  userTokenAccount: earnerATA,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.earnAuthority])
+                .rpc(),
+              "InvalidAccount"
+            );
+          });
+
+          test("Earner has recipient account, token account matches - success", async () => {
+            // Set the earner's recipient account to the yield recipients ATA
+            const yieldRecipient = new Keypair();
+            const yieldRecipientATA = await $.getATA(
+              $.extMint.publicKey,
+              yieldRecipient.publicKey
+            );
+            await $.setRecipient(earnerOne, yieldRecipientATA);
+
+            // Setup the instruction
+            const earnerATA = await $.getATA(
+              $.extMint.publicKey,
+              earnerOne.publicKey
+            );
+            const earnerAccount = $.getEarnerAccount(earnerOne.publicKey);
+
+            // Check that the last claim index and the last claim timestamp are the initial values
+            await $.expectEarnerState(earnerAccount, {
+              lastClaimIndex: initialIndex,
+              lastClaimTimestamp: startTime,
+            });
+
+            // Get the initial balance for the earner ata
+            const initialBalance = await $.getTokenBalance(earnerATA);
+
+            // Calculate the expected yield
+            // Note: earn manager fee is 0, so it all goes to the yield recipient
+            const expectedYield = initialBalance
+              .mul(newIndex)
+              .div(initialIndex)
+              .sub(initialBalance);
+
+            // Send the instruction
+            await $.ext.methods
+              .claimFor(initialBalance)
+              .accountsPartial({
+                earnAuthority: $.earnAuthority.publicKey,
+                earnerAccount: $.getEarnerAccount(earnerOne.publicKey),
+                earnManagerAccount: $.getEarnManagerAccount(
+                  earnManagerOne.publicKey
+                ),
+                userTokenAccount: yieldRecipientATA,
+                extTokenProgram: $.extTokenProgram,
+              })
+              .signers([$.earnAuthority])
+              .rpc();
+
+            // Check the ata balance didn't change but the yield recipient received the yield
+            await $.expectTokenBalance(earnerATA, initialBalance);
+            await $.expectTokenBalance(yieldRecipientATA, expectedYield);
+
+            // Check the earner account is updated
+            await $.expectEarnerState(earnerAccount, {
+              lastClaimIndex: newIndex,
+              lastClaimTimestamp: $.currentTime(),
+            });
+          });
+
+          // given all accounts are correct
+          // given the earner's yield has been claimed up to the current index
+          // it reverts with an AlreadyClaimed error
+          test("Earner yield already claimed up to current index - reverts", async () => {
+            // Setup the instruction to claim for earner two
+            // earnerTwo was added after the sync, so its lastClaimIndex should equal the current index
+            const earnerAccount = $.getEarnerAccount(earnerTwo.publicKey);
+            const balance = await $.getTokenBalance(
+              await $.getATA($.extMint.publicKey, earnerTwo.publicKey)
+            );
+
+            // Verify that the earner's last claim index is equal to the current global index
+            await $.expectEarnerState(earnerAccount, {
+              lastClaimIndex: newIndex,
+              lastClaimTimestamp: $.currentTime(),
+            });
+
+            // Attempt to send the transaction
+            // Expect an AlreadyClaimed error
+            await $.expectAnchorError(
+              $.ext.methods
+                .claimFor(balance)
+                .accountsPartial({
+                  earnAuthority: $.earnAuthority.publicKey,
+                  earnerAccount,
+                  earnManagerAccount: $.getEarnManagerAccount(
+                    earnManagerOne.publicKey
+                  ),
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.earnAuthority])
+                .rpc(),
+              "AlreadyClaimed"
+            );
+          });
+
+          // given all the accounts are correct
+          // given the earn manager has zero fee
+          // it mints all the yield to the earner's recipient account
+          test("Earn manager fee is zero - success", async () => {
+            const earnerAccount = $.getEarnerAccount(earnerOne.publicKey);
+            const userTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnerOne.publicKey
+            );
+            const earnManagerTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnManagerOne.publicKey
+            );
+
+            // Get the current balance of the earner's token account
+            const earnerStartBalance = await $.getTokenBalance(
+              userTokenAccount
+            );
+
+            // Get the current balance of the earn manager's token account
+            const earnManagerStartBalance = await $.getTokenBalance(
+              earnManagerTokenAccount
+            );
+
+            // Confirm the earn manager fee is zero
+            await $.expectEarnManagerState(
+              $.getEarnManagerAccount(earnManagerOne.publicKey),
+              {
+                feeBps: new BN(0),
+              }
+            );
+
+            // Confirm the starting earner account state
+            await $.expectEarnerState(earnerAccount, {
+              lastClaimIndex: initialIndex,
+              lastClaimTimestamp: startTime,
+            });
+
+            // Send the transaction
+            await $.ext.methods
+              .claimFor(earnerStartBalance)
+              .accountsPartial({
+                earnAuthority: $.earnAuthority.publicKey,
+                earnerAccount,
+                earnManagerAccount: $.getEarnManagerAccount(
+                  earnManagerOne.publicKey
+                ),
+                userTokenAccount,
+                earnManagerTokenAccount,
+                extTokenProgram: $.extTokenProgram,
+              })
+              .signers([$.earnAuthority])
+              .rpc();
+
+            // Calculate expected rewards (balance * (global_index / last_claim_index) - balance)
+            const expectedRewards = earnerStartBalance
+              .mul(newIndex)
+              .div(initialIndex)
+              .sub(earnerStartBalance);
+
+            // Verify the expected token balance changes
+            await $.expectTokenBalance(
+              userTokenAccount,
+              earnerStartBalance.add(expectedRewards)
+            );
+            await $.expectTokenBalance(
+              earnManagerTokenAccount,
+              earnManagerStartBalance
+            );
+
+            // Verify the earner account was updated with the new claim index and claim timestamp
+            await $.expectEarnerState(earnerAccount, {
+              lastClaimIndex: newIndex,
+              lastClaimTimestamp: $.currentTime(),
+            });
+          });
+
+          // given all the accounts are correct
+          // given the earn manager fee is not zero and earn manager is not active
+          // it mints all the yield to the earner's recipient account
+          test("Earn manager fee is non-zero, earn manager inactive - success", async () => {
+            // Set the earn manager fee to a non-zero value
+            await $.configureEarnManager(earnManagerOne, new BN(1000));
+
+            // Remove the earn manager
+            await $.removeEarnManager(earnManagerOne.publicKey);
+
+            const earnerAccount = $.getEarnerAccount(earnerOne.publicKey);
+            const userTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnerOne.publicKey
+            );
+            const earnManagerTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnManagerOne.publicKey
+            );
+
+            // Get the current balance of the earner's token account
+            const earnerStartBalance = await $.getTokenBalance(
+              userTokenAccount
+            );
+
+            // Get the current balance of the earn manager's token account
+            const earnManagerStartBalance = await $.getTokenBalance(
+              earnManagerTokenAccount
+            );
+
+            // Confirm the earn manager fee is non-zero and inactive
+            await $.expectEarnManagerState(
+              $.getEarnManagerAccount(earnManagerOne.publicKey),
+              {
+                feeBps: new BN(1000),
+                isActive: false,
+              }
+            );
+
+            // Confirm the starting earner account state
+            await $.expectEarnerState(earnerAccount, {
+              lastClaimIndex: initialIndex,
+              lastClaimTimestamp: startTime,
+            });
+
+            // Send the transaction
+            await $.ext.methods
+              .claimFor(earnerStartBalance)
+              .accountsPartial({
+                earnAuthority: $.earnAuthority.publicKey,
+                earnerAccount,
+                earnManagerAccount: $.getEarnManagerAccount(
+                  earnManagerOne.publicKey
+                ),
+                userTokenAccount,
+                earnManagerTokenAccount,
+                extTokenProgram: $.extTokenProgram,
+              })
+              .signers([$.earnAuthority])
+              .rpc();
+
+            // Calculate expected rewards (balance * (global_index / last_claim_index) - balance)
+            const expectedRewards = earnerStartBalance
+              .mul(newIndex)
+              .div(initialIndex)
+              .sub(earnerStartBalance);
+
+            // Verify the expected token balance changes
+            await $.expectTokenBalance(
+              userTokenAccount,
+              earnerStartBalance.add(expectedRewards)
+            );
+            await $.expectTokenBalance(
+              earnManagerTokenAccount,
+              earnManagerStartBalance
+            );
+
+            // Verify the earner account was updated with the new claim index and claim timestamp
+            await $.expectEarnerState(earnerAccount, {
+              lastClaimIndex: newIndex,
+              lastClaimTimestamp: $.currentTime(),
+            });
+          });
+
+          // given all the accounts are correct
+          // given the earn manager fee is not zero and earn manager is active
+          // given the earn manager token account is closed
+          // it mints all the yield to the earner's recipient account
+          test("Earn manager fee is non-zero, earn manager active, earn manager token account closed - success", async () => {
+            // Set the earn manager fee to a non-zero value
+            await $.configureEarnManager(earnManagerOne, new BN(1000));
+
+            const earnerAccount = $.getEarnerAccount(earnerOne.publicKey);
+            const userTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnerOne.publicKey
+            );
+            const earnManagerTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnManagerOne.publicKey
+            );
+
+            // Close the earn manager token account
+            await $.closeTokenAccount(earnManagerOne, earnManagerTokenAccount);
+
+            // Get the current balance of the earner's token account
+            const earnerStartBalance = await $.getTokenBalance(
+              userTokenAccount
+            );
+
+            // Confirm the earn manager fee is non-zero and inactive
+            await $.expectEarnManagerState(
+              $.getEarnManagerAccount(earnManagerOne.publicKey),
+              {
+                feeBps: new BN(1000),
+                isActive: true,
+              }
+            );
+
+            // Confirm the starting earner account state
+            await $.expectEarnerState(earnerAccount, {
+              lastClaimIndex: initialIndex,
+              lastClaimTimestamp: startTime,
+            });
+
+            // Send the transaction
+            await $.ext.methods
+              .claimFor(earnerStartBalance)
+              .accountsPartial({
+                earnAuthority: $.earnAuthority.publicKey,
+                earnerAccount,
+                earnManagerAccount: $.getEarnManagerAccount(
+                  earnManagerOne.publicKey
+                ),
+                userTokenAccount,
+                earnManagerTokenAccount, // This will be closed, so it should not affect the claim
+                extTokenProgram: $.extTokenProgram,
+              })
+              .signers([$.earnAuthority])
+              .rpc();
+
+            // Calculate expected rewards (balance * (global_index / last_claim_index) - balance)
+            const expectedRewards = earnerStartBalance
+              .mul(newIndex)
+              .div(initialIndex)
+              .sub(earnerStartBalance);
+
+            // Verify the expected token balance changes
+            await $.expectTokenBalance(
+              userTokenAccount,
+              earnerStartBalance.add(expectedRewards)
+            );
+
+            // Verify the earner account was updated with the new claim index and claim timestamp
+            await $.expectEarnerState(earnerAccount, {
+              lastClaimIndex: newIndex,
+              lastClaimTimestamp: $.currentTime(),
+            });
+          });
+
+          // given all the accounts are correct
+          // given the earn manager fee is not zero and earn manager is active
+          // given the fee amount rounds to zero
+          // it mints all the yield to the earner's recipient account
+          test("Earn manager fee is non-zero, earn manager active, fee amount rounds to zero - success", async () => {
+            // Set a very small fee (1 bps = 0.01%)
+            await $.configureEarnManager(earnManagerOne, new BN(1));
+
+            const earnerAccount = $.getEarnerAccount(earnerOne.publicKey);
+            const userTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnerOne.publicKey
+            );
+            const earnManagerTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnManagerOne.publicKey
+            );
+
+            // Get the earner starting balance (this is used to compare later)
+            const earnerStartBalance = await $.getTokenBalance(
+              userTokenAccount
+            );
+
+            // Get the earn manager token account starting balance
+            const earnManagerStartBalance = await $.getTokenBalance(
+              earnManagerTokenAccount
+            );
+
+            // Confirm the earn manager fee is non-zero and active
+            await $.expectEarnManagerState(
+              $.getEarnManagerAccount(earnManagerOne.publicKey),
+              {
+                feeBps: new BN(1),
+                isActive: true,
+              }
+            );
+
+            // Confirm the starting earner account state
+            await $.expectEarnerState(earnerAccount, {
+              lastClaimIndex: initialIndex,
+              lastClaimTimestamp: startTime,
+            });
+
+            // Send the transaction
+            // We use a smaller balance for the yield calculation here to make the fee round to zero
+            const snapshotBalance = new BN(10000);
+            await $.ext.methods
+              .claimFor(snapshotBalance)
+              .accountsPartial({
+                earnAuthority: $.earnAuthority.publicKey,
+                earnerAccount,
+                earnManagerAccount: $.getEarnManagerAccount(
+                  earnManagerOne.publicKey
+                ),
+                userTokenAccount,
+                earnManagerTokenAccount,
+                extTokenProgram: $.extTokenProgram,
+              })
+              .signers([$.earnAuthority])
+              .rpc();
+
+            // Calculate expected rewards (balance * (global_index / last_claim_index) - balance)
+            const expectedRewards = snapshotBalance
+              .mul(newIndex)
+              .div(initialIndex)
+              .sub(snapshotBalance);
+
+            // Verify the expected token balance changes
+            // Since fee rounds to zero, all rewards go to the earner
+            await $.expectTokenBalance(
+              userTokenAccount,
+              earnerStartBalance.add(expectedRewards)
+            );
+            await $.expectTokenBalance(
+              earnManagerTokenAccount,
+              earnManagerStartBalance
+            );
+
+            // Verify the earner account was updated with the new claim index and claim timestamp
+            await $.expectEarnerState(earnerAccount, {
+              lastClaimIndex: newIndex,
+              lastClaimTimestamp: $.currentTime(),
+            });
+          });
+
+          // given all the accounts are correct
+          // given the earn manager fee is not zero and earn manager is active
+          // given the fee amount is not zero
+          // it mints the fee amount to the earn manager token account
+          // it mints the yield minus the fee amount to the earner's recipient account
+          test("Earn manager fee is non-zero, earn manager active, fee amount not zero - success", async () => {
+            // Configure the earn manager account with a 1% fee
+            const feeBps = new BN(100);
+            await $.configureEarnManager(earnManagerOne, feeBps);
+
+            const earnerAccount = $.getEarnerAccount(earnerOne.publicKey);
+            const userTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnerOne.publicKey
+            );
+            const earnManagerTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnManagerOne.publicKey
+            );
+
+            // Get the current balance of the earner's token account
+            const earnerStartBalance = await $.getTokenBalance(
+              userTokenAccount
+            );
+
+            // Get the current balance of the earn manager's token account
+            const earnManagerStartBalance = await $.getTokenBalance(
+              earnManagerTokenAccount
+            );
+
+            // Confirm the earn manager fee is 1%
+            await $.expectEarnManagerState(
+              $.getEarnManagerAccount(earnManagerOne.publicKey),
+              {
+                feeBps,
+                isActive: true,
+              }
+            );
+
+            // Confirm the starting earner account state
+            await $.expectEarnerState(earnerAccount, {
+              lastClaimIndex: initialIndex,
+              lastClaimTimestamp: startTime,
+            });
+
+            // Send the transaction
+            const snapshotBalance = await $.getTokenBalance(
+              await $.getATA($.extMint.publicKey, earnerOne.publicKey)
+            );
+            await $.ext.methods
+              .claimFor(snapshotBalance)
+              .accountsPartial({
+                earnAuthority: $.earnAuthority.publicKey,
+                earnerAccount,
+                earnManagerAccount: $.getEarnManagerAccount(
+                  earnManagerOne.publicKey
+                ),
+                userTokenAccount,
+                earnManagerTokenAccount,
+                extTokenProgram: $.extTokenProgram,
+              })
+              .signers([$.earnAuthority])
+              .rpc();
+
+            // Calculate expected rewards (balance * (global_index / last_claim_index) - balance)
+            const expectedRewards = snapshotBalance
+              .mul(newIndex)
+              .div(initialIndex)
+              .sub(snapshotBalance);
+
+            // Calculate the fee amount (1% of rewards)
+            const feeAmount = expectedRewards.mul(feeBps).div(new BN(10000));
+
+            // Calculate the amount that should go to the earner
+            const earnerAmount = expectedRewards.sub(feeAmount);
+
+            // Verify the expected token balance changes
+            await $.expectTokenBalance(
+              userTokenAccount,
+              earnerStartBalance.add(earnerAmount)
+            );
+            await $.expectTokenBalance(
+              earnManagerTokenAccount,
+              earnManagerStartBalance.add(feeAmount)
+            );
+
+            // Verify the earner account was updated with the new claim index and claim timestamp
+            await $.expectEarnerState(earnerAccount, {
+              lastClaimIndex: newIndex,
+              lastClaimTimestamp: $.currentTime(),
+            });
+          });
+        });
+      });
     }
   });
 }

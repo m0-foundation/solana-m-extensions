@@ -100,10 +100,20 @@ export type ExtGlobal<V extends Variant> = {
 
 export type EarnManager = {
   earnManager?: PublicKey;
-  isActive: boolean;
+  isActive?: boolean;
   feeBps?: BN;
   feeTokenAccount?: PublicKey | null;
   bump?: number;
+};
+
+export type Earner = {
+  lastClaimIndex?: BN;
+  lastClaimTimestamp?: BN;
+  bump?: number;
+  user?: PublicKey;
+  userTokenAccount?: PublicKey;
+  earnManager?: PublicKey;
+  recipientTokenAccount?: PublicKey | null;
 };
 
 const PROGRAM_ID = new PublicKey(
@@ -1109,6 +1119,29 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
       expect(state.feeBps.toString()).toEqual(expected.feeBps.toString());
     if (expected.feeTokenAccount)
       expect(state.feeTokenAccount).toEqual(expected.feeTokenAccount);
+  }
+
+  public async expectEarnerState(earnerAccount: PublicKey, expected: Earner) {
+    const state = await this.ext.account.earner.fetch(earnerAccount);
+
+    if (expected.lastClaimIndex)
+      expect(state.lastClaimIndex.toString()).toEqual(
+        expected.lastClaimIndex.toString()
+      );
+    if (expected.lastClaimTimestamp)
+      expect(state.lastClaimTimestamp.toString()).toEqual(
+        expected.lastClaimTimestamp.toString()
+      );
+    if (expected.bump) expect(state.bump).toEqual(expected.bump);
+    if (expected.user) expect(state.user).toEqual(expected.user);
+    if (expected.userTokenAccount)
+      expect(state.userTokenAccount).toEqual(expected.userTokenAccount);
+    if (expected.earnManager)
+      expect(state.earnManager).toEqual(expected.earnManager);
+    if (expected.recipientTokenAccount)
+      expect(state.recipientTokenAccount).toEqual(
+        expected.recipientTokenAccount
+      );
   }
 
   public async expectScaledUiAmountConfig(
