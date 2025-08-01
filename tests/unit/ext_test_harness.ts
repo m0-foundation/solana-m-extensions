@@ -88,6 +88,7 @@ export type YieldConfig<V extends Variant> = V extends Variant.ScaledUi
 
 export type ExtGlobal<V extends Variant> = {
   admin?: PublicKey;
+  pendingAdmin?: PublicKey | null;
   extMint?: PublicKey;
   mMint?: PublicKey;
   mEarnGlobalAccount?: PublicKey;
@@ -139,8 +140,17 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
   public nonWrapAuthority: Keypair;
   public mEarnerList: PublicKey[] = [];
 
-  constructor(variant: V, addresses: PublicKey[], use2022: boolean = true) {
+  constructor(variant: V, extTokenProgram: PublicKey, addresses: PublicKey[]) {
     this.variant = variant;
+    this.extTokenProgram = extTokenProgram;
+
+    if (
+      variant === Variant.ScaledUi &&
+      extTokenProgram !== TOKEN_2022_PROGRAM_ID
+    ) {
+      throw new Error("Scaled UI variant must use the TOKEN_2022_PROGRAM_ID");
+    }
+
     const M_EXT_IDL = require(`../../target/idl/${variant}.json`);
     const EARN_IDL = require("../programs/earn.json");
 
@@ -178,7 +188,6 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
     this.admin = new Keypair();
     this.mMint = new Keypair();
     this.extMint = new Keypair();
-    this.extTokenProgram = use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
     this.mMintAuthority = new Keypair();
     this.earnAuthority = new Keypair();
     this.wrapAuthority = new Keypair();
@@ -1034,6 +1043,9 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
     );
 
     if (expected.admin) expect(state.admin).toEqual(expected.admin);
+    if (expected.pendingAdmin !== undefined) {
+      expect(state.pendingAdmin).toEqual(expected.pendingAdmin);
+    }
     if (expected.extMint) expect(state.extMint).toEqual(expected.extMint);
     if (expected.mMint) expect(state.mMint).toEqual(expected.mMint);
     if (expected.mEarnGlobalAccount)
@@ -1792,6 +1804,38 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
         extTokenProgram: this.extTokenProgram,
       })
       .signers([this.earnAuthority])
+      .rpc();
+  }
+
+  // Admin transfer helper methods
+
+  public async transferAdmin(newAdmin: PublicKey) {
+    await this.ext.methods
+      .transferAdmin(newAdmin)
+      .accounts({
+        admin: this.admin.publicKey,
+      })
+      .signers([this.admin])
+      .rpc();
+  }
+
+  public async acceptAdmin(pendingAdmin: Keypair) {
+    await this.ext.methods
+      .acceptAdmin()
+      .accounts({
+        pendingAdmin: pendingAdmin.publicKey,
+      })
+      .signers([pendingAdmin])
+      .rpc();
+  }
+
+  public async revokeAdminTransfer() {
+    await this.ext.methods
+      .revokeAdminTransfer()
+      .accounts({
+        admin: this.admin.publicKey,
+      })
+      .signers([this.admin])
       .rpc();
   }
 }

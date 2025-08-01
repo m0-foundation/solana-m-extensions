@@ -206,6 +206,7 @@ impl Initialize<'_> {
         // Initialize the ExtGlobalV2 account
         ctx.accounts.global_account.set_inner(ExtGlobalV2 {
             admin: ctx.accounts.admin.key(),
+            pending_admin: None,
             ext_mint: ctx.accounts.ext_mint.key(),
             m_mint: ctx.accounts.m_mint.key(),
             m_earn_global_account: ctx.accounts.m_earn_global_account.key(),

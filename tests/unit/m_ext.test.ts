@@ -15,6 +15,7 @@ import {
   createInitializeImmutableOwnerInstruction,
   getAssociatedTokenAddressSync,
   ASSOCIATED_TOKEN_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { randomInt } from "crypto";
 
@@ -26,24 +27,32 @@ import { Comparison, ExtensionTest, Variant } from "./ext_test_harness";
 const initialSupply = new BN(100_000_000); // 100 tokens with 6 decimals
 const initialIndex = new BN(1_100_000_000_000); // 1.1 with 12 decimals
 
-const VARIANTS: Variant[] = [Variant.NoYield, Variant.ScaledUi, Variant.Crank];
+const VARIANTS = [
+  [Variant.NoYield, TOKEN_2022_PROGRAM_ID],
+  // [Variant.NoYield, TOKEN_PROGRAM_ID],
+  [Variant.ScaledUi, TOKEN_2022_PROGRAM_ID],
+  // [Variant.Crank, TOKEN_PROGRAM_ID],
+  [Variant.Crank, TOKEN_2022_PROGRAM_ID],
+];
 
 // Implement test cases for all variants
 // Most are the same, but allows conditional tests when required for different variants
-for (const variant of VARIANTS) {
+for (const [variant, tokenProgramId] of VARIANTS) {
   let $: ExtensionTest<Variant>;
 
   describe(`${variant} unit tests`, () => {
     beforeEach(async () => {
       // Create new extenstion test harness and then initialize it
-      $ = new ExtensionTest(variant, []);
+      $ = new ExtensionTest(
+        variant as Variant,
+        tokenProgramId as PublicKey,
+        []
+      );
       await $.init(initialSupply, initialIndex);
     });
 
     describe("admin instruction tests", () => {
       describe("initialize unit tests", () => {
-        // TODO: add tests with wrong token program for the ext mint
-
         // general test cases
         // [X] given the m_mint is not owned by the token2022 program
         //   [X] it reverts with a ConstraintAddress error
@@ -101,7 +110,11 @@ for (const variant of VARIANTS) {
         test("ext_mint not owned by the correct token program - reverts", async () => {
           // Create a mint owned by a different program
           const wrongMint = new Keypair();
-          await $.createMint(wrongMint, $.nonAdmin.publicKey, false);
+          await $.createMint(
+            wrongMint,
+            $.nonAdmin.publicKey,
+            $.extTokenProgram !== TOKEN_2022_PROGRAM_ID
+          );
 
           // Attempt to send the transaction
           await $.expectAnchorError(
@@ -128,7 +141,12 @@ for (const variant of VARIANTS) {
         test("ext_mint incorrect decimals - reverts", async () => {
           // Create a mint owned by a different program
           const badMint = new Keypair();
-          await $.createMint(badMint, $.nonAdmin.publicKey, true, 9);
+          await $.createMint(
+            badMint,
+            $.nonAdmin.publicKey,
+            $.extTokenProgram === TOKEN_2022_PROGRAM_ID,
+            9
+          );
 
           // Attempt to send the transaction
           await $.expectAnchorError(
@@ -211,7 +229,13 @@ for (const variant of VARIANTS) {
         test("ext_mint does not have a freeze authority - reverts", async () => {
           // Create a mint without a freeze authority
           const wrongMint = new Keypair();
-          await $.createMint(wrongMint, $.nonAdmin.publicKey, true, 6, false);
+          await $.createMint(
+            wrongMint,
+            $.nonAdmin.publicKey,
+            $.extTokenProgram === TOKEN_2022_PROGRAM_ID,
+            6,
+            false
+          );
 
           // Attempt to send the transaction
           await $.expectAnchorError(
@@ -335,7 +359,7 @@ for (const variant of VARIANTS) {
             });
 
             // Confirm the size of the global account based on the number of wrap authorities
-            const expectedSize = 143 + 1 + wrapAuthorities.length * 32; // 143 bytes base size + 1 for yield config discriminator + 4 bytes for vector length + 32 bytes per wrap authority
+            const expectedSize = 176 + 1 + wrapAuthorities.length * 32; // 176 bytes base size + 1 for yield config discriminator + 4 bytes for vector length + 32 bytes per wrap authority
             const extGlobalSize = await $.provider.connection
               .getAccountInfo(globalAccount)
               .then((info) => info?.data.length || 0);
@@ -473,7 +497,7 @@ for (const variant of VARIANTS) {
             });
 
             // Check the size of the global account based on the number of wrap authorities
-            const expectedSize = 143 + 25 + wrapAuthorities.length * 32; // 143 bytes base size + 25 yield config size + 32 bytes per wrap authority
+            const expectedSize = 176 + 25 + wrapAuthorities.length * 32; // 176 bytes base size + 25 yield config size + 32 bytes per wrap authority
             const extGlobalSize = await $.provider.connection
               .getAccountInfo(globalAccount)
               .then((info) => info?.data.length || 0);
@@ -490,6 +514,184 @@ for (const variant of VARIANTS) {
             });
           });
         }
+      });
+
+      describe("admin transfer unit tests", () => {
+        const newAdmin = new Keypair();
+        let wrapAuthorities: PublicKey[];
+
+        beforeEach(async () => {
+          wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
+
+          const feeBps =
+            variant === Variant.NoYield ? new BN(0) : new BN(randomInt(10000));
+          // Initialize the extension program
+          await $.initializeExt(wrapAuthorities, feeBps);
+
+          // Airdrop SOL to the new admin to pay for transactions
+          $.svm.airdrop(newAdmin.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
+        });
+
+        describe("transfer_admin unit tests", () => {
+          // given the admin does not sign the transaction
+          // it reverts with a NotAuthorized error
+          test("Non-admin tries to transfer admin - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .transferAdmin(newAdmin.publicKey)
+                .accounts({
+                  admin: $.nonAdmin.publicKey,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the admin signs the transaction
+          // given the new admin is the same as current admin
+          // it reverts with InvalidParam error
+          test("Transfer admin to same admin - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .transferAdmin($.admin.publicKey)
+                .accounts({
+                  admin: $.admin.publicKey,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "InvalidParam"
+            );
+          });
+
+          // given the admin signs the transaction
+          // given the new admin is different
+          // it sets pending_admin to the new admin
+          test("Transfer admin - success", async () => {
+            // Transfer admin to newAdmin
+            await $.transferAdmin(newAdmin.publicKey);
+
+            // Check that pending_admin is set correctly
+            await $.expectExtGlobalState({
+              admin: $.admin.publicKey,
+              pendingAdmin: newAdmin.publicKey,
+            });
+          });
+        });
+
+        describe("accept_admin unit tests", () => {
+          beforeEach(async () => {
+            // Set up a pending admin transfer
+            await $.transferAdmin(newAdmin.publicKey);
+          });
+
+          // given the pending admin does not sign the transaction
+          // it reverts with a NotAuthorized error
+          test("Wrong account tries to accept admin - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .acceptAdmin()
+                .accounts({
+                  pendingAdmin: $.nonAdmin.publicKey,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the pending admin signs the transaction
+          // it transfers admin ownership and clears pending_admin
+          test("Accept admin transfer - success", async () => {
+            // Accept the admin transfer
+            await $.acceptAdmin(newAdmin);
+
+            // Check that admin is updated and pending_admin is cleared
+            await $.expectExtGlobalState({
+              admin: newAdmin.publicKey,
+              pendingAdmin: null,
+            });
+          });
+        });
+
+        describe("revoke_admin_transfer unit tests", () => {
+          // given there is no pending admin transfer
+          // it reverts with InvalidParam error
+          test("Revoke when no pending transfer - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .revokeAdminTransfer()
+                .accounts({
+                  admin: $.admin.publicKey,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "InvalidParam"
+            );
+          });
+
+          // given there is a pending admin transfer
+          describe("with pending admin transfer", () => {
+            beforeEach(async () => {
+              // Set up a pending admin transfer
+              await $.transferAdmin(newAdmin.publicKey);
+            });
+
+            // given the non-admin tries to revoke the transfer
+            // it reverts with NotAuthorized error
+            test("Non-admin tries to revoke transfer - reverts", async () => {
+              await $.expectAnchorError(
+                $.ext.methods
+                  .revokeAdminTransfer()
+                  .accounts({
+                    admin: $.nonAdmin.publicKey,
+                  })
+                  .signers([$.nonAdmin])
+                  .rpc(),
+                "NotAuthorized"
+              );
+            });
+
+            // given the admin revokes the transfer
+            // it clears the pending_admin field
+            test("Admin revokes transfer - success", async () => {
+              // Verify there is a pending admin transfer
+              await $.expectExtGlobalState({
+                admin: $.admin.publicKey,
+                pendingAdmin: newAdmin.publicKey,
+              });
+
+              // Revoke the admin transfer
+              await $.revokeAdminTransfer();
+
+              // Check that pending_admin is cleared
+              await $.expectExtGlobalState({
+                admin: $.admin.publicKey,
+                pendingAdmin: null,
+              });
+            });
+
+            // given the admin revokes the transfer
+            // given the old pending admin tries to accept
+            // it reverts with NotAuthorized error
+            test("Cannot accept after revocation - reverts", async () => {
+              // Revoke the admin transfer
+              await $.revokeAdminTransfer();
+
+              // Attempt to accept the revoked transfer
+              await $.expectAnchorError(
+                $.ext.methods
+                  .acceptAdmin()
+                  .accounts({
+                    pendingAdmin: newAdmin.publicKey,
+                  })
+                  .signers([newAdmin])
+                  .rpc(),
+                "NotAuthorized"
+              );
+            });
+          });
+        });
       });
 
       describe("add_wrap_authority unit tests", () => {
