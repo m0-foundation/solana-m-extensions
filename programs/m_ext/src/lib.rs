@@ -176,4 +176,12 @@ pub mod m_ext {
     pub fn set_recipient(ctx: Context<SetRecipient>) -> Result<()> {
         SetRecipient::handler(ctx)
     }
+
+    // Open instructions (Crank variant only)
+    #[cfg(feature = "crank")]
+    pub fn remove_orphaned_earner(
+        ctx: Context<RemoveOrphanedEarner>,
+    ) -> Result<()> {
+        RemoveOrphanedEarner::handler(ctx)
+    }
 }
