@@ -247,14 +247,15 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
     tokenAccount: PublicKey,
     expectedBalance: BN,
     op: Comparison = Comparison.Equal,
-    tolerance?: BN
+    tolerance?: BN,
+    use2022: boolean = true
   ) {
     const balance = (
       await getAccount(
         this.provider.connection,
         tokenAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
       )
     ).amount;
     // try {
@@ -501,13 +502,17 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
     return { tokenAccount: tokenAccount.publicKey };
   }
 
-  public async closeTokenAccount(owner: Keypair, tokenAccount: PublicKey) {
+  public async closeTokenAccount(
+    owner: Keypair,
+    tokenAccount: PublicKey,
+    use2022: boolean = true
+  ) {
     const closeIx = createCloseAccountInstruction(
       tokenAccount,
       owner.publicKey,
       owner.publicKey,
       [],
-      TOKEN_2022_PROGRAM_ID
+      use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
     );
 
     let tx = new Transaction().add(closeIx);
@@ -793,13 +798,17 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
     await this.provider.sendAndConfirm!(tx, [this.mMintAuthority]);
   }
 
-  public async getTokenBalance(tokenAccount: PublicKey) {
+  public async getTokenBalance(
+    tokenAccount: PublicKey,
+    use2022: boolean = true
+  ) {
     const tokenAccountInfo = await getAccount(
       this.provider.connection,
       tokenAccount,
       undefined,
-      TOKEN_2022_PROGRAM_ID
+      use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
     );
+
     if (!tokenAccountInfo) {
       throw new Error("Account not created");
     }
@@ -832,12 +841,12 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
     return new BN(uiBalance.toString());
   }
 
-  public async getTokenSupply(mint: PublicKey) {
+  public async getTokenSupply(mint: PublicKey, use2022: boolean = true) {
     const mintInfo = await getMint(
       this.provider.connection,
       mint,
       undefined,
-      TOKEN_2022_PROGRAM_ID
+      use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
     );
     if (!mintInfo) {
       throw new Error("Mint not found");
@@ -894,7 +903,11 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
     mint: PublicKey,
     amount: BN
   ) {
-    const sourceATA: PublicKey = await this.getATA(mint, source.publicKey);
+    const sourceATA: PublicKey = await this.getATA(
+      mint,
+      source.publicKey,
+      mint.equals(this.extMint.publicKey) ? this.useToken2022ForExt : true
+    );
 
     const approveIx = createApproveCheckedInstruction(
       sourceATA,
@@ -904,7 +917,11 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
       BigInt(amount.toString()),
       6, // decimals
       [],
-      TOKEN_2022_PROGRAM_ID
+      mint.equals(this.extMint.publicKey)
+        ? this.useToken2022ForExt
+          ? TOKEN_2022_PROGRAM_ID
+          : TOKEN_PROGRAM_ID
+        : TOKEN_2022_PROGRAM_ID
     );
 
     let tx = new Transaction();
@@ -1196,7 +1213,10 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
   };
 
   public async expectExtSolvent() {
-    const extSupply = await this.getTokenSupply(this.extMint.publicKey);
+    const extSupply = await this.getTokenSupply(
+      this.extMint.publicKey,
+      this.useToken2022ForExt
+    );
     const mVaultUiBalance = await this.getTokenUiBalance(
       await this.getATA(this.mMint.publicKey, this.getMVault())
     );
@@ -1445,7 +1465,11 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
       fromMTokenAccount ?? (await this.getATA(this.mMint.publicKey, from));
     toExtTokenAccount =
       toExtTokenAccount ??
-      (await this.getATA(this.extMint.publicKey, to ?? from));
+      (await this.getATA(
+        this.extMint.publicKey,
+        to ?? from,
+        this.useToken2022ForExt
+      ));
     vaultMTokenAccount =
       vaultMTokenAccount ?? (await this.getATA(this.mMint.publicKey, mVault));
 
@@ -1508,7 +1532,12 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
     toMTokenAccount =
       toMTokenAccount ?? (await this.getATA(this.mMint.publicKey, to ?? from));
     fromExtTokenAccount =
-      fromExtTokenAccount ?? (await this.getATA(this.extMint.publicKey, from));
+      fromExtTokenAccount ??
+      (await this.getATA(
+        this.extMint.publicKey,
+        from,
+        this.useToken2022ForExt
+      ));
     vaultMTokenAccount =
       vaultMTokenAccount ?? (await this.getATA(this.mMint.publicKey, mVault));
 
@@ -1592,7 +1621,11 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
   ): Promise<{ recipientExtTokenAccount: PublicKey }> {
     const recipientExtTokenAccount =
       toTokenAccount ??
-      (await this.getATA(this.extMint.publicKey, this.admin.publicKey, true));
+      (await this.getATA(
+        this.extMint.publicKey,
+        this.admin.publicKey,
+        this.useToken2022ForExt
+      ));
 
     // Send the instruction
     await this.ext.methods
@@ -1639,7 +1672,11 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
 
     const feeTokenATA =
       feeTokenAccount ??
-      (await this.getATA(this.extMint.publicKey, earnManager));
+      (await this.getATA(
+        this.extMint.publicKey,
+        earnManager,
+        this.useToken2022ForExt
+      ));
 
     await this.ext.methods
       .addEarnManager(earnManager, feeBps)
@@ -1690,7 +1727,12 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
     }
 
     const userTokenATA =
-      userTokenAccount ?? (await this.getATA(this.extMint.publicKey, user));
+      userTokenAccount ??
+      (await this.getATA(
+        this.extMint.publicKey,
+        user,
+        this.useToken2022ForExt
+      ));
 
     await this.ext.methods
       .addEarner(user)
@@ -1805,6 +1847,11 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
       })
       .signers([this.earnAuthority])
       .rpc();
+  }
+
+  // Helper method to determine if we should use TOKEN_2022_PROGRAM_ID for ext mint operations
+  public get useToken2022ForExt(): boolean {
+    return this.extTokenProgram === TOKEN_2022_PROGRAM_ID;
   }
 
   // Admin transfer helper methods

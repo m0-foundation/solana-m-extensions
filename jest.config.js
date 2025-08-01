@@ -3,7 +3,7 @@ module.exports = {
   testEnvironment: "node",
   setupFilesAfterEnv: ["<rootDir>/jest.setup.js"],
   verbose: true,
-  maxWorkers: 1,
+  maxWorkers: 4,
   forceExit: true,
   // detectOpenHandles: true,
 };

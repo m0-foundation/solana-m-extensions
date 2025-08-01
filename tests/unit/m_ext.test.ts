@@ -29,9 +29,9 @@ const initialIndex = new BN(1_100_000_000_000); // 1.1 with 12 decimals
 
 const VARIANTS = [
   [Variant.NoYield, TOKEN_2022_PROGRAM_ID],
-  // [Variant.NoYield, TOKEN_PROGRAM_ID],
+  [Variant.NoYield, TOKEN_PROGRAM_ID],
   [Variant.ScaledUi, TOKEN_2022_PROGRAM_ID],
-  // [Variant.Crank, TOKEN_PROGRAM_ID],
+  [Variant.Crank, TOKEN_PROGRAM_ID],
   [Variant.Crank, TOKEN_2022_PROGRAM_ID],
 ];
 
@@ -40,7 +40,9 @@ const VARIANTS = [
 for (const [variant, tokenProgramId] of VARIANTS) {
   let $: ExtensionTest<Variant>;
 
-  describe(`${variant} unit tests`, () => {
+  describe(`${variant} - ${
+    tokenProgramId === TOKEN_2022_PROGRAM_ID ? "Token2022" : "Token"
+  } unit tests`, () => {
     beforeEach(async () => {
       // Create new extenstion test harness and then initialize it
       $ = new ExtensionTest(
@@ -113,7 +115,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           await $.createMint(
             wrongMint,
             $.nonAdmin.publicKey,
-            $.extTokenProgram !== TOKEN_2022_PROGRAM_ID
+            !$.useToken2022ForExt
           );
 
           // Attempt to send the transaction
@@ -144,7 +146,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           await $.createMint(
             badMint,
             $.nonAdmin.publicKey,
-            $.extTokenProgram === TOKEN_2022_PROGRAM_ID,
+            $.useToken2022ForExt,
             9
           );
 
@@ -232,7 +234,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           await $.createMint(
             wrongMint,
             $.nonAdmin.publicKey,
-            $.extTokenProgram === TOKEN_2022_PROGRAM_ID,
+            $.useToken2022ForExt,
             6,
             false
           );
@@ -389,7 +391,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("ext_mint does not have the scaled ui amount extension - reverts", async () => {
             // Create a mint without the scaled ui amount extension
             const wrongMint = new Keypair();
-            await $.createMint(wrongMint, $.getExtMintAuthority(), true, 6); // valid otherwise
+            await $.createMint(
+              wrongMint,
+              $.getExtMintAuthority(),
+              $.useToken2022ForExt,
+              6
+            ); // valid otherwise
 
             // Attempt to send the transaction
             await $.expectAnchorError(
@@ -920,7 +927,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("admin does not sign - reverts", async () => {
             const recipientExtTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              $.nonAdmin.publicKey
+              $.nonAdmin.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to send the transaction
@@ -950,7 +958,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             const recipientExtTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              $.admin.publicKey
+              $.admin.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to send the transaction
@@ -984,7 +993,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             const recipientExtTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              $.admin.publicKey
+              $.admin.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to send the transaction
@@ -1008,11 +1018,17 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("ext mint does not match global account - reverts", async () => {
             // Create a new mint
             const wrongMint = new Keypair();
-            await $.createMint(wrongMint, $.nonAdmin.publicKey, true, 6);
+            await $.createMint(
+              wrongMint,
+              $.nonAdmin.publicKey,
+              $.useToken2022ForExt,
+              6
+            );
 
             const recipientExtTokenAccount = await $.getATA(
               wrongMint.publicKey,
-              $.admin.publicKey
+              $.admin.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to send the transaction
@@ -1040,7 +1056,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             const recipientExtTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              $.admin.publicKey
+              $.admin.publicKey,
+              $.useToken2022ForExt
             );
             // Attempt to send the transaction
             await $.expectAnchorError(
@@ -1121,14 +1138,16 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               );
               const recipientATA = await $.getATA(
                 $.extMint.publicKey,
-                $.admin.publicKey
+                $.admin.publicKey,
+                $.useToken2022ForExt
               );
 
               // Get the new multiplier calculate the expected excess
               const multiplier = await $.getNewMultiplier(newIndex);
 
               const initialRecipientPrincipal = await $.getTokenBalance(
-                recipientATA
+                recipientATA,
+                $.useToken2022ForExt
               );
               const initialRecipientBalance = await $.getTokenUiBalance(
                 recipientATA,
@@ -1139,7 +1158,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 $.provider.connection,
                 $.extMint.publicKey,
                 undefined,
-                TOKEN_2022_PROGRAM_ID
+                $.extTokenProgram
               ).then((mint) => mint.supply);
 
               const requiredCollateral = new BN(
@@ -1205,7 +1224,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               );
               const recipientATA = await $.getATA(
                 $.extMint.publicKey,
-                $.admin.publicKey
+                $.admin.publicKey,
+                $.useToken2022ForExt
               );
 
               // Get the current multiplier and calculate the $.expected excess
@@ -1215,14 +1235,15 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 multiplier
               );
               const initialRecipientPrincipal = await $.getTokenBalance(
-                recipientATA
+                recipientATA,
+                $.useToken2022ForExt
               );
 
               const extSupply = await getMint(
                 $.provider.connection,
                 $.extMint.publicKey,
                 undefined,
-                TOKEN_2022_PROGRAM_ID
+                $.extTokenProgram
               ).then((mint) => mint.supply);
 
               const requiredCollateral = new BN(
@@ -1276,10 +1297,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               const initialVaultBalance = await $.getTokenBalance(mVaultATA);
               const recipientATA = await $.getATA(
                 $.extMint.publicKey,
-                $.admin.publicKey
+                $.admin.publicKey,
+                $.useToken2022ForExt
               );
               const initialRecipientBalance = await $.getTokenBalance(
-                recipientATA
+                recipientATA,
+                $.useToken2022ForExt
               );
 
               // Attempt to send the transaction
@@ -1295,7 +1318,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
               // Verify no tokens were transferred
               $.expectTokenBalance(mVaultATA, initialVaultBalance);
-              $.expectTokenBalance(recipientATA, initialRecipientBalance);
+              $.expectTokenBalance(
+                recipientATA,
+                initialRecipientBalance,
+                Comparison.Equal,
+                undefined,
+                $.useToken2022ForExt
+              );
             });
           }
 
@@ -1321,17 +1350,19 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               );
               const recipientATA = await $.getATA(
                 $.extMint.publicKey,
-                $.admin.publicKey
+                $.admin.publicKey,
+                $.useToken2022ForExt
               );
               const initialRecipientBalance = await $.getTokenBalance(
-                recipientATA
+                recipientATA,
+                $.useToken2022ForExt
               );
 
               const extSupply = await getMint(
                 $.provider.connection,
                 $.extMint.publicKey,
                 undefined,
-                TOKEN_2022_PROGRAM_ID
+                $.extTokenProgram
               ).then((mint) => mint.supply);
 
               const expectedExcess = initialVaultUiBalance.sub(
@@ -1352,7 +1383,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               $.expectTokenBalance(mVaultATA, initialVaultBalance);
               $.expectTokenBalance(
                 recipientATA,
-                initialRecipientBalance.add(expectedExcess)
+                initialRecipientBalance.add(expectedExcess),
+                Comparison.Equal,
+                undefined,
+                $.useToken2022ForExt
               );
             });
 
@@ -1372,10 +1406,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               const initialVaultBalance = await $.getTokenBalance(mVaultATA);
               const recipientATA = await $.getATA(
                 $.extMint.publicKey,
-                $.admin.publicKey
+                $.admin.publicKey,
+                $.useToken2022ForExt
               );
               const initialRecipientBalance = await $.getTokenBalance(
-                recipientATA
+                recipientATA,
+                $.useToken2022ForExt
               );
 
               // Attempt to send the transaction
@@ -1391,7 +1427,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
               // Verify no tokens were transferred
               $.expectTokenBalance(mVaultATA, initialVaultBalance);
-              $.expectTokenBalance(recipientATA, initialRecipientBalance);
+              $.expectTokenBalance(
+                recipientATA,
+                initialRecipientBalance,
+                Comparison.Equal,
+                undefined,
+                $.useToken2022ForExt
+              );
             });
           }
         });
@@ -1463,7 +1505,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("ext mint does not match global account - reverts", async () => {
             // Create a new mint
             const wrongMint = new Keypair();
-            await $.createMint(wrongMint, $.nonAdmin.publicKey, true, 6);
+            await $.createMint(
+              wrongMint,
+              $.nonAdmin.publicKey,
+              $.useToken2022ForExt,
+              6
+            );
 
             // Attempt to send the transaction
             await $.expectAnchorError(
@@ -1668,7 +1715,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for the earn manager
             const earnManagerATA = await $.getATA(
               $.extMint.publicKey,
-              earnManagerOne.publicKey
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to send the transaction
@@ -1725,7 +1773,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   admin: $.admin.publicKey,
                   feeTokenAccount: await $.getATA(
                     $.extMint.publicKey,
-                    earnManagerOne.publicKey
+                    earnManagerOne.publicKey,
+                    $.useToken2022ForExt
                   ),
                 })
                 .signers([$.admin])
@@ -1742,7 +1791,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             const feeBps = new BN(randomInt(0, 10000));
             const earnManagerATA = await $.getATA(
               $.extMint.publicKey,
-              earnManagerOne.publicKey
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Send the transaction
@@ -1783,7 +1833,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Add the earn manager again with a new fee and fee token account
             const newFeeTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnManagerTwo.publicKey
+              earnManagerTwo.publicKey,
+              $.useToken2022ForExt
             );
             const feeBps = new BN(10);
             await $.addEarnManager(
@@ -1958,7 +2009,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           );
           toExtTokenAccount = await $.getATA(
             $.extMint.publicKey,
-            $.wrapAuthority.publicKey
+            $.wrapAuthority.publicKey,
+            $.useToken2022ForExt
           );
         });
 
@@ -2044,11 +2096,17 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // it reverts with an InvalidAccount error
           test("Ext mint account does not match global account - reverts", async () => {
             const wrongMint = Keypair.generate();
-            await $.createMint(wrongMint, $.wrapAuthority.publicKey, true, 6);
+            await $.createMint(
+              wrongMint,
+              $.wrapAuthority.publicKey,
+              $.useToken2022ForExt,
+              6
+            );
 
             toExtTokenAccount = await $.getATA(
               wrongMint.publicKey,
-              $.wrapAuthority.publicKey
+              $.wrapAuthority.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to send the transaction
@@ -2175,7 +2233,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             );
             toExtTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              $.nonWrapAuthority.publicKey
+              $.nonWrapAuthority.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to send the transaction
@@ -2239,95 +2298,100 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             );
           });
 
-          // // given a wrap authority is not provided
-          // // given the token authority is on the wrap authorities list
-          // // given the from token account has enough M tokens
-          // // given the token authority is not the owner of the from M token account, but is delegated
-          // // it transfers the amount of M tokens from the user's M token account to the M vault token account
-          // // it mints the amount of ext tokens to the to ext token account
-          // test("Wrap with delegated authority - success", async () => {
-          //   // This is a raw token amount (i.e. principal), not a UI amount
-          //   const wrapPrincipal = new BN(
-          //     randomInt(1, mintAmount.toNumber() + 1)
-          //   );
-          //   // Calculate the UI amount of M from this raw amount
-          //   const wrapUiAmount = await $.toUiAmount(
-          //     $.mMint.publicKey,
-          //     wrapPrincipal
-          //   );
+          // given a wrap authority is not provided
+          // given the token authority is on the wrap authorities list
+          // given the from token account has enough M tokens
+          // given the token authority is not the owner of the from M token account, but is delegated
+          // it transfers the amount of M tokens from the user's M token account to the M vault token account
+          // it mints the amount of ext tokens to the to ext token account
+          test("Wrap with delegated authority - success", async () => {
+            // This is a raw token amount (i.e. principal), not a UI amount
+            const wrapPrincipal = new BN(
+              randomInt(1, mintAmount.toNumber() + 1)
+            );
+            // Calculate the UI amount of M from this raw amount
+            const wrapUiAmount = await $.toUiAmount(
+              $.mMint.publicKey,
+              wrapPrincipal
+            );
 
-          //   // Calculate th expected extension principal from this amount
-          //   const expectedExtPrincipal =
-          //     variant === Variant.ScaledUi
-          //       ? await $.toPrincipal($.extMint.publicKey, wrapUiAmount)
-          //       : wrapUiAmount;
+            // Calculate th expected extension principal from this amount
+            const expectedExtPrincipal =
+              variant === Variant.ScaledUi
+                ? await $.toPrincipal($.extMint.publicKey, wrapUiAmount)
+                : wrapUiAmount;
 
-          //   // Approve (delegate) the wrap authority to spend the non-wrap authority's M tokens
-          //   const { sourceATA: fromMTokenAccount } = await $.approve(
-          //     $.nonWrapAuthority,
-          //     $.wrapAuthority.publicKey,
-          //     $.mMint.publicKey,
-          //     wrapPrincipal
-          //   );
+            // Approve (delegate) the wrap authority to spend the non-wrap authority's M tokens
+            const { sourceATA: fromMTokenAccount } = await $.approve(
+              $.nonWrapAuthority,
+              $.wrapAuthority.publicKey,
+              $.mMint.publicKey,
+              wrapPrincipal
+            );
 
-          //   // Setup the instruction
-          //   const toExtTokenAccount = await $.getATA(
-          //     $.extMint.publicKey,
-          //     $.nonWrapAuthority.publicKey
-          //   );
+            // Setup the instruction
+            const toExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.nonWrapAuthority.publicKey,
+              $.useToken2022ForExt
+            );
 
-          //   // Cache initial balances
-          //   const fromMTokenAccountBalance = await $.getTokenBalance(
-          //     fromMTokenAccount
-          //   );
-          //   const vaultMTokenAccountBalance = await $.getTokenBalance(
-          //     vaultMTokenAccount
-          //   );
-          //   const toExtTokenAccountBalance = await $.getTokenBalance(
-          //     toExtTokenAccount
-          //   );
-          //   let toExtTokenAccountUiBalance;
-          //   if (variant === Variant.ScaledUi) {
-          //     toExtTokenAccountUiBalance = await $.getTokenUiBalance(
-          //       toExtTokenAccount
-          //     );
-          //   }
+            // Cache initial balances
+            const fromMTokenAccountBalance = await $.getTokenBalance(
+              fromMTokenAccount
+            );
+            const vaultMTokenAccountBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+            const toExtTokenAccountBalance = await $.getTokenBalance(
+              toExtTokenAccount,
+              $.useToken2022ForExt
+            );
+            let toExtTokenAccountUiBalance;
+            if (variant === Variant.ScaledUi) {
+              toExtTokenAccountUiBalance = await $.getTokenUiBalance(
+                toExtTokenAccount
+              );
+            }
 
-          //   // Send the instruction
-          //   await $.ext.methods
-          //     .wrap(wrapPrincipal)
-          //     .accounts({
-          //       tokenAuthority: $.wrapAuthority.publicKey,
-          //       wrapAuthority: $.ext.programId,
-          //       fromMTokenAccount,
-          //       toExtTokenAccount,
-          //       extTokenProgram: $.extTokenProgram,
-          //     })
-          //     .signers([$.wrapAuthority])
-          //     .rpc();
+            // Send the instruction
+            await $.ext.methods
+              .wrap(wrapPrincipal)
+              .accounts({
+                tokenAuthority: $.wrapAuthority.publicKey,
+                wrapAuthority: $.ext.programId,
+                fromMTokenAccount,
+                toExtTokenAccount,
+                extTokenProgram: $.extTokenProgram,
+              })
+              .signers([$.wrapAuthority])
+              .rpc();
 
-          //   // Confirm updated balances
-          //   await $.expectTokenBalance(
-          //     fromMTokenAccount,
-          //     fromMTokenAccountBalance.sub(wrapPrincipal)
-          //   );
-          //   await $.expectTokenBalance(
-          //     vaultMTokenAccount,
-          //     vaultMTokenAccountBalance.add(wrapPrincipal)
-          //   );
-          //   await $.expectTokenBalance(
-          //     toExtTokenAccount,
-          //     toExtTokenAccountBalance.add(expectedExtPrincipal)
-          //   );
-          //   if (variant === Variant.ScaledUi) {
-          //     await $.expectTokenUiBalance(
-          //       toExtTokenAccount,
-          //       toExtTokenAccountUiBalance!.add(wrapUiAmount),
-          //       Comparison.LessThanOrEqual,
-          //       new BN(2)
-          //     );
-          //   }
-          // });
+            // Confirm updated balances
+            await $.expectTokenBalance(
+              fromMTokenAccount,
+              fromMTokenAccountBalance.sub(wrapPrincipal)
+            );
+            await $.expectTokenBalance(
+              vaultMTokenAccount,
+              vaultMTokenAccountBalance.add(wrapPrincipal)
+            );
+            await $.expectTokenBalance(
+              toExtTokenAccount,
+              toExtTokenAccountBalance.add(expectedExtPrincipal),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
+            );
+            if (variant === Variant.ScaledUi) {
+              await $.expectTokenUiBalance(
+                toExtTokenAccount,
+                toExtTokenAccountUiBalance!.add(wrapUiAmount),
+                Comparison.LessThanOrEqual,
+                new BN(2)
+              );
+            }
+          });
 
           // given a wrap authority is not provided
           // given the token authority is on the wrap authorities list
@@ -2344,7 +2408,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               vaultMTokenAccount
             );
             const toExtTokenAccountBalance = await $.getTokenBalance(
-              toExtTokenAccount
+              toExtTokenAccount,
+              $.useToken2022ForExt
             );
             let toExtTokenAccountUiBalance;
             if (variant === Variant.ScaledUi) {
@@ -2390,7 +2455,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             );
             await $.expectTokenBalance(
               toExtTokenAccount,
-              toExtTokenAccountBalance.add(expectedExtPrincipal)
+              toExtTokenAccountBalance.add(expectedExtPrincipal),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
             if (variant === Variant.ScaledUi) {
               await $.expectTokenUiBalance(
@@ -2402,111 +2470,125 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             }
           });
 
-          // // given a wrap authority is not provided
-          // // given the token authority is on the wrap authorities list
-          // // given the from token account has enough M tokens
-          // // given the token authority is the owner of the from M token account
-          // // given the signer does not own the to ext token account
-          // // it transfers the amount of M tokens from the user's M token account to the M vault token account
-          // // it mints the amount of wM tokens to the user's wM token account
-          // test("Wrap to different account - success", async () => {
-          //   toExtTokenAccount = await $.getATA(
-          //     $.extMint.publicKey,
-          //     $.nonWrapAuthority.publicKey
-          //   );
+          // given a wrap authority is not provided
+          // given the token authority is on the wrap authorities list
+          // given the from token account has enough M tokens
+          // given the token authority is the owner of the from M token account
+          // given the signer does not own the to ext token account
+          // it transfers the amount of M tokens from the user's M token account to the M vault token account
+          // it mints the amount of wM tokens to the user's wM token account
+          test("Wrap to different account - success", async () => {
+            toExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.nonWrapAuthority.publicKey,
+              $.useToken2022ForExt
+            );
 
-          //   // Cache initial balances
-          //   const fromMTokenAccountBalance = await $.getTokenBalance(
-          //     fromMTokenAccount
-          //   );
-          //   const vaultMTokenAccountBalance = await $.getTokenBalance(
-          //     vaultMTokenAccount
-          //   );
-          //   const toExtTokenAccountBalance = await $.getTokenBalance(
-          //     toExtTokenAccount
-          //   );
-          //   let toExtTokenAccountUiBalance;
-          //   if (variant === Variant.ScaledUi) {
-          //     toExtTokenAccountUiBalance = await $.getTokenUiBalance(
-          //       toExtTokenAccount
-          //     );
-          //   }
+            // Cache initial balances
+            const fromMTokenAccountBalance = await $.getTokenBalance(
+              fromMTokenAccount
+            );
+            const vaultMTokenAccountBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+            const toExtTokenAccountBalance = await $.getTokenBalance(
+              toExtTokenAccount,
+              $.useToken2022ForExt
+            );
+            let toExtTokenAccountUiBalance;
+            if (variant === Variant.ScaledUi) {
+              toExtTokenAccountUiBalance = await $.getTokenUiBalance(
+                toExtTokenAccount
+              );
+            }
 
-          //   const wrapPrincipal = new BN(
-          //     randomInt(1, mintAmount.toNumber() + 1)
-          //   );
-          //   const wrapUiAmount = await $.toUiAmount(
-          //     $.mMint.publicKey,
-          //     wrapPrincipal
-          //   );
-          //   // Calculate the expected extension principal from this amount
-          //   const expectedExtPrincipal =
-          //     variant === Variant.ScaledUi
-          //       ? await $.toPrincipal($.extMint.publicKey, wrapUiAmount)
-          //       : wrapUiAmount;
+            const wrapPrincipal = new BN(
+              randomInt(1, mintAmount.toNumber() + 1)
+            );
+            const wrapUiAmount = await $.toUiAmount(
+              $.mMint.publicKey,
+              wrapPrincipal
+            );
+            // Calculate the expected extension principal from this amount
+            const expectedExtPrincipal =
+              variant === Variant.ScaledUi
+                ? await $.toPrincipal($.extMint.publicKey, wrapUiAmount)
+                : wrapUiAmount;
 
-          //   // Send the instruction
-          //   await $.ext.methods
-          //     .wrap(wrapPrincipal)
-          //     .accountsPartial({
-          //       tokenAuthority: $.wrapAuthority.publicKey,
-          //       wrapAuthority: $.ext.programId,
-          //       fromMTokenAccount,
-          //       toExtTokenAccount,
-          //       extTokenProgram: $.extTokenProgram,
-          //     })
-          //     .signers([$.wrapAuthority])
-          //     .rpc();
+            // Send the instruction
+            await $.ext.methods
+              .wrap(wrapPrincipal)
+              .accountsPartial({
+                tokenAuthority: $.wrapAuthority.publicKey,
+                wrapAuthority: $.ext.programId,
+                fromMTokenAccount,
+                toExtTokenAccount,
+                extTokenProgram: $.extTokenProgram,
+              })
+              .signers([$.wrapAuthority])
+              .rpc();
 
-          //   // Confirm updated balances
-          //   await $.expectTokenBalance(
-          //     fromMTokenAccount,
-          //     fromMTokenAccountBalance.sub(wrapPrincipal)
-          //   );
-          //   await $.expectTokenBalance(
-          //     vaultMTokenAccount,
-          //     vaultMTokenAccountBalance.add(wrapPrincipal)
-          //   );
-          //   await $.expectTokenBalance(
-          //     toExtTokenAccount,
-          //     toExtTokenAccountBalance.add(expectedExtPrincipal)
-          //   );
-          //   if (variant === Variant.ScaledUi) {
-          //     await $.expectTokenUiBalance(
-          //       toExtTokenAccount,
-          //       toExtTokenAccountUiBalance!.add(wrapUiAmount),
-          //       Comparison.LessThanOrEqual,
-          //       new BN(2)
-          //     );
-          //   }
-          // });
+            // Confirm updated balances
+            await $.expectTokenBalance(
+              fromMTokenAccount,
+              fromMTokenAccountBalance.sub(wrapPrincipal)
+            );
+            await $.expectTokenBalance(
+              vaultMTokenAccount,
+              vaultMTokenAccountBalance.add(wrapPrincipal)
+            );
+            await $.expectTokenBalance(
+              toExtTokenAccount,
+              toExtTokenAccountBalance.add(expectedExtPrincipal),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
+            );
+            if (variant === Variant.ScaledUi) {
+              await $.expectTokenUiBalance(
+                toExtTokenAccount,
+                toExtTokenAccountUiBalance!.add(wrapUiAmount),
+                Comparison.LessThanOrEqual,
+                new BN(2)
+              );
+            }
+          });
 
-          // // given a wrap authority is not provided
-          // // given the token authority is on the wrap authorities list
-          // // given the from token account enough M tokens
-          // // given the token authority is the owner of the from token account
-          // // round-trip (wrap / unwrap)
-          // test("Wrap / unwrap roundtrip - success", async () => {
-          //   // Cache the starting balance of M
-          //   const startingBalance = await $.getTokenBalance(fromMTokenAccount);
+          // given a wrap authority is not provided
+          // given the token authority is on the wrap authorities list
+          // given the from token account enough M tokens
+          // given the token authority is the owner of the from token account
+          // round-trip (wrap / unwrap)
+          test("Wrap / unwrap roundtrip - success", async () => {
+            // Cache the starting balance of M
+            const startingBalance = await $.getTokenBalance(fromMTokenAccount);
 
-          //   // Wrap some tokens
-          //   const wrapPrincipal = new BN(
-          //     randomInt(1, startingBalance.toNumber() + 1)
-          //   );
-          //   await $.wrap($.wrapAuthority, wrapPrincipal);
+            // Wrap some tokens
+            const wrapPrincipal = new BN(
+              randomInt(1, startingBalance.toNumber() + 1)
+            );
+            const wrapUiAmount = await $.toUiAmount(
+              $.mMint.publicKey,
+              wrapPrincipal
+            );
+            await $.wrap($.wrapAuthority, wrapPrincipal);
 
-          //   // Unwrap the same amount
-          //   await $.unwrap($.wrapAuthority, wrapPrincipal);
+            const extPrincipal =
+              variant === Variant.ScaledUi
+                ? await $.toPrincipal($.extMint.publicKey, wrapUiAmount)
+                : wrapUiAmount;
 
-          //   // Confirm the final balance is the same as the starting balance
-          //   $.expectTokenBalance(
-          //     fromMTokenAccount,
-          //     startingBalance,
-          //     Comparison.LessThanOrEqual,
-          //     new BN(2)
-          //   );
-          // });
+            // Unwrap the same amount
+            await $.unwrap($.wrapAuthority, extPrincipal);
+
+            // Confirm the final balance is the same as the starting balance
+            $.expectTokenBalance(
+              fromMTokenAccount,
+              startingBalance,
+              Comparison.LessThanOrEqual,
+              new BN(2)
+            );
+          });
 
           // given a wrap authority is provided
           // given the wrap authority is not in the wrap authorities list
@@ -2556,204 +2638,221 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             );
           });
 
-          // // given a wrap authority is provided
-          // // given the wrap authority is in the wrap authorities list
-          // // given the from token account has enough M tokens
-          // // given the token authority is not the owner of the from M token account, but is delegated
-          // // it transfers the amount of M tokens from the user's M token account to the M vault token account
-          // // it mints the amount of ext tokens to the user's ext token account
-          // test("Wrap with delegated authority - wrap authority - success", async () => {
-          //   const wrapPrincipal = new BN(
-          //     randomInt(1, mintAmount.toNumber() + 1)
-          //   );
-          //   const wrapUiAmount = await $.toUiAmount(
-          //     $.mMint.publicKey,
-          //     wrapPrincipal
-          //   );
-          //   // Calculate the expected extension principal from this amount
-          //   const expectedExtPrincipal =
-          //     variant === Variant.ScaledUi
-          //       ? await $.toPrincipal($.extMint.publicKey, wrapUiAmount)
-          //       : wrapUiAmount;
+          // given a wrap authority is provided
+          // given the wrap authority is in the wrap authorities list
+          // given the from token account has enough M tokens
+          // given the token authority is not the owner of the from M token account, but is delegated
+          // it transfers the amount of M tokens from the user's M token account to the M vault token account
+          // it mints the amount of ext tokens to the user's ext token account
+          test("Wrap with delegated authority - wrap authority - success", async () => {
+            const wrapPrincipal = new BN(
+              randomInt(1, mintAmount.toNumber() + 1)
+            );
+            const wrapUiAmount = await $.toUiAmount(
+              $.mMint.publicKey,
+              wrapPrincipal
+            );
+            // Calculate the expected extension principal from this amount
+            const expectedExtPrincipal =
+              variant === Variant.ScaledUi
+                ? await $.toPrincipal($.extMint.publicKey, wrapUiAmount)
+                : wrapUiAmount;
 
-          //   // Approve (delegate) the wrap authority to spend the non-wrap authority's M tokens
-          //   const { sourceATA: fromMTokenAccount } = await $.approve(
-          //     $.nonWrapAuthority,
-          //     $.nonAdmin.publicKey,
-          //     $.mMint.publicKey,
-          //     wrapPrincipal
-          //   );
+            // Approve (delegate) the wrap authority to spend the non-wrap authority's M tokens
+            const { sourceATA: fromMTokenAccount } = await $.approve(
+              $.nonWrapAuthority,
+              $.nonAdmin.publicKey,
+              $.mMint.publicKey,
+              wrapPrincipal
+            );
 
-          //   // Setup the instruction
-          //   const toExtTokenAccount = await $.getATA(
-          //     $.extMint.publicKey,
-          //     $.nonWrapAuthority.publicKey
-          //   );
+            // Setup the instruction
+            const toExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.nonWrapAuthority.publicKey,
+              $.useToken2022ForExt
+            );
 
-          //   // Cache initial balances
-          //   const fromMTokenAccountBalance = await $.getTokenBalance(
-          //     fromMTokenAccount
-          //   );
-          //   const vaultMTokenAccountBalance = await $.getTokenBalance(
-          //     vaultMTokenAccount
-          //   );
-          //   const toExtTokenAccountBalance = await $.getTokenBalance(
-          //     toExtTokenAccount
-          //   );
-          //   let toExtTokenAccountUiBalance;
-          //   if (variant === Variant.ScaledUi) {
-          //     toExtTokenAccountUiBalance = await $.getTokenUiBalance(
-          //       toExtTokenAccount
-          //     );
-          //   }
+            // Cache initial balances
+            const fromMTokenAccountBalance = await $.getTokenBalance(
+              fromMTokenAccount
+            );
+            const vaultMTokenAccountBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+            const toExtTokenAccountBalance = await $.getTokenBalance(
+              toExtTokenAccount,
+              $.useToken2022ForExt
+            );
+            let toExtTokenAccountUiBalance;
+            if (variant === Variant.ScaledUi) {
+              toExtTokenAccountUiBalance = await $.getTokenUiBalance(
+                toExtTokenAccount
+              );
+            }
 
-          //   // Send the instruction
-          //   await $.ext.methods
-          //     .wrap(wrapPrincipal)
-          //     .accounts({
-          //       tokenAuthority: $.nonAdmin.publicKey,
-          //       wrapAuthority: $.wrapAuthority.publicKey,
-          //       fromMTokenAccount,
-          //       toExtTokenAccount,
-          //       extTokenProgram: $.extTokenProgram,
-          //     })
-          //     .signers([$.nonAdmin, $.wrapAuthority])
-          //     .rpc();
+            // Send the instruction
+            await $.ext.methods
+              .wrap(wrapPrincipal)
+              .accounts({
+                tokenAuthority: $.nonAdmin.publicKey,
+                wrapAuthority: $.wrapAuthority.publicKey,
+                fromMTokenAccount,
+                toExtTokenAccount,
+                extTokenProgram: $.extTokenProgram,
+              })
+              .signers([$.nonAdmin, $.wrapAuthority])
+              .rpc();
 
-          //   // Confirm updated balances
-          //   await $.expectTokenBalance(
-          //     fromMTokenAccount,
-          //     fromMTokenAccountBalance.sub(wrapPrincipal)
-          //   );
-          //   await $.expectTokenBalance(
-          //     vaultMTokenAccount,
-          //     vaultMTokenAccountBalance.add(wrapPrincipal)
-          //   );
-          //   await $.expectTokenBalance(
-          //     toExtTokenAccount,
-          //     toExtTokenAccountBalance.add(expectedExtPrincipal)
-          //   );
-          //   if (variant === Variant.ScaledUi) {
-          //     await $.expectTokenUiBalance(
-          //       toExtTokenAccount,
-          //       toExtTokenAccountUiBalance!.add(wrapUiAmount),
-          //       Comparison.LessThanOrEqual,
-          //       new BN(2)
-          //     );
-          //   }
-          // });
+            // Confirm updated balances
+            await $.expectTokenBalance(
+              fromMTokenAccount,
+              fromMTokenAccountBalance.sub(wrapPrincipal)
+            );
+            await $.expectTokenBalance(
+              vaultMTokenAccount,
+              vaultMTokenAccountBalance.add(wrapPrincipal)
+            );
+            await $.expectTokenBalance(
+              toExtTokenAccount,
+              toExtTokenAccountBalance.add(expectedExtPrincipal),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
+            );
+            if (variant === Variant.ScaledUi) {
+              await $.expectTokenUiBalance(
+                toExtTokenAccount,
+                toExtTokenAccountUiBalance!.add(wrapUiAmount),
+                Comparison.LessThanOrEqual,
+                new BN(2)
+              );
+            }
+          });
 
-          // // given a wrap authority is provided
-          // // given the wrap authority is in the wrap authorities list
-          // // given the from token account has enough M tokens
-          // // given the token authority is the owner of the from M token account
-          // // it transfers the amount of M tokens from the user's M token account to the M vault token account
-          // // it mints the amount of ext tokens to the user's ext token account
-          // test("Wrap to differenct account - wrap authority - success", async () => {
-          //   fromMTokenAccount = await $.getATA(
-          //     $.mMint.publicKey,
-          //     $.nonWrapAuthority.publicKey
-          //   );
+          // given a wrap authority is provided
+          // given the wrap authority is in the wrap authorities list
+          // given the from token account has enough M tokens
+          // given the token authority is the owner of the from M token account
+          // it transfers the amount of M tokens from the user's M token account to the M vault token account
+          // it mints the amount of ext tokens to the user's ext token account
+          test("Wrap to differenct account - wrap authority - success", async () => {
+            fromMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.nonWrapAuthority.publicKey
+            );
 
-          //   toExtTokenAccount = await $.getATA(
-          //     $.extMint.publicKey,
-          //     $.nonAdmin.publicKey
-          //   );
+            toExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.nonAdmin.publicKey,
+              $.useToken2022ForExt
+            );
 
-          //   // Cache initial balances
-          //   const fromMTokenAccountBalance = await $.getTokenBalance(
-          //     fromMTokenAccount
-          //   );
-          //   const vaultMTokenAccountBalance = await $.getTokenBalance(
-          //     vaultMTokenAccount
-          //   );
-          //   const toExtTokenAccountBalance = await $.getTokenBalance(
-          //     toExtTokenAccount
-          //   );
-          //   let toExtTokenAccountUiBalance;
-          //   if (variant === Variant.ScaledUi) {
-          //     toExtTokenAccountUiBalance = await $.getTokenUiBalance(
-          //       toExtTokenAccount
-          //     );
-          //   }
+            // Cache initial balances
+            const fromMTokenAccountBalance = await $.getTokenBalance(
+              fromMTokenAccount
+            );
+            const vaultMTokenAccountBalance = await $.getTokenBalance(
+              vaultMTokenAccount
+            );
+            const toExtTokenAccountBalance = await $.getTokenBalance(
+              toExtTokenAccount,
+              $.useToken2022ForExt
+            );
+            let toExtTokenAccountUiBalance;
+            if (variant === Variant.ScaledUi) {
+              toExtTokenAccountUiBalance = await $.getTokenUiBalance(
+                toExtTokenAccount
+              );
+            }
 
-          //   const wrapPrincipal = new BN(
-          //     randomInt(1, mintAmount.toNumber() + 1)
-          //   );
-          //   const wrapUiAmount = await $.toUiAmount(
-          //     $.mMint.publicKey,
-          //     wrapPrincipal
-          //   );
-          //   // Calculate the expected extension principal from this amount
-          //   const expectedExtPrincipal =
-          //     variant === Variant.ScaledUi
-          //       ? await $.toPrincipal($.extMint.publicKey, wrapUiAmount)
-          //       : wrapUiAmount;
+            const wrapPrincipal = new BN(
+              randomInt(1, mintAmount.toNumber() + 1)
+            );
+            const wrapUiAmount = await $.toUiAmount(
+              $.mMint.publicKey,
+              wrapPrincipal
+            );
+            // Calculate the expected extension principal from this amount
+            const expectedExtPrincipal =
+              variant === Variant.ScaledUi
+                ? await $.toPrincipal($.extMint.publicKey, wrapUiAmount)
+                : wrapUiAmount;
 
-          //   // Send the instruction
-          //   await $.ext.methods
-          //     .wrap(wrapPrincipal)
-          //     .accountsPartial({
-          //       tokenAuthority: $.nonWrapAuthority.publicKey,
-          //       wrapAuthority: $.wrapAuthority.publicKey,
-          //       fromMTokenAccount,
-          //       toExtTokenAccount,
-          //       extTokenProgram: $.extTokenProgram,
-          //     })
-          //     .signers([$.nonWrapAuthority, $.wrapAuthority])
-          //     .rpc();
+            // Send the instruction
+            await $.ext.methods
+              .wrap(wrapPrincipal)
+              .accountsPartial({
+                tokenAuthority: $.nonWrapAuthority.publicKey,
+                wrapAuthority: $.wrapAuthority.publicKey,
+                fromMTokenAccount,
+                toExtTokenAccount,
+                extTokenProgram: $.extTokenProgram,
+              })
+              .signers([$.nonWrapAuthority, $.wrapAuthority])
+              .rpc();
 
-          //   // Confirm updated balances
-          //   await $.expectTokenBalance(
-          //     fromMTokenAccount,
-          //     fromMTokenAccountBalance.sub(wrapPrincipal)
-          //   );
-          //   await $.expectTokenBalance(
-          //     vaultMTokenAccount,
-          //     vaultMTokenAccountBalance.add(wrapPrincipal)
-          //   );
-          //   await $.expectTokenBalance(
-          //     toExtTokenAccount,
-          //     toExtTokenAccountBalance.add(expectedExtPrincipal)
-          //   );
-          //   if (variant === Variant.ScaledUi) {
-          //     await $.expectTokenUiBalance(
-          //       toExtTokenAccount,
-          //       toExtTokenAccountUiBalance!.add(wrapUiAmount),
-          //       Comparison.LessThanOrEqual,
-          //       new BN(2)
-          //     );
-          //   }
-          // });
+            // Confirm updated balances
+            await $.expectTokenBalance(
+              fromMTokenAccount,
+              fromMTokenAccountBalance.sub(wrapPrincipal)
+            );
+            await $.expectTokenBalance(
+              vaultMTokenAccount,
+              vaultMTokenAccountBalance.add(wrapPrincipal)
+            );
+            await $.expectTokenBalance(
+              toExtTokenAccount,
+              toExtTokenAccountBalance.add(expectedExtPrincipal),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
+            );
+            if (variant === Variant.ScaledUi) {
+              await $.expectTokenUiBalance(
+                toExtTokenAccount,
+                toExtTokenAccountUiBalance!.add(wrapUiAmount),
+                Comparison.LessThanOrEqual,
+                new BN(2)
+              );
+            }
+          });
 
-          // // given a wrap authority is provided
-          // // given the wrap authority is in the wrap authorities list
-          // // given the from token account has enough M tokens
-          // // given the token authority is the owner of the from M token account
-          // // round-trip (wrap / unwrap)
-          // test("Wrap / unwrap roundtrip - wrap authority - success", async () => {
-          //   // Cache the starting balance of M
-          //   const startingBalance = await $.getTokenUiBalance(
-          //     fromMTokenAccount
-          //   );
+          // given a wrap authority is provided
+          // given the wrap authority is in the wrap authorities list
+          // given the from token account has enough M tokens
+          // given the token authority is the owner of the from M token account
+          // round-trip (wrap / unwrap)
+          test("Wrap / unwrap roundtrip - wrap authority - success", async () => {
+            // Cache the starting balance of M
+            const startingBalance = await $.getTokenBalance(fromMTokenAccount);
 
-          //   // Wrap some tokens
-          //   const wrapAmount = new BN(
-          //     randomInt(1, startingBalance.toNumber() + 1)
-          //   );
-          //   await $.wrap($.nonWrapAuthority, wrapAmount, $.wrapAuthority);
+            // Wrap some tokens
+            const wrapPrincipal = new BN(
+              randomInt(1, startingBalance.toNumber() + 1)
+            );
+            const wrapUiAmount = await $.toUiAmount(
+              $.mMint.publicKey,
+              wrapPrincipal
+            );
+            await $.wrap($.nonWrapAuthority, wrapPrincipal, $.wrapAuthority);
 
-          //   // Unwrap the same amount
-          //   await $.unwrap($.nonWrapAuthority, wrapAmount, $.wrapAuthority);
+            const extPrincipal =
+              variant === Variant.ScaledUi
+                ? await $.toPrincipal($.extMint.publicKey, wrapUiAmount)
+                : wrapUiAmount;
 
-          //   // Confirm the final balance is the same as the starting balance
-          //   $.expectTokenUiBalance(
-          //     fromMTokenAccount,
-          //     startingBalance,
-          //     Comparison.LessThanOrEqual,
-          //     new BN(2)
-          //   );
-          // });
+            // Unwrap the same amount
+            await $.unwrap($.nonWrapAuthority, extPrincipal, $.wrapAuthority);
+
+            // Confirm the final balance is the same as the starting balance
+            $.expectTokenBalance(
+              fromMTokenAccount,
+              startingBalance,
+              Comparison.LessThanOrEqual,
+              new BN(2)
+            );
+          });
         });
 
         describe("index different from start (sync required)", () => {
@@ -2811,7 +2910,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 vaultMTokenAccount
               );
               const toExtTokenAccountBalance = await $.getTokenBalance(
-                toExtTokenAccount
+                toExtTokenAccount,
+                $.useToken2022ForExt
               );
               let toExtTokenAccountUiBalance;
               if (variant === Variant.ScaledUi) {
@@ -2857,7 +2957,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               );
               await $.expectTokenBalance(
                 toExtTokenAccount,
-                toExtTokenAccountBalance.add(expectedExtPrincipal)
+                toExtTokenAccountBalance.add(expectedExtPrincipal),
+                Comparison.Equal,
+                undefined,
+                $.useToken2022ForExt
               );
               if (variant === Variant.ScaledUi) {
                 await $.expectTokenUiBalance(
@@ -2891,7 +2994,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 vaultMTokenAccount
               );
               const toExtTokenAccountBalance = await $.getTokenBalance(
-                toExtTokenAccount
+                toExtTokenAccount,
+                $.useToken2022ForExt
               );
               let toExtTokenAccountUiBalance;
               if (variant === Variant.ScaledUi) {
@@ -2937,7 +3041,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               );
               await $.expectTokenBalance(
                 toExtTokenAccount,
-                toExtTokenAccountBalance.add(expectedExtPrincipal)
+                toExtTokenAccountBalance.add(expectedExtPrincipal),
+                Comparison.Equal,
+                undefined,
+                $.useToken2022ForExt
               );
               if (variant === Variant.ScaledUi) {
                 await $.expectTokenUiBalance(
@@ -2972,7 +3079,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 vaultMTokenAccount
               );
               const toExtTokenAccountBalance = await $.getTokenBalance(
-                toExtTokenAccount
+                toExtTokenAccount,
+                $.useToken2022ForExt
               );
               let toExtTokenAccountUiBalance;
               if (variant === Variant.ScaledUi) {
@@ -3018,7 +3126,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               );
               await $.expectTokenBalance(
                 toExtTokenAccount,
-                toExtTokenAccountBalance.add(expectedExtPrincipal)
+                toExtTokenAccountBalance.add(expectedExtPrincipal),
+                Comparison.Equal,
+                undefined,
+                $.useToken2022ForExt
               );
               if (variant === Variant.ScaledUi) {
                 await $.expectTokenUiBalance(
@@ -3062,7 +3173,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 vaultMTokenAccount
               );
               const toExtTokenAccountBalance = await $.getTokenBalance(
-                toExtTokenAccount
+                toExtTokenAccount,
+                $.useToken2022ForExt
               );
               let toExtTokenAccountUiBalance;
               if (variant === Variant.ScaledUi) {
@@ -3113,7 +3225,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               );
               await $.expectTokenBalance(
                 toExtTokenAccount,
-                toExtTokenAccountBalance.add(expectedExtPrincipal)
+                toExtTokenAccountBalance.add(expectedExtPrincipal),
+                Comparison.Equal,
+                undefined,
+                $.useToken2022ForExt
               );
               if (variant === Variant.ScaledUi) {
                 await $.expectTokenUiBalance(
@@ -3155,7 +3270,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 vaultMTokenAccount
               );
               const toExtTokenAccountBalance = await $.getTokenBalance(
-                toExtTokenAccount
+                toExtTokenAccount,
+                $.useToken2022ForExt
               );
               let toExtTokenAccountUiBalance;
               if (variant === Variant.ScaledUi) {
@@ -3206,7 +3322,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               );
               await $.expectTokenBalance(
                 toExtTokenAccount,
-                toExtTokenAccountBalance.add(expectedExtPrincipal)
+                toExtTokenAccountBalance.add(expectedExtPrincipal),
+                Comparison.Equal,
+                undefined,
+                $.useToken2022ForExt
               );
               if (variant === Variant.ScaledUi) {
                 await $.expectTokenUiBalance(
@@ -3248,7 +3367,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 vaultMTokenAccount
               );
               const toExtTokenAccountBalance = await $.getTokenBalance(
-                toExtTokenAccount
+                toExtTokenAccount,
+                $.useToken2022ForExt
               );
               let toExtTokenAccountUiBalance;
               if (variant === Variant.ScaledUi) {
@@ -3299,7 +3419,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               );
               await $.expectTokenBalance(
                 toExtTokenAccount,
-                toExtTokenAccountBalance.add(expectedExtPrincipal)
+                toExtTokenAccountBalance.add(expectedExtPrincipal),
+                Comparison.Equal,
+                undefined,
+                $.useToken2022ForExt
               );
               if (variant === Variant.ScaledUi) {
                 await $.expectTokenUiBalance(
@@ -3328,7 +3451,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
         beforeEach(async () => {
           fromExtTokenAccount = await $.getATA(
             $.extMint.publicKey,
-            $.wrapAuthority.publicKey
+            $.wrapAuthority.publicKey,
+            $.useToken2022ForExt
           );
           toMTokenAccount = await $.getATA(
             $.mMint.publicKey,
@@ -3420,12 +3544,18 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // it reverts with an InvalidAccount error
           test("Ext mint account does not match global account - reverts", async () => {
             const wrongMint = Keypair.generate();
-            await $.createMint(wrongMint, $.wrapAuthority.publicKey, true, 6);
+            await $.createMint(
+              wrongMint,
+              $.wrapAuthority.publicKey,
+              $.useToken2022ForExt,
+              6
+            );
 
             // Update the ext token accounts
             fromExtTokenAccount = await $.getATA(
               wrongMint.publicKey,
-              $.wrapAuthority.publicKey
+              $.wrapAuthority.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to send the transaction
@@ -3453,7 +3583,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for another user
             fromExtTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              $.nonWrapAuthority.publicKey
+              $.nonWrapAuthority.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to send the transaction
@@ -3475,7 +3606,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
           // given the M vault token account is not the M vault PDA's ATA
           // it reverts with a ConstraintAssociated error
-          test("M Vault Token account is the the M Vault PDA's ATA (other token account) - reverts", async () => {
+          test("M Vault Token account is not the M Vault PDA's ATA (other token account) - reverts", async () => {
             // Create a token account for the M vault that is not the ATA
             const mVault = $.getMVault();
             const { tokenAccount: vaultMTokenAccount } =
@@ -3552,7 +3683,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("Token authority is not in the wrap authorities list - reverts", async () => {
             fromExtTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              $.nonWrapAuthority.publicKey
+              $.nonWrapAuthority.publicKey,
+              $.useToken2022ForExt
             );
             toMTokenAccount = await $.getATA(
               $.mMint.publicKey,
@@ -3583,7 +3715,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("Not enough ext tokens, unwraps user's total balance - reverts", async () => {
             // Get the balance of the from ext token account
             const fromExtTokenAccountBalance = await $.getTokenBalance(
-              fromExtTokenAccount
+              fromExtTokenAccount,
+              $.useToken2022ForExt
             );
 
             // Create a random amount to unwrap that is greater than the balance
@@ -3659,7 +3792,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Cache initial balances
             const fromExtTokenAccountBalance = await $.getTokenBalance(
-              fromExtTokenAccount
+              fromExtTokenAccount,
+              $.useToken2022ForExt
             );
             let fromExtTokenAccountUiBalance;
             if (variant === Variant.ScaledUi) {
@@ -3690,7 +3824,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Confirm updated balances
             await $.expectTokenBalance(
               fromExtTokenAccount,
-              fromExtTokenAccountBalance.sub(unwrapPrincipal)
+              fromExtTokenAccountBalance.sub(unwrapPrincipal),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
             if (variant === Variant.ScaledUi) {
               await $.expectTokenUiBalance(
@@ -3722,7 +3859,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("Unwrap to wrap authority account - success", async () => {
             // Cache initial balances
             const fromExtTokenAccountBalance = await $.getTokenBalance(
-              fromExtTokenAccount
+              fromExtTokenAccount,
+              $.useToken2022ForExt
             );
             let fromExtTokenAccountBalanceUi;
             if (variant === Variant.ScaledUi) {
@@ -3777,7 +3915,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             );
             await $.expectTokenBalance(
               fromExtTokenAccount,
-              fromExtTokenAccountBalance.sub(unwrapPrincipal)
+              fromExtTokenAccountBalance.sub(unwrapPrincipal),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
             if (variant === Variant.ScaledUi) {
               await $.expectTokenUiBalance(
@@ -3802,7 +3943,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Cache initial balances
             const fromExtTokenAccountBalance = await $.getTokenBalance(
-              fromExtTokenAccount
+              fromExtTokenAccount,
+              $.useToken2022ForExt
             );
             let fromExtTokenAccountBalanceUi;
             if (variant === Variant.ScaledUi) {
@@ -3857,7 +3999,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             );
             await $.expectTokenBalance(
               fromExtTokenAccount,
-              fromExtTokenAccountBalance.sub(unwrapPrincipal)
+              fromExtTokenAccountBalance.sub(unwrapPrincipal),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
             if (variant === Variant.ScaledUi) {
               await $.expectTokenUiBalance(
@@ -3875,7 +4020,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("Wrap authority does not sign - reverts", async () => {
             fromExtTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              $.nonWrapAuthority.publicKey
+              $.nonWrapAuthority.publicKey,
+              $.useToken2022ForExt
             );
             toMTokenAccount = await $.getATA(
               $.mMint.publicKey,
@@ -3905,7 +4051,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("Wrap authority not on wrap authorities list - reverts", async () => {
             fromExtTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              $.nonWrapAuthority.publicKey
+              $.nonWrapAuthority.publicKey,
+              $.useToken2022ForExt
             );
             toMTokenAccount = await $.getATA(
               $.mMint.publicKey,
@@ -3937,7 +4084,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("Not enough ext tokens, unwraps user's total balance - wrap authority - reverts", async () => {
             fromExtTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              $.nonWrapAuthority.publicKey
+              $.nonWrapAuthority.publicKey,
+              $.useToken2022ForExt
             );
             toMTokenAccount = await $.getATA(
               $.mMint.publicKey,
@@ -3950,7 +4098,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Get the balance of the from ext token account
             const fromExtTokenAccountBalance = await $.getTokenBalance(
-              fromExtTokenAccount
+              fromExtTokenAccount,
+              $.useToken2022ForExt
             );
 
             const unwrapPrincipal = new BN(
@@ -3999,7 +4148,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Cache initial balances
             const fromExtTokenAccountBalance = await $.getTokenBalance(
-              fromExtTokenAccount
+              fromExtTokenAccount,
+              $.useToken2022ForExt
             );
             let fromExtTokenAccountBalanceUi;
             if (variant === Variant.ScaledUi) {
@@ -4054,7 +4204,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             );
             await $.expectTokenBalance(
               fromExtTokenAccount,
-              fromExtTokenAccountBalance.sub(unwrapPrincipal)
+              fromExtTokenAccountBalance.sub(unwrapPrincipal),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
             if (variant === Variant.ScaledUi) {
               await $.expectTokenUiBalance(
@@ -4075,7 +4228,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("Unwrap with owner authority - wrap authority - success", async () => {
             fromExtTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              $.nonWrapAuthority.publicKey
+              $.nonWrapAuthority.publicKey,
+              $.useToken2022ForExt
             );
             toMTokenAccount = await $.getATA(
               $.mMint.publicKey,
@@ -4088,7 +4242,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Cache initial balances
             const fromExtTokenAccountBalance = await $.getTokenBalance(
-              fromExtTokenAccount
+              fromExtTokenAccount,
+              $.useToken2022ForExt
             );
             let fromExtTokenAccountBalanceUi;
             if (variant === Variant.ScaledUi) {
@@ -4143,7 +4298,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             );
             await $.expectTokenBalance(
               fromExtTokenAccount,
-              fromExtTokenAccountBalance.sub(unwrapPrincipal)
+              fromExtTokenAccountBalance.sub(unwrapPrincipal),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
             if (variant === Variant.ScaledUi) {
               await $.expectTokenUiBalance(
@@ -4194,7 +4352,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Cache initial balances
             const fromExtTokenAccountBalance = await $.getTokenBalance(
-              fromExtTokenAccount
+              fromExtTokenAccount,
+              $.useToken2022ForExt
             );
             let fromExtTokenAccountBalanceUi;
             if (variant === Variant.ScaledUi) {
@@ -4255,7 +4414,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             );
             await $.expectTokenBalance(
               fromExtTokenAccount,
-              fromExtTokenAccountBalance.sub(unwrapPrincipal)
+              fromExtTokenAccountBalance.sub(unwrapPrincipal),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
             if (variant === Variant.ScaledUi) {
               await $.expectTokenUiBalance(
@@ -4290,7 +4452,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Cache initial balances
             const fromExtTokenAccountBalance = await $.getTokenBalance(
-              fromExtTokenAccount
+              fromExtTokenAccount,
+              $.useToken2022ForExt
             );
             let fromExtTokenAccountBalanceUi;
             if (variant === Variant.ScaledUi) {
@@ -4351,7 +4514,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             );
             await $.expectTokenBalance(
               fromExtTokenAccount,
-              fromExtTokenAccountBalance.sub(unwrapPrincipal)
+              fromExtTokenAccountBalance.sub(unwrapPrincipal),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
             if (variant === Variant.ScaledUi) {
               await $.expectTokenUiBalance(
@@ -4385,7 +4551,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Cache initial balances
             const fromExtTokenAccountBalance = await $.getTokenBalance(
-              fromExtTokenAccount
+              fromExtTokenAccount,
+              $.useToken2022ForExt
             );
             let fromExtTokenAccountBalanceUi;
             if (variant === Variant.ScaledUi) {
@@ -4446,7 +4613,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             );
             await $.expectTokenBalance(
               fromExtTokenAccount,
-              fromExtTokenAccountBalance.sub(unwrapPrincipal)
+              fromExtTokenAccountBalance.sub(unwrapPrincipal),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
             if (variant === Variant.ScaledUi) {
               await $.expectTokenUiBalance(
@@ -4516,7 +4686,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("Ext mint account does not match global account - reverts", async () => {
             // Create a new mint
             const newMint = Keypair.generate();
-            await $.createMint(newMint, $.nonAdmin.publicKey, true, 6);
+            await $.createMint(
+              newMint,
+              $.nonAdmin.publicKey,
+              $.useToken2022ForExt,
+              6
+            );
 
             // Attempt to send the transaction
             // Expect an invalid account error
@@ -4525,7 +4700,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 .sync()
                 .accountsPartial({
                   extMint: newMint.publicKey,
-                  extTokenProgram: TOKEN_2022_PROGRAM_ID,
+                  extTokenProgram: $.extTokenProgram,
                 })
                 .signers([])
                 .rpc(),
@@ -4813,9 +4988,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("Earn authority does not sign the transaction - reverts", async () => {
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
-            const balance = await $.getTokenBalance(earnerOneATA);
+            const balance = await $.getTokenBalance(
+              earnerOneATA,
+              $.useToken2022ForExt
+            );
 
             // Attempt to send the transaction
             // Expect a NotAuthorized error
@@ -4831,7 +5010,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   userTokenAccount: earnerOneATA,
                   earnManagerTokenAccount: await $.getATA(
                     $.extMint.publicKey,
-                    earnManagerOne.publicKey
+                    earnManagerOne.publicKey,
+                    $.useToken2022ForExt
                   ),
                   extTokenProgram: $.extTokenProgram,
                 })
@@ -4849,9 +5029,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
-            const balance = await $.getTokenBalance(earnerOneATA);
+            const balance = await $.getTokenBalance(
+              earnerOneATA,
+              $.useToken2022ForExt
+            );
 
             // Attempt to send the transaction
             // Expect revert
@@ -4867,7 +5051,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   userTokenAccount: earnerOneATA,
                   earnManagerTokenAccount: await $.getATA(
                     $.extMint.publicKey,
-                    earnManagerOne.publicKey
+                    earnManagerOne.publicKey,
+                    $.useToken2022ForExt
                   ),
                   extMint: wrongMint,
                   extTokenProgram: $.extTokenProgram,
@@ -4885,9 +5070,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
-            const balance = await $.getTokenBalance(earnerOneATA);
+            const balance = await $.getTokenBalance(
+              earnerOneATA,
+              $.useToken2022ForExt
+            );
 
             // Attempt send the transaction
             // Expect revert
@@ -4903,7 +5092,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   userTokenAccount: earnerOneATA,
                   earnManagerTokenAccount: await $.getATA(
                     $.extMint.publicKey,
-                    earnManagerOne.publicKey
+                    earnManagerOne.publicKey,
+                    $.useToken2022ForExt
                   ),
                   extTokenProgram: $.extTokenProgram,
                 })
@@ -4922,9 +5112,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
-            const balance = await $.getTokenBalance(earnerOneATA);
+            const balance = await $.getTokenBalance(
+              earnerOneATA,
+              $.useToken2022ForExt
+            );
 
             // Attempt to send the transaction
             // Expect revert with a ConstraintAssociated error
@@ -4940,7 +5134,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   userTokenAccount: earnerOneATA,
                   earnManagerTokenAccount: await $.getATA(
                     $.extMint.publicKey,
-                    earnManagerOne.publicKey
+                    earnManagerOne.publicKey,
+                    $.useToken2022ForExt
                   ),
                   vaultMTokenAccount: invalidMVaultTokenAccount,
                   extTokenProgram: $.extTokenProgram,
@@ -4958,14 +5153,19 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             const { tokenAccount: invalidEarnManagerTokenAccount } =
               await $.createTokenAccount(
                 $.extMint.publicKey,
-                earnManagerOne.publicKey
+                earnManagerOne.publicKey,
+                $.useToken2022ForExt
               );
 
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
-            const balance = await $.getTokenBalance(earnerOneATA);
+            const balance = await $.getTokenBalance(
+              earnerOneATA,
+              $.useToken2022ForExt
+            );
 
             // Attempt to send the transaction
             // Expect revert with an InvalidAccount error
@@ -4996,14 +5196,19 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             const { tokenAccount: invalidUserTokenAccount } =
               await $.createTokenAccount(
                 $.extMint.publicKey,
-                earnerOne.publicKey
+                earnerOne.publicKey,
+                $.useToken2022ForExt
               );
 
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
-            const balance = await $.getTokenBalance(earnerOneATA);
+            const balance = await $.getTokenBalance(
+              earnerOneATA,
+              $.useToken2022ForExt
+            );
 
             // Attempt to send the transaction
             // Expect revert with an InvalidAccount error
@@ -5019,7 +5224,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   userTokenAccount: invalidUserTokenAccount,
                   earnManagerTokenAccount: await $.getATA(
                     $.extMint.publicKey,
-                    earnManagerOne.publicKey
+                    earnManagerOne.publicKey,
+                    $.useToken2022ForExt
                   ),
                   extTokenProgram: $.extTokenProgram,
                 })
@@ -5035,7 +5241,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("Earner has no recipient account, token account matches - success", async () => {
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(earnerOneATA);
 
@@ -5046,7 +5253,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             });
 
             // Get the initial balance for the earner ata
-            const initialBalance = await $.getTokenBalance(earnerOneATA);
+            const initialBalance = await $.getTokenBalance(
+              earnerOneATA,
+              $.useToken2022ForExt
+            );
 
             // Calculate the expected new balance
             // Note: earn manager fee is 0, so it all goes to the earner
@@ -5066,7 +5276,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 userTokenAccount: earnerOneATA,
                 earnManagerTokenAccount: await $.getATA(
                   $.extMint.publicKey,
-                  earnManagerOne.publicKey
+                  earnManagerOne.publicKey,
+                  $.useToken2022ForExt
                 ),
                 extTokenProgram: $.extTokenProgram,
               })
@@ -5074,7 +5285,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .rpc();
 
             // Check the new balance matches the expected balance
-            await $.expectTokenBalance(earnerOneATA, expectedBalance);
+            await $.expectTokenBalance(
+              earnerOneATA,
+              expectedBalance,
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
+            );
 
             // Check the earner account is updated
             await $.expectEarnerState(earnerAccount, {
@@ -5088,11 +5305,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             const yieldRecipient = new Keypair();
             const yieldRecipientATA = await $.getATA(
               $.extMint.publicKey,
-              yieldRecipient.publicKey
+              yieldRecipient.publicKey,
+              $.useToken2022ForExt
             );
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(earnerOneATA);
             await $.setRecipient(earnerOne, earnerAccount, yieldRecipientATA);
@@ -5101,7 +5320,9 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Expect revert with an InvalidAccount error
             await $.expectAnchorError(
               $.ext.methods
-                .claimFor(await $.getTokenBalance(earnerOneATA))
+                .claimFor(
+                  await $.getTokenBalance(earnerOneATA, $.useToken2022ForExt)
+                )
                 .accountsPartial({
                   earnAuthority: $.earnAuthority.publicKey,
                   earnerAccount,
@@ -5111,7 +5332,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   userTokenAccount: earnerOneATA,
                   earnManagerTokenAccount: await $.getATA(
                     $.extMint.publicKey,
-                    earnManagerOne.publicKey
+                    earnManagerOne.publicKey,
+                    $.useToken2022ForExt
                   ),
                   extTokenProgram: $.extTokenProgram,
                 })
@@ -5126,11 +5348,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             const yieldRecipient = new Keypair();
             const yieldRecipientATA = await $.getATA(
               $.extMint.publicKey,
-              yieldRecipient.publicKey
+              yieldRecipient.publicKey,
+              $.useToken2022ForExt
             );
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(earnerOneATA);
             await $.setRecipient(earnerOne, earnerAccount, yieldRecipientATA);
@@ -5142,7 +5366,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             });
 
             // Get the initial balance for the earner ata
-            const initialBalance = await $.getTokenBalance(earnerOneATA);
+            const initialBalance = await $.getTokenBalance(
+              earnerOneATA,
+              $.useToken2022ForExt
+            );
 
             // Calculate the expected yield
             // Note: earn manager fee is 0, so it all goes to the yield recipient
@@ -5163,7 +5390,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 userTokenAccount: yieldRecipientATA,
                 earnManagerTokenAccount: await $.getATA(
                   $.extMint.publicKey,
-                  earnManagerOne.publicKey
+                  earnManagerOne.publicKey,
+                  $.useToken2022ForExt
                 ),
                 extTokenProgram: $.extTokenProgram,
               })
@@ -5171,8 +5399,20 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .rpc();
 
             // Check the ata balance didn't change but the yield recipient received the yield
-            await $.expectTokenBalance(earnerOneATA, initialBalance);
-            await $.expectTokenBalance(yieldRecipientATA, expectedYield);
+            await $.expectTokenBalance(
+              earnerOneATA,
+              initialBalance,
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
+            );
+            await $.expectTokenBalance(
+              yieldRecipientATA,
+              expectedYield,
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
+            );
 
             // Check the earner account is updated
             await $.expectEarnerState(earnerAccount, {
@@ -5189,10 +5429,14 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // earnerTwo was added after the sync, so its lastClaimIndex should equal the current index
             const earnerTwoATA = await $.getATA(
               $.extMint.publicKey,
-              earnerTwo.publicKey
+              earnerTwo.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(earnerTwoATA);
-            const balance = await $.getTokenBalance(earnerTwoATA);
+            const balance = await $.getTokenBalance(
+              earnerTwoATA,
+              $.useToken2022ForExt
+            );
 
             // Verify that the earner's last claim index is equal to the current global index
             await $.expectEarnerState(earnerAccount, {
@@ -5214,7 +5458,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   userTokenAccount: earnerTwoATA,
                   earnManagerTokenAccount: await $.getATA(
                     $.extMint.publicKey,
-                    earnManagerOne.publicKey
+                    earnManagerOne.publicKey,
+                    $.useToken2022ForExt
                   ),
                   extTokenProgram: $.extTokenProgram,
                 })
@@ -5230,23 +5475,27 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("Earn manager fee is zero - success", async () => {
             const userTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(userTokenAccount);
 
             const earnManagerTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnManagerOne.publicKey
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Get the current balance of the earner's token account
             const earnerStartBalance = await $.getTokenBalance(
-              userTokenAccount
+              userTokenAccount,
+              $.useToken2022ForExt
             );
 
             // Get the current balance of the earn manager's token account
             const earnManagerStartBalance = await $.getTokenBalance(
-              earnManagerTokenAccount
+              earnManagerTokenAccount,
+              $.useToken2022ForExt
             );
 
             // Confirm the earn manager fee is zero
@@ -5288,11 +5537,17 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Verify the expected token balance changes
             await $.expectTokenBalance(
               userTokenAccount,
-              earnerStartBalance.add(expectedRewards)
+              earnerStartBalance.add(expectedRewards),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
             await $.expectTokenBalance(
               earnManagerTokenAccount,
-              earnManagerStartBalance
+              earnManagerStartBalance,
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
 
             // Verify the earner account was updated with the new claim index and claim timestamp
@@ -5313,23 +5568,27 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.removeEarnManager(earnManagerOne.publicKey);
             const userTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(userTokenAccount);
 
             const earnManagerTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnManagerOne.publicKey
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Get the current balance of the earner's token account
             const earnerStartBalance = await $.getTokenBalance(
-              userTokenAccount
+              userTokenAccount,
+              $.useToken2022ForExt
             );
 
             // Get the current balance of the earn manager's token account
             const earnManagerStartBalance = await $.getTokenBalance(
-              earnManagerTokenAccount
+              earnManagerTokenAccount,
+              $.useToken2022ForExt
             );
 
             // Confirm the earn manager fee is non-zero and inactive
@@ -5372,11 +5631,17 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Verify the expected token balance changes
             await $.expectTokenBalance(
               userTokenAccount,
-              earnerStartBalance.add(expectedRewards)
+              earnerStartBalance.add(expectedRewards),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
             await $.expectTokenBalance(
               earnManagerTokenAccount,
-              earnManagerStartBalance
+              earnManagerStartBalance,
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
 
             // Verify the earner account was updated with the new claim index and claim timestamp
@@ -5395,21 +5660,28 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.configureEarnManager(earnManagerOne, new BN(1000));
             const userTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(userTokenAccount);
 
             const earnManagerTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnManagerOne.publicKey
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Close the earn manager token account
-            await $.closeTokenAccount(earnManagerOne, earnManagerTokenAccount);
+            await $.closeTokenAccount(
+              earnManagerOne,
+              earnManagerTokenAccount,
+              $.useToken2022ForExt
+            );
 
             // Get the current balance of the earner's token account
             const earnerStartBalance = await $.getTokenBalance(
-              userTokenAccount
+              userTokenAccount,
+              $.useToken2022ForExt
             );
 
             // Confirm the earn manager fee is non-zero and inactive
@@ -5452,7 +5724,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Verify the expected token balance changes
             await $.expectTokenBalance(
               userTokenAccount,
-              earnerStartBalance.add(expectedRewards)
+              earnerStartBalance.add(expectedRewards),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
 
             // Verify the earner account was updated with the new claim index and claim timestamp
@@ -5471,23 +5746,27 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.configureEarnManager(earnManagerOne, new BN(1));
             const userTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(userTokenAccount);
 
             const earnManagerTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnManagerOne.publicKey
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Get the earner starting balance (this is used to compare later)
             const earnerStartBalance = await $.getTokenBalance(
-              userTokenAccount
+              userTokenAccount,
+              $.useToken2022ForExt
             );
 
             // Get the earn manager token account starting balance
             const earnManagerStartBalance = await $.getTokenBalance(
-              earnManagerTokenAccount
+              earnManagerTokenAccount,
+              $.useToken2022ForExt
             );
 
             // Confirm the earn manager fee is non-zero and active
@@ -5533,11 +5812,17 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Since fee rounds to zero, all rewards go to the earner
             await $.expectTokenBalance(
               userTokenAccount,
-              earnerStartBalance.add(expectedRewards)
+              earnerStartBalance.add(expectedRewards),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
             await $.expectTokenBalance(
               earnManagerTokenAccount,
-              earnManagerStartBalance
+              earnManagerStartBalance,
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
 
             // Verify the earner account was updated with the new claim index and claim timestamp
@@ -5558,23 +5843,27 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.configureEarnManager(earnManagerOne, feeBps);
             const userTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(userTokenAccount);
 
             const earnManagerTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnManagerOne.publicKey
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Get the current balance of the earner's token account
             const earnerStartBalance = await $.getTokenBalance(
-              userTokenAccount
+              userTokenAccount,
+              $.useToken2022ForExt
             );
 
             // Get the current balance of the earn manager's token account
             const earnManagerStartBalance = await $.getTokenBalance(
-              earnManagerTokenAccount
+              earnManagerTokenAccount,
+              $.useToken2022ForExt
             );
 
             // Confirm the earn manager fee is 1%
@@ -5594,7 +5883,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Send the transaction
             const snapshotBalance = await $.getTokenBalance(
-              await $.getATA($.extMint.publicKey, earnerOne.publicKey)
+              await $.getATA(
+                $.extMint.publicKey,
+                earnerOne.publicKey,
+                $.useToken2022ForExt
+              ),
+              $.useToken2022ForExt
             );
             await $.ext.methods
               .claimFor(snapshotBalance)
@@ -5626,11 +5920,17 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Verify the expected token balance changes
             await $.expectTokenBalance(
               userTokenAccount,
-              earnerStartBalance.add(earnerAmount)
+              earnerStartBalance.add(earnerAmount),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
             await $.expectTokenBalance(
               earnManagerTokenAccount,
-              earnManagerStartBalance.add(feeAmount)
+              earnManagerStartBalance.add(feeAmount),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
             );
 
             // Verify the earner account was updated with the new claim index and claim timestamp
@@ -5704,7 +6004,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earner two
             const earnerTwoATA = await $.getATA(
               $.extMint.publicKey,
-              earnerTwo.publicKey
+              earnerTwo.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to add earner without an initialized earn manager account
@@ -5728,7 +6029,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earner two
             const earnerTwoATA = await $.getATA(
               $.extMint.publicKey,
-              earnerTwo.publicKey
+              earnerTwo.publicKey,
+              $.useToken2022ForExt
             );
 
             // Remove the earn manager one's account (set it to inactive)
@@ -5756,7 +6058,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earner one
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to add earner with an already initialized earner account
@@ -5780,12 +6083,17 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("User token account is for the wrong token mint - reverts", async () => {
             // Create a new mint for the user token account
             const wrongMint = new Keypair();
-            await $.createMint(wrongMint, $.nonAdmin.publicKey);
+            await $.createMint(
+              wrongMint,
+              $.nonAdmin.publicKey,
+              $.useToken2022ForExt
+            );
 
             // Get the ATA for earner two on the wrong mint
             const earnerTwoATA = await $.getATA(
               wrongMint.publicKey,
-              earnerTwo.publicKey
+              earnerTwo.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to add earner with user token account for wrong token mint
@@ -5811,7 +6119,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for random user (not the same as the user)
             const randomATA = await $.getATA(
               $.extMint.publicKey,
-              $.nonAdmin.publicKey
+              $.nonAdmin.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to add earner with user token account for wrong token mint
@@ -5829,51 +6138,21 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           });
 
           test("Add earner (non ATA) - success", async () => {
-            const tokenAccountKeypair = Keypair.generate();
-            const tokenAccountLen = getAccountLen([
-              ExtensionType.ImmutableOwner,
-            ]);
-            const lamports =
-              await $.provider.connection.getMinimumBalanceForRentExemption(
-                tokenAccountLen
-              );
-
-            // Create token account with the immutable owner extension
-            const transaction = new Transaction().add(
-              SystemProgram.createAccount({
-                fromPubkey: earnManagerOne.publicKey,
-                newAccountPubkey: tokenAccountKeypair.publicKey,
-                space: tokenAccountLen,
-                lamports,
-                programId: TOKEN_2022_PROGRAM_ID,
-              }),
-              createInitializeImmutableOwnerInstruction(
-                tokenAccountKeypair.publicKey,
-                TOKEN_2022_PROGRAM_ID
-              ),
-              createInitializeAccountInstruction(
-                tokenAccountKeypair.publicKey,
-                $.extMint.publicKey,
-                earnerTwo.publicKey,
-                TOKEN_2022_PROGRAM_ID
-              )
+            const { tokenAccount } = await $.createTokenAccount(
+              $.extMint.publicKey,
+              earnerTwo.publicKey,
+              $.useToken2022ForExt,
+              true
             );
 
-            await $.provider.send!(transaction, [
-              earnManagerOne,
-              tokenAccountKeypair,
-            ]);
-
-            const earnerAccount = $.getEarnerAccount(
-              tokenAccountKeypair.publicKey
-            );
+            const earnerAccount = $.getEarnerAccount(tokenAccount);
 
             // Add earner two to the earn manager's list
             await $.ext.methods
               .addEarner(earnerTwo.publicKey)
               .accounts({
                 signer: earnManagerOne.publicKey,
-                userTokenAccount: tokenAccountKeypair.publicKey,
+                userTokenAccount: tokenAccount,
               })
               .signers([earnManagerOne])
               .rpc();
@@ -5884,7 +6163,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               lastClaimIndex: initialIndex,
               lastClaimTimestamp: $.currentTime(),
               user: earnerTwo.publicKey,
-              userTokenAccount: tokenAccountKeypair.publicKey,
+              userTokenAccount: tokenAccount,
             });
           });
 
@@ -5901,7 +6180,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earner two
             const earnerTwoATA = await $.getATA(
               $.extMint.publicKey,
-              earnerTwo.publicKey
+              earnerTwo.publicKey,
+              $.useToken2022ForExt
             );
 
             // Add earner one to the earn manager's list
@@ -5949,7 +6229,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earner one
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to remove earner without an initialized earn manager account
@@ -5973,7 +6254,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earner one
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Remove the earn manager account (set it to inactive)
@@ -6005,7 +6287,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earner one
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to remove earner with the wrong earn manager
@@ -6031,7 +6314,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earner one
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(earnerOneATA);
 
@@ -6077,7 +6361,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("earner account not initialized - reverts", async () => {
             const nonEarnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              nonEarnerOne.publicKey
+              nonEarnerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to transfer earner without an initialized account
@@ -6099,7 +6384,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("to_earn_manager account not initialized - reverts", async () => {
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to transfer earner to a non-initialized earn manager account
@@ -6121,7 +6407,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("from earn manager does not sign transaction - reverts", async () => {
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to transfer earner with a non-authorized signer
@@ -6147,7 +6434,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("from earn manager is not active - reverts", async () => {
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Remove the earn manager account (set it to inactive)
@@ -6173,7 +6461,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("to earn manager is not active - reverts", async () => {
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Remove the to earn manager account (set it to inactive)
@@ -6199,7 +6488,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("transfer_earner - success", async () => {
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(earnerOneATA);
 
@@ -6255,7 +6545,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earn manager one
             const earnManagerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnManagerOne.publicKey
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to configure earn manager with non-matching account
@@ -6283,7 +6574,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earn manager two
             const earnManagerTwoATA = await $.getATA(
               $.extMint.publicKey,
-              earnManagerTwo.publicKey
+              earnManagerTwo.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to configure earn manager that hasn't been initialized
@@ -6311,7 +6603,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earn manager one
             const earnManagerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnManagerOne.publicKey
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             const feeBps = new BN(randomInt(10001, 2 ** 48 - 1));
@@ -6342,12 +6635,17 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("Fee token account for wrong mint - reverts", async () => {
             // Create a new token mint
             const wrongMint = new Keypair();
-            await $.createMint(wrongMint, $.nonAdmin.publicKey);
+            await $.createMint(
+              wrongMint,
+              $.nonAdmin.publicKey,
+              $.useToken2022ForExt
+            );
 
             // Get the ATA for earn manager one with the wrong mint
             const wrongATA = await $.getATA(
               wrongMint.publicKey,
-              earnManagerOne.publicKey
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Attempt to configure earn manager with invalid fee token account
@@ -6376,7 +6674,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earn manager one
             const earnManagerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnManagerOne.publicKey
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             const earnManagerAccount = $.getEarnManagerAccount(
@@ -6418,7 +6717,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earn manager one
             const earnManagerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnManagerOne.publicKey
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             const earnManagerAccount = $.getEarnManagerAccount(
@@ -6462,14 +6762,16 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earn manager one
             const earnManagerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnManagerOne.publicKey
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Use the ATA for a different address to change the fee token account to
             // it's easier than creating a manual token account
             const newFeeTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              nonEarnManager.publicKey
+              nonEarnManager.publicKey,
+              $.useToken2022ForExt
             );
 
             const earnManagerAccount = $.getEarnManagerAccount(
@@ -6512,14 +6814,16 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earn manager one
             const earnManagerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnManagerOne.publicKey
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Use the ATA for a different address to change the fee token account to
             // it's easier than creating a manual token account
             const newFeeTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              nonEarnManager.publicKey
+              nonEarnManager.publicKey,
+              $.useToken2022ForExt
             );
 
             const earnManagerAccount = $.getEarnManagerAccount(
@@ -6590,7 +6894,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               $.extMint.publicKey,
               nonEarnManager.publicKey,
               true,
-              TOKEN_2022_PROGRAM_ID,
+              $.extTokenProgram,
               ASSOCIATED_TOKEN_PROGRAM_ID
             );
 
@@ -6623,7 +6927,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earner two
             const earnerTwoATA = await $.getATA(
               $.extMint.publicKey,
-              earnerTwo.publicKey
+              earnerTwo.publicKey,
+              $.useToken2022ForExt
             );
 
             // Get the earner account PDA
@@ -6657,7 +6962,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earner one
             const earnerOneATA = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
 
             // Get the earner account PDA
@@ -6688,7 +6994,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("Invalid earn manager account - reverts", async () => {
             const earnerTwoATA = await $.getATA(
               $.extMint.publicKey,
-              earnerTwo.publicKey
+              earnerTwo.publicKey,
+              $.useToken2022ForExt
             );
 
             // Get the earner account PDA
@@ -6723,7 +7030,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for earnerTwo
             const earnerTwoATA = await $.getATA(
               $.extMint.publicKey,
-              earnerTwo.publicKey
+              earnerTwo.publicKey,
+              $.useToken2022ForExt
             );
 
             // Get the earner and earn manager account PDAs
@@ -6793,11 +7101,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // This way we can tell when we set it back to None
           startRecipientAccount = await $.getATA(
             $.extMint.publicKey,
-            nonEarnerOne.publicKey
+            nonEarnerOne.publicKey,
+            $.useToken2022ForExt
           );
           const earnerATA = await $.getATA(
             $.extMint.publicKey,
-            earnerOne.publicKey
+            earnerOne.publicKey,
+            $.useToken2022ForExt
           );
           const earnerAccount = $.getEarnerAccount(earnerATA);
           await $.setRecipient(earnerOne, earnerAccount, startRecipientAccount);
@@ -6828,7 +7138,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the earner account
             const earnerTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(earnerTokenAccount);
 
@@ -6861,7 +7172,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the earner account
             const earnerTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(earnerTokenAccount);
 
@@ -6893,7 +7205,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the earner account
             const earnerTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(earnerTokenAccount);
 
@@ -6926,7 +7239,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the earner account
             const earnerTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(earnerTokenAccount);
 
@@ -6954,13 +7268,15 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for the recipient (use yieldRecipient as the recipient)
             const recipientATA = await $.getATA(
               $.extMint.publicKey,
-              yieldRecipient.publicKey
+              yieldRecipient.publicKey,
+              $.useToken2022ForExt
             );
 
             // Get the earner account
             const earnerTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(earnerTokenAccount);
 
@@ -6989,13 +7305,15 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Get the ATA for the recipient (using yieldRecipient as the recipient)
             const recipientATA = await $.getATA(
               $.extMint.publicKey,
-              yieldRecipient.publicKey
+              yieldRecipient.publicKey,
+              $.useToken2022ForExt
             );
 
             // Get the earner account
             const earnerTokenAccount = await $.getATA(
               $.extMint.publicKey,
-              earnerOne.publicKey
+              earnerOne.publicKey,
+              $.useToken2022ForExt
             );
             const earnerAccount = $.getEarnerAccount(earnerTokenAccount);
 
