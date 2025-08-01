@@ -1746,7 +1746,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
 
   public async setRecipient(
     signer: Keypair,
-    userTokenAccount: PublicKey,
+    earnerAccount: PublicKey,
     recipientTokenAccount?: PublicKey
   ) {
     if (this.variant !== Variant.Crank) {
@@ -1757,7 +1757,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUi> {
       .setRecipient()
       .accountsPartial({
         signer: signer.publicKey,
-        earnerAccount: this.getEarnerAccount(userTokenAccount),
+        earnerAccount,
         recipientTokenAccount: recipientTokenAccount || null,
       })
       .signers([signer])

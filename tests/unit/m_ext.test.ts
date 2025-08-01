@@ -13,6 +13,8 @@ import {
   ExtensionType,
   createInitializeAccountInstruction,
   createInitializeImmutableOwnerInstruction,
+  getAssociatedTokenAddressSync,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { randomInt } from "crypto";
 
@@ -4891,7 +4893,7 @@ for (const variant of VARIANTS) {
               earnerOne.publicKey
             );
             const earnerAccount = $.getEarnerAccount(earnerOneATA);
-            await $.setRecipient(earnerOne, earnerOneATA, yieldRecipientATA);
+            await $.setRecipient(earnerOne, earnerAccount, yieldRecipientATA);
 
             // Attempt to send the transaction
             // Expect revert with an InvalidAccount error
@@ -4929,7 +4931,7 @@ for (const variant of VARIANTS) {
               earnerOne.publicKey
             );
             const earnerAccount = $.getEarnerAccount(earnerOneATA);
-            await $.setRecipient(earnerOne, earnerOneATA, yieldRecipientATA);
+            await $.setRecipient(earnerOne, earnerAccount, yieldRecipientATA);
 
             // Check that the last claim index and the last claim timestamp are the initial values
             await $.expectEarnerState(earnerAccount, {
@@ -6348,6 +6350,467 @@ for (const variant of VARIANTS) {
               isActive: true,
               feeBps: newFee,
               feeTokenAccount: newFeeTokenAccount,
+            });
+          });
+        });
+
+        describe("remove_orphaned_earner unit tests", () => {
+          // test cases
+          // [X] given the earner account is not initialized
+          //   [X] it reverts with an account not initialized error
+          // [X] given the earn manager account is not initialized
+          //   [X] it reverts with an account not initialized error
+          // [X] given the earn manager account does not match the one on the earner account
+          //   [X] it reverts with a ConstraintSeeds error
+          // [X] given all the accounts are valid
+          //   [X] given the earner has an earn manager
+          //     [X] given the earn manager account is active
+          //       [X] it reverts with a Active error
+          //     [X] given the earn manager account is not active
+          //       [X] it closes the earner account and refunds the rent to the signer
+
+          beforeEach(async () => {
+            // Add another earn manager
+            await $.addEarnManager(earnManagerTwo.publicKey, new BN(0));
+
+            // Add an earner under the new earn manager
+            await $.addEarner(earnManagerTwo, earnerTwo.publicKey);
+
+            // Remove earn manager two so that earner two is orphaned
+            await $.removeEarnManager(earnManagerTwo.publicKey);
+          });
+
+          // given the earner account is not initialized
+          // it reverts with an account not initialized error
+          test("Earner account is not initialized - reverts", async () => {
+            // Calculate the ATA for non earner one, but don't create it
+            const nonInitATA = getAssociatedTokenAddressSync(
+              $.extMint.publicKey,
+              nonEarnManager.publicKey,
+              true,
+              TOKEN_2022_PROGRAM_ID,
+              ASSOCIATED_TOKEN_PROGRAM_ID
+            );
+
+            // Get the earner account PDA
+            const earnerAccount = $.getEarnerAccount(nonInitATA);
+
+            // Get the earn manager account PDA
+            const earnManagerAccount = $.getEarnManagerAccount(
+              earnManagerOne.publicKey
+            );
+
+            // Attempt to remove orphaned earner with uninitialized token account
+            await $.expectAnchorError(
+              $.ext.methods
+                .removeOrphanedEarner()
+                .accountsPartial({
+                  signer: $.nonAdmin.publicKey,
+                  earnerAccount: earnerAccount,
+                  earnManagerAccount: earnManagerAccount,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "AccountNotInitialized"
+            );
+          });
+
+          // given the earn manager account is not initialized
+          // it reverts with an account not initialized error
+          test("Earn manager account is not initialized - reverts", async () => {
+            // Get the ATA for earner two
+            const earnerTwoATA = await $.getATA(
+              $.extMint.publicKey,
+              earnerTwo.publicKey
+            );
+
+            // Get the earner account PDA
+            const earnerAccount = $.getEarnerAccount(earnerTwoATA);
+
+            // Get the earn manager account PDA for the non-earn manager
+            const earnManagerAccount = $.getEarnManagerAccount(
+              nonEarnManager.publicKey
+            );
+
+            // Attempt to remove orphaned earner with uninitialized earn manager account
+            await $.expectAnchorError(
+              $.ext.methods
+                .removeOrphanedEarner()
+                .accountsPartial({
+                  signer: $.nonAdmin.publicKey,
+                  earnerAccount: earnerAccount,
+                  earnManagerAccount: earnManagerAccount,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "AccountNotInitialized"
+            );
+          });
+
+          // given all the accounts are valid
+          // given the earner has an earn manager
+          // given the earn manager account is active
+          // it reverts with an Active error
+          test("Earn manager account is active - reverts", async () => {
+            // Get the ATA for earner one
+            const earnerOneATA = await $.getATA(
+              $.extMint.publicKey,
+              earnerOne.publicKey
+            );
+
+            // Get the earner account PDA
+            const earnerAccount = $.getEarnerAccount(earnerOneATA);
+
+            // Get the earn manager account PDA
+            const earnManagerAccount = $.getEarnManagerAccount(
+              earnManagerOne.publicKey
+            );
+
+            // Attempt to remove orphaned earner with an active earn manager
+            await $.expectAnchorError(
+              $.ext.methods
+                .removeOrphanedEarner()
+                .accountsPartial({
+                  signer: $.nonAdmin.publicKey,
+                  earnerAccount: earnerAccount,
+                  earnManagerAccount: earnManagerAccount,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "Active"
+            );
+          });
+
+          // given the earn manager account does not match the earner's earn manager
+          // it reverts with a ConstraintSeeds error
+          test("Invalid earn manager account - reverts", async () => {
+            const earnerTwoATA = await $.getATA(
+              $.extMint.publicKey,
+              earnerTwo.publicKey
+            );
+
+            // Get the earner account PDA
+            const earnerAccount = $.getEarnerAccount(earnerTwoATA);
+
+            // Get the wrong earn manager account PDA (earnManagerOne instead of earnManagerTwo)
+            const earnManagerAccount = $.getEarnManagerAccount(
+              earnManagerOne.publicKey
+            );
+
+            // Attempt to remove orphaned earner with the wrong earn manager account
+            // expect revert with ConstraintSeeds error
+            await $.expectAnchorError(
+              $.ext.methods
+                .removeOrphanedEarner()
+                .accountsPartial({
+                  signer: $.nonAdmin.publicKey,
+                  earnerAccount: earnerAccount,
+                  earnManagerAccount: earnManagerAccount,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "ConstraintSeeds"
+            );
+          });
+
+          // given all the accounts are valid
+          // given the earner has an earn manager
+          // given the earn manager account is not active
+          // it closes the earner account and refunds the rent to the signer
+          test("Remove orphaned earner - success", async () => {
+            // Get the ATA for earnerTwo
+            const earnerTwoATA = await $.getATA(
+              $.extMint.publicKey,
+              earnerTwo.publicKey
+            );
+
+            // Get the earner and earn manager account PDAs
+            const earnerAccount = $.getEarnerAccount(earnerTwoATA);
+            const earnManagerAccount = $.getEarnManagerAccount(
+              earnManagerTwo.publicKey
+            );
+
+            // Confirm that the account is active and has the correct earn manager
+            await $.expectEarnerState(earnerAccount, {
+              earnManager: earnManagerTwo.publicKey,
+            });
+
+            // Confirm that the earn manager account is not active
+            await $.expectEarnManagerState(earnManagerAccount, {
+              isActive: false,
+            });
+
+            // Remove the orphaned earner
+            await $.ext.methods
+              .removeOrphanedEarner()
+              .accountsPartial({
+                signer: $.nonAdmin.publicKey,
+                earnerAccount: earnerAccount,
+                earnManagerAccount: earnManagerAccount,
+              })
+              .signers([$.nonAdmin])
+              .rpc();
+
+            // Verify the earner account was closed
+            $.expectAccountEmpty(earnerAccount);
+          });
+        });
+      });
+
+      describe("earner instruction tests", () => {
+        let startRecipientAccount: PublicKey;
+        const earnManagerOne = new Keypair();
+        const earnerOne = new Keypair();
+        const yieldRecipient = new Keypair();
+        const nonEarnerOne = new Keypair();
+
+        beforeEach(async () => {
+          // Airdrop SOL to the earn managers and earners to pay for transactions
+          for (const account of [
+            earnManagerOne,
+            earnerOne,
+            yieldRecipient,
+            nonEarnerOne,
+          ]) {
+            $.svm.airdrop(account.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
+          }
+
+          // Initialize the program
+          await $.initializeExt(
+            [$.admin.publicKey, $.wrapAuthority.publicKey],
+            undefined
+          );
+
+          // Add an earn manager
+          await $.addEarnManager(earnManagerOne.publicKey, new BN(0));
+
+          // Add an earner under the earn manager
+          await $.addEarner(earnManagerOne, earnerOne.publicKey);
+
+          // Set the earners recipient token account initially to the non earner one ATA
+          // This way we can tell when we set it back to None
+          startRecipientAccount = await $.getATA(
+            $.extMint.publicKey,
+            nonEarnerOne.publicKey
+          );
+          const earnerATA = await $.getATA(
+            $.extMint.publicKey,
+            earnerOne.publicKey
+          );
+          const earnerAccount = $.getEarnerAccount(earnerATA);
+          await $.setRecipient(earnerOne, earnerAccount, startRecipientAccount);
+        });
+
+        describe("set_recipient unit tests", () => {
+          // test cases
+          // [X] given neither the earner or earn manager signs the transaction
+          //   [X] it reverts with a NotAuthorized error
+          // [X] given the recipient token account is None
+          //   [X] given the earner signs the transaction
+          //     [X] it updates the earner's recipient token account to None (defaults to user token account)
+          //   [X] given the earn manager signs the transaction
+          //     [X] it updates the earner's recipient token account to None (defaults to user token account)
+          // [X] given a recipient token account is provided
+          //   [X] given the recipient token account is for the wrong mint
+          //     [X] it reverts with a ConstraintTokenMint error
+          //   [X] given the recipient token account is valid
+          //     [X] given the earner signs the transaction
+          //       [X] it updates the earner's recipient token account to the provided value
+          //     [X] given the earn manager signs the transaction
+          //       [X] it updates the earner's recipient token account to the provided value
+
+          // given the new recipient token account is None
+          // given the earner signers the transaction
+          // it updates the recipient account to None
+          test("Earner signs, new recipient token account is None (default) - success", async () => {
+            // Get the earner account
+            const earnerTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnerOne.publicKey
+            );
+            const earnerAccount = $.getEarnerAccount(earnerTokenAccount);
+
+            // Check the starting value
+            await $.expectEarnerState(earnerAccount, {
+              recipientTokenAccount: startRecipientAccount,
+            });
+
+            // Send the instruction
+            await $.ext.methods
+              .setRecipient()
+              .accountsPartial({
+                signer: earnerOne.publicKey,
+                earnerAccount: earnerAccount,
+                recipientTokenAccount: null,
+              })
+              .signers([earnerOne])
+              .rpc();
+
+            // Check that the recipient token account was updated
+            await $.expectEarnerState(earnerAccount, {
+              recipientTokenAccount: undefined,
+            });
+          });
+
+          // given the new recipient token account is None
+          // given the earn manager signs the transaction
+          // it updates the recipient account to None
+          test("Earn manager signs, new recipient token account is None (default) - success", async () => {
+            // Get the earner account
+            const earnerTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnerOne.publicKey
+            );
+            const earnerAccount = $.getEarnerAccount(earnerTokenAccount);
+
+            // Check the starting value
+            await $.expectEarnerState(earnerAccount, {
+              recipientTokenAccount: startRecipientAccount,
+            });
+
+            // Send the instruction
+            await $.ext.methods
+              .setRecipient()
+              .accountsPartial({
+                signer: earnManagerOne.publicKey,
+                earnerAccount: earnerAccount,
+                recipientTokenAccount: null,
+              })
+              .signers([earnManagerOne])
+              .rpc();
+
+            // Check that the recipient token account was updated
+            await $.expectEarnerState(earnerAccount, {
+              recipientTokenAccount: undefined,
+            });
+          });
+
+          // given the transaction is not signed by the earner or the earn manager
+          // it reverts with a NotAuthorized error
+          test("Neither earner nor earn manager signs the transaction - reverts", async () => {
+            // Get the earner account
+            const earnerTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnerOne.publicKey
+            );
+            const earnerAccount = $.getEarnerAccount(earnerTokenAccount);
+
+            // Send the instruction
+            // Expect revert with a NotAuthorized error
+            await $.expectAnchorError(
+              $.ext.methods
+                .setRecipient()
+                .accountsPartial({
+                  signer: $.nonAdmin.publicKey,
+                  earnerAccount: earnerAccount,
+                  recipientTokenAccount: null,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given a recipient token account is provided
+          // given the recipient token account is for the wrong mint
+          // it reverts with a ConstraintTokenMint error
+          test("Recipient token account is for the wrong mint - reverts", async () => {
+            // Create an ATA for the wrong mint (M mint instead of EXT mint)
+            const wrongMintATA = await $.getATA(
+              $.mMint.publicKey,
+              earnerOne.publicKey
+            );
+
+            // Get the earner account
+            const earnerTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnerOne.publicKey
+            );
+            const earnerAccount = $.getEarnerAccount(earnerTokenAccount);
+
+            // Attempt to send the transaction
+            // Expect a ConstraintTokenMint error
+            await $.expectAnchorError(
+              $.ext.methods
+                .setRecipient()
+                .accountsPartial({
+                  signer: earnerOne.publicKey,
+                  earnerAccount: earnerAccount,
+                  recipientTokenAccount: wrongMintATA,
+                })
+                .signers([earnerOne])
+                .rpc(),
+              "ConstraintTokenMint"
+            );
+          });
+
+          // given a recipient token account is provided
+          // given the recipient token account is valid
+          // given the earner signs the transaction
+          // it updates the earner's recipient token account to the provided token account
+          test("Earner signs, new recipient token account provided - success", async () => {
+            // Get the ATA for the recipient (use yieldRecipient as the recipient)
+            const recipientATA = await $.getATA(
+              $.extMint.publicKey,
+              yieldRecipient.publicKey
+            );
+
+            // Get the earner account
+            const earnerTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnerOne.publicKey
+            );
+            const earnerAccount = $.getEarnerAccount(earnerTokenAccount);
+
+            // Send the instruction
+            await $.ext.methods
+              .setRecipient()
+              .accountsPartial({
+                signer: earnerOne.publicKey,
+                earnerAccount: earnerAccount,
+                recipientTokenAccount: recipientATA,
+              })
+              .signers([earnerOne])
+              .rpc();
+
+            // Check that the recipient token account was updated correctly
+            await $.expectEarnerState(earnerAccount, {
+              recipientTokenAccount: recipientATA,
+            });
+          });
+
+          // given a recipient token account is provided
+          // given the recipient token account is validr
+          // given the earn manager signs the transaction
+          // it updates the earner's recipient token account to the provided token account
+          test("Earn manager signs, new recipient token account provided - success", async () => {
+            // Get the ATA for the recipient (using yieldRecipient as the recipient)
+            const recipientATA = await $.getATA(
+              $.extMint.publicKey,
+              yieldRecipient.publicKey
+            );
+
+            // Get the earner account
+            const earnerTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              earnerOne.publicKey
+            );
+            const earnerAccount = $.getEarnerAccount(earnerTokenAccount);
+
+            // Send the instruction
+            await $.ext.methods
+              .setRecipient()
+              .accountsPartial({
+                signer: earnManagerOne.publicKey,
+                earnerAccount: earnerAccount,
+                recipientTokenAccount: recipientATA,
+              })
+              .signers([earnManagerOne])
+              .rpc();
+
+            // Check that the recipient token account was updated correctly
+            await $.expectEarnerState(earnerAccount, {
+              recipientTokenAccount: recipientATA,
             });
           });
         });
