@@ -19,7 +19,7 @@ impl SwapGlobal {
         4 + // length of whitelisted_unwrappers vector
         unwrappers * 32 + // each Pubkey is 32 bytes
         4 + // length of whitelisted_extensions vector
-        extensions * 64 // program_id + mint
+        extensions * 96 // program_id + mint + token_program
     }
 
     pub fn is_extension_whitelisted(&self, program_id: &Pubkey) -> bool {
@@ -33,4 +33,5 @@ impl SwapGlobal {
 pub struct WhitelistedExtension {
     pub program_id: Pubkey,
     pub mint: Pubkey,
+    pub token_program: Pubkey,
 }

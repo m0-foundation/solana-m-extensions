@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_spl::token_interface::Mint;
 use m_ext::state::EXT_GLOBAL_SEED;
 
 use crate::{
@@ -38,6 +39,9 @@ pub struct WhitelistExt<'info> {
     )]
     /// CHECK: PDA that is owned by the extension program
     pub ext_global: AccountInfo<'info>,
+
+    #[account(mut)]
+    pub ext_mint: InterfaceAccount<'info, Mint>,
 }
 
 impl WhitelistExt<'_> {
@@ -55,20 +59,26 @@ impl WhitelistExt<'_> {
             return err!(SwapError::InvalidExtension);
         }
 
+        // Check that the mint matches the extension global account
+        let data = self.ext_global.try_borrow_data()?;
+        let mint = Pubkey::new_from_array(data[32..64].try_into().unwrap());
+
+        if !self.ext_mint.key().eq(&mint) {
+            return err!(SwapError::InvalidExtension);
+        }
+
         Ok(())
     }
 
     #[access_control(ctx.accounts.validate())]
     pub fn handler(ctx: Context<Self>) -> Result<()> {
-        let data = ctx.accounts.ext_global.try_borrow_data()?;
-        let mint = Pubkey::new_from_array(data[32..64].try_into().unwrap());
-
         ctx.accounts
             .swap_global
             .whitelisted_extensions
             .push(WhitelistedExtension {
                 program_id: ctx.accounts.ext_program.key(),
-                mint,
+                mint: ctx.accounts.ext_mint.key(),
+                token_program: *ctx.accounts.ext_mint.to_account_info().owner,
             });
 
         Ok(())
