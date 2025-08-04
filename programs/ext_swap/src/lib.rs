@@ -53,6 +53,11 @@ pub mod ext_swap {
         RemoveWhitelistedUnwrapper::handler(ctx, authority)
     }
 
+    #[cfg(feature = "migrate")]
+    pub fn reset_whitelists(ctx: Context<ResetWhitelists>) -> Result<()> {
+        ResetWhitelists::handler(ctx)
+    }
+
     pub fn swap<'info>(
         ctx: Context<'_, '_, '_, 'info, Swap<'info>>,
         amount: u64,

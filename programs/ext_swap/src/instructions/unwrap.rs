@@ -104,8 +104,7 @@ impl<'info> Unwrap<'info> {
     fn validate(&self, ext_principal: u64) -> Result<()> {
         if !self
             .swap_global
-            .whitelisted_extensions
-            .contains(self.from_ext_program.key)
+            .is_extension_whitelisted(self.from_ext_program.key)
         {
             return err!(SwapError::InvalidExtension);
         }

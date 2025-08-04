@@ -103,8 +103,7 @@ impl<'info> Wrap<'info> {
     fn validate(&self, m_principal: u64) -> Result<()> {
         if !self
             .swap_global
-            .whitelisted_extensions
-            .contains(self.to_ext_program.key)
+            .is_extension_whitelisted(self.to_ext_program.key)
         {
             return err!(SwapError::InvalidExtension);
         }

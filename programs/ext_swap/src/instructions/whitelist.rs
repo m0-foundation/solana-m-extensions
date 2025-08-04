@@ -1,8 +1,9 @@
 use anchor_lang::prelude::*;
+use m_ext::state::EXT_GLOBAL_SEED;
 
 use crate::{
     errors::SwapError,
-    state::{SwapGlobal, GLOBAL_SEED},
+    state::{SwapGlobal, WhitelistedExtension, GLOBAL_SEED},
 };
 
 #[derive(Accounts)]
@@ -28,6 +29,15 @@ pub struct WhitelistExt<'info> {
 
     /// CHECK: This account is validated in the `validate` function
     pub ext_program: AccountInfo<'info>,
+
+    #[account(
+        mut,
+        seeds = [EXT_GLOBAL_SEED],
+        seeds::program = ext_program.key(),
+        bump,
+    )]
+    /// CHECK: PDA that is owned by the extension program
+    pub ext_global: AccountInfo<'info>,
 }
 
 impl WhitelistExt<'_> {
@@ -35,8 +45,7 @@ impl WhitelistExt<'_> {
         // Check if the extension program is already whitelisted
         if self
             .swap_global
-            .whitelisted_extensions
-            .contains(self.ext_program.key)
+            .is_extension_whitelisted(self.ext_program.key)
         {
             return err!(SwapError::AlreadyWhitelisted);
         }
@@ -51,10 +60,16 @@ impl WhitelistExt<'_> {
 
     #[access_control(ctx.accounts.validate())]
     pub fn handler(ctx: Context<Self>) -> Result<()> {
+        let data = ctx.accounts.ext_global.try_borrow_data()?;
+        let mint = Pubkey::new_from_array(data[32..64].try_into().unwrap());
+
         ctx.accounts
             .swap_global
             .whitelisted_extensions
-            .push(*ctx.accounts.ext_program.key);
+            .push(WhitelistedExtension {
+                program_id: ctx.accounts.ext_program.key(),
+                mint,
+            });
 
         Ok(())
     }
@@ -118,11 +133,7 @@ pub struct RemoveWhitelistedExt<'info> {
 
 impl RemoveWhitelistedExt<'_> {
     fn validate(&self, ext_program: &Pubkey) -> Result<()> {
-        if !self
-            .swap_global
-            .whitelisted_extensions
-            .contains(ext_program)
-        {
+        if !self.swap_global.is_extension_whitelisted(ext_program) {
             return err!(SwapError::InvalidExtension);
         }
 
@@ -134,7 +145,7 @@ impl RemoveWhitelistedExt<'_> {
         ctx.accounts
             .swap_global
             .whitelisted_extensions
-            .retain(|&x| !x.eq(&ext_program));
+            .retain(|ext| !ext.program_id.eq(&ext_program));
 
         Ok(())
     }
@@ -169,6 +180,45 @@ impl RemoveWhitelistedUnwrapper<'_> {
             .swap_global
             .whitelisted_unwrappers
             .retain(|&x| !x.eq(&authority));
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "migrate")]
+#[derive(Accounts)]
+pub struct ResetWhitelists<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [GLOBAL_SEED],
+        bump,
+    )]
+    /// CHECK: validating manually then resetting
+    pub swap_global: AccountInfo<'info>,
+}
+
+#[cfg(feature = "migrate")]
+impl ResetWhitelists<'_> {
+    fn validate(&self) -> Result<()> {
+        let data = self.swap_global.try_borrow_data()?;
+        let admin = Pubkey::new_from_array(data[1..33].try_into().unwrap());
+
+        if !admin.eq(self.admin.key) {
+            return err!(SwapError::NotAuthorized);
+        }
+
+        Ok(())
+    }
+
+    #[access_control(ctx.accounts.validate())]
+    pub fn handler(ctx: Context<Self>) -> Result<()> {
+        let mut data = ctx.accounts.swap_global.try_borrow_mut_data()?;
+
+        // zero out whitelist data
+        data[41..].fill(0);
 
         Ok(())
     }
