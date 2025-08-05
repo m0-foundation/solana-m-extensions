@@ -51,9 +51,8 @@ pub struct Unwrap<'info> {
     pub m_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
-        associated_token::mint = from_mint,
-        associated_token::authority = signer,
-        associated_token::token_program = from_token_program,
+        token::mint = from_mint,
+        token::token_program = from_token_program,
     )]
     pub from_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
 

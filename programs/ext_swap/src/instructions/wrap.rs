@@ -44,9 +44,8 @@ pub struct Wrap<'info> {
      */
     #[account(
         mut,
-        associated_token::mint = m_mint,
-        associated_token::authority = signer,
-        associated_token::token_program = m_token_program,
+        token::mint = m_mint,
+        token::token_program = m_token_program,
     )]
     pub m_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
