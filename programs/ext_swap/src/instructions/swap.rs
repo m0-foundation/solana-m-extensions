@@ -1,5 +1,4 @@
 use anchor_lang::prelude::*;
-use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use m_ext::cpi::accounts::{Unwrap, Wrap};
 use m_ext::state::{EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
@@ -11,7 +10,6 @@ use crate::{
 
 #[derive(Accounts)]
 pub struct Swap<'info> {
-    #[account(mut)]
     pub signer: Signer<'info>,
 
     // Required if the swap program is not whitelisted on the extension
@@ -143,7 +141,6 @@ pub struct Swap<'info> {
     /// CHECK: checked against whitelisted extensions
     #[account(constraint = to_ext_program.key() != from_ext_program.key())]
     pub to_ext_program: UncheckedAccount<'info>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
