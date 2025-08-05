@@ -36,12 +36,13 @@ import {
   getExtensionData,
   createApproveCheckedInstruction,
 } from "@solana/spl-token";
-import { MerkleTree, ProofElement } from "@m0-foundation/solana-m-sdk";
 import {
   ZERO_WORD,
   InitializeScaledUiAmountConfigInstructionData,
   ScaledUiAmountConfig,
   ScaledUiAmountConfigLayout,
+  MerkleTree,
+  ProofElement,
 } from "../test-utils";
 import { MExt as ScaledUIExt } from "../../target/types/scaled_ui";
 import { MExt as NoYieldExt } from "../../target/types/no_yield";
@@ -1000,7 +1001,7 @@ class ExtensionTestBase {
   async removeRegistrarEarner(
     earner: PublicKey,
     proofs: ProofElement[][],
-    neighbors: PublicKey[],
+    neighbors: number[][],
     earnerTokenAccount?: PublicKey
   ) {
     // Get the earner ATA
@@ -1009,10 +1010,7 @@ class ExtensionTestBase {
 
     // Send the instruction
     await this.earn.methods
-      .removeRegistrarEarner(
-        proofs,
-        neighbors.map((n) => [...n.toBytes()])
-      )
+      .removeRegistrarEarner(proofs, neighbors)
       .accountsPartial({
         signer: this.nonAdmin.publicKey,
         userTokenAccount: tokenAccount,
@@ -1035,7 +1033,8 @@ class ExtensionTestBase {
     const mScaledUiConfig = await this.getScaledUiAmountConfig(
       this.mMint.publicKey
     );
-    const currentIndex = new BN(mScaledUiConfig.newMultiplier * 1e12);
+
+    const currentIndex = new BN(Math.ceil(mScaledUiConfig.multiplier * 1e12));
 
     // Propagate the merkle root
     await this.propagateIndex(currentIndex, earnerMerkleTree.getRoot());
@@ -1135,7 +1134,7 @@ export class ExtensionTest<
 
   public async init(initialSupply: BN, initialIndex: BN) {
     // Call the base init function
-    this._init(initialSupply, initialIndex);
+    await this._init(initialSupply, initialIndex);
 
     // Create the Ext token mint
     switch (this.variant) {
@@ -1165,7 +1164,7 @@ export class ExtensionTest<
     await this.addMEarner(mVault);
   }
 
-  public async getExtTokenSupply(mint: PublicKey, use2022: boolean = true) {
+  public async getExtTokenSupply(mint: PublicKey, use2022: boolean) {
     const mintInfo = await getMint(
       this.provider.connection,
       mint,
