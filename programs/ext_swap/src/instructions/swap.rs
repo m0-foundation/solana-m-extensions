@@ -65,14 +65,13 @@ pub struct Swap<'info> {
     )]
     pub from_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
-        init_if_needed,
-        payer = signer,
-        associated_token::mint = to_mint,
-        associated_token::authority = signer,
-        associated_token::token_program = to_token_program,
+        mut,
+        token::mint = to_mint,
+        token::token_program = to_token_program,
     )]
     pub to_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
+        mut,
         associated_token::mint = m_mint,
         associated_token::authority = swap_global,
         associated_token::token_program = m_token_program,
