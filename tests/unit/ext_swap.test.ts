@@ -101,7 +101,7 @@ describe("extension swap tests (new)", () => {
       expect(swapGlobal.whitelistedUnwrappers).toHaveLength(0);
 
       // Expire the blockhash before re-adding
-      await $.svm.expireBlockhash();
+      $.svm.expireBlockhash();
 
       // Re-add for later tests
       await $.whitelistUnwrapper($.swapperKeypair.publicKey);
@@ -122,7 +122,7 @@ describe("extension swap tests (new)", () => {
       expect(swapGlobal.whitelistedExtensions).toHaveLength(2);
 
       // Expire the blockhash before re-adding
-      await $.svm.expireBlockhash();
+      $.svm.expireBlockhash();
 
       // Re-add for later tests
       await $.whitelistExtension($.getExtensionProgramId("extA"));
@@ -148,9 +148,11 @@ describe("extension swap tests (new)", () => {
           signer: $.swapperKeypair.publicKey,
           wrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
           mMint: $.mMint.publicKey,
+          mTokenAccount: accounts.ataM,
           mTokenProgram: TOKEN_2022_PROGRAM_ID,
           toExtProgram: $.getExtensionProgramId("extA"),
           toMint: $.getExtensionMint("mintA"),
+          toTokenAccount: accounts.ataA,
           toTokenProgram: TOKEN_2022_PROGRAM_ID,
         })
         .signers([$.swapperKeypair])
@@ -170,8 +172,10 @@ describe("extension swap tests (new)", () => {
           signer: $.swapperKeypair.publicKey, // must be a whitelisted unwrapper on the swap program
           unwrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority on CPI
           mMint: $.mMint.publicKey,
+          mTokenAccount: accounts.ataM,
           mTokenProgram: TOKEN_2022_PROGRAM_ID,
           fromExtProgram: $.getExtensionProgramId("extA"),
+          fromTokenAccount: accounts.ataA,
           fromMint: $.getExtensionMint("mintA"),
           fromTokenProgram: TOKEN_2022_PROGRAM_ID,
         })
@@ -224,6 +228,8 @@ describe("extension swap tests (new)", () => {
         .signers([$.admin])
         .rpc();
 
+      const accounts = await getTokenAccounts();
+
       // Try to wrap to non-whitelisted extension
       await expect(
         $.swapProgram.methods
@@ -232,9 +238,11 @@ describe("extension swap tests (new)", () => {
             signer: $.swapperKeypair.publicKey,
             wrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
             mMint: $.mMint.publicKey,
+            mTokenAccount: accounts.ataM,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             toExtProgram: $.getExtensionProgramId("extC"),
             toMint: $.getExtensionMint("mintC"),
+            toTokenAccount: accounts.ataC,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
           .signers([$.swapperKeypair])
@@ -442,7 +450,7 @@ describe("extension swap tests (new)", () => {
   describe("remove extension", () => {
     it("should fail to swap to extension that was removed", async () => {
       // Remove extension A from whitelist first
-      await $.svm.expireBlockhash();
+      $.svm.expireBlockhash();
 
       await $.swapProgram.methods
         .removeWhitelistedExtension($.getExtensionProgramId("extA"))
@@ -494,6 +502,8 @@ describe("extension swap tests (new)", () => {
         .signers([$.admin])
         .rpc();
 
+      const accounts = await getTokenAccounts();
+
       // Try to wrap (should fail)
       await $.expectAnchorError(
         $.swapProgram.methods
@@ -502,9 +512,11 @@ describe("extension swap tests (new)", () => {
             signer: $.swapperKeypair.publicKey,
             wrapAuthority: $.swapProgram.programId,
             mMint: $.mMint.publicKey,
+            mTokenAccount: accounts.ataM,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             toExtProgram: $.getExtensionProgramId("extA"),
             toMint: $.getExtensionMint("mintA"),
+            toTokenAccount: accounts.ataA,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
           .signers([$.swapperKeypair])
@@ -514,6 +526,8 @@ describe("extension swap tests (new)", () => {
     });
 
     it("should fail to wrap with invalid external ext wrap authority co-signer", async () => {
+      const accounts = await getTokenAccounts();
+
       await $.expectAnchorError(
         $.swapProgram.methods
           .wrap(new BN(10))
@@ -521,9 +535,11 @@ describe("extension swap tests (new)", () => {
             signer: $.swapperKeypair.publicKey,
             wrapAuthority: $.nonAdmin.publicKey,
             mMint: $.mMint.publicKey,
+            mTokenAccount: accounts.ataM,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             toExtProgram: $.getExtensionProgramId("extA"),
             toMint: $.getExtensionMint("mintA"),
+            toTokenAccount: accounts.ataA,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
           .signers([$.swapperKeypair, $.nonAdmin])
@@ -536,15 +552,19 @@ describe("extension swap tests (new)", () => {
       // Add admin as wrap authority
       await $.addWrapAuthorityToExtension("extA", $.nonAdmin.publicKey);
 
+      const accounts = await getTokenAccounts();
+
       await $.swapProgram.methods
         .wrap(new BN(100))
         .accounts({
           signer: $.swapperKeypair.publicKey,
           wrapAuthority: $.nonAdmin.publicKey,
           mMint: $.mMint.publicKey,
+          mTokenAccount: accounts.ataM,
           mTokenProgram: TOKEN_2022_PROGRAM_ID,
           toExtProgram: $.getExtensionProgramId("extA"),
           toMint: $.getExtensionMint("mintA"),
+          toTokenAccount: accounts.ataA,
           toTokenProgram: TOKEN_2022_PROGRAM_ID,
         })
         .signers([$.swapperKeypair, $.nonAdmin])
@@ -577,14 +597,14 @@ describe("extension swap tests (new)", () => {
       ).rejects.toThrow();
     });
 
-    it("should swap with correct wrap authority", async () => {
+    it("should swap with valid wrap authority", async () => {
       const accounts = await getTokenAccounts();
 
       await $.swapProgram.methods
         .swap(new BN(15), 0)
         .accounts({
           signer: $.swapperKeypair.publicKey,
-          unwrapAuthority: $.swapperKeypair.publicKey,
+          unwrapAuthority: $.admin.publicKey,
           wrapAuthority: $.admin.publicKey,
           mMint: $.mMint.publicKey,
           mTokenProgram: TOKEN_2022_PROGRAM_ID,
@@ -606,21 +626,26 @@ describe("extension swap tests (new)", () => {
     const cosigner = new Keypair();
 
     it("should fail when co-signer is not authorized", async () => {
-      await expect(
+      const accounts = await getTokenAccounts();
+
+      await $.expectAnchorError(
         $.swapProgram.methods
           .unwrap(new BN(100))
           .accounts({
             signer: $.swapperKeypair.publicKey,
             unwrapAuthority: cosigner.publicKey,
             fromExtProgram: $.getExtensionProgramId("extA"),
+            fromTokenAccount: accounts.ataA,
             fromMint: $.getExtensionMint("mintA"),
             mMint: $.mMint.publicKey,
+            mTokenAccount: accounts.ataM,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
           .signers([$.swapperKeypair, cosigner])
-          .rpc()
-      ).rejects.toThrow();
+          .rpc(),
+        "UnauthorizedUnwrapper"
+      );
     });
 
     it("should whitelist co-signer", async () => {
@@ -644,14 +669,18 @@ describe("extension swap tests (new)", () => {
     });
 
     it("should succeed when co-signer is authorized", async () => {
+      const accounts = await getTokenAccounts();
+
       await $.swapProgram.methods
         .unwrap(new BN(1_000))
         .accounts({
           signer: $.swapperKeypair.publicKey,
           unwrapAuthority: cosigner.publicKey,
           fromExtProgram: $.getExtensionProgramId("extA"),
+          fromTokenAccount: accounts.ataA,
           fromMint: $.getExtensionMint("mintA"),
           mMint: $.mMint.publicKey,
+          mTokenAccount: accounts.ataM,
           mTokenProgram: TOKEN_2022_PROGRAM_ID,
           fromTokenProgram: TOKEN_2022_PROGRAM_ID,
         })
@@ -671,6 +700,8 @@ describe("extension swap tests (new)", () => {
         .signers([$.admin])
         .rpc();
 
+      const accounts = await getTokenAccounts();
+
       // Try to wrap with removed authority (should fail)
       await expect(
         $.swapProgram.methods
@@ -679,14 +710,19 @@ describe("extension swap tests (new)", () => {
             signer: $.swapperKeypair.publicKey,
             wrapAuthority: $.admin.publicKey,
             mMint: $.mMint.publicKey,
+            mTokenAccount: accounts.ataM,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             toExtProgram: $.getExtensionProgramId("extA"),
             toMint: $.getExtensionMint("mintA"),
+            toTokenAccount: accounts.ataA,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
           .signers([$.swapperKeypair, $.admin])
           .rpc()
       ).rejects.toThrow();
+
+      // Expire the blockhash
+      $.svm.expireBlockhash();
 
       // Add admin back as wrap authority
       await $.addWrapAuthorityToExtension("extA", $.admin.publicKey);
@@ -698,9 +734,11 @@ describe("extension swap tests (new)", () => {
           signer: $.swapperKeypair.publicKey,
           wrapAuthority: $.admin.publicKey,
           mMint: $.mMint.publicKey,
+          mTokenAccount: accounts.ataM,
           mTokenProgram: TOKEN_2022_PROGRAM_ID,
           toExtProgram: $.getExtensionProgramId("extA"),
           toMint: $.getExtensionMint("mintA"),
+          toTokenAccount: accounts.ataA,
           toTokenProgram: TOKEN_2022_PROGRAM_ID,
         })
         .signers([$.swapperKeypair, $.admin])
