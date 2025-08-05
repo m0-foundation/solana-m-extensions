@@ -64,7 +64,7 @@ impl AcceptAdmin<'_> {
     pub fn handler(ctx: Context<Self>) -> Result<()> {
         // Transfer admin ownership
         ctx.accounts.global_account.admin = ctx.accounts.pending_admin.key();
-        
+
         // Clear the pending admin
         ctx.accounts.global_account.pending_admin = None;
 

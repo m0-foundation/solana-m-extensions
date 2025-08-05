@@ -6,16 +6,16 @@ pub const EXT_GLOBAL_SEED: &[u8] = b"global";
 
 #[account]
 pub struct ExtGlobalV2 {
-    pub admin: Pubkey,                     // can update config values
-    pub pending_admin: Option<Pubkey>,     // pending admin for two-step admin transfer
+    pub admin: Pubkey,                 // can update config values
+    pub pending_admin: Option<Pubkey>, // pending admin for two-step admin transfer
     pub ext_mint: Pubkey,
     pub m_mint: Pubkey,
     pub m_earn_global_account: Pubkey,
     pub bump: u8,
     pub m_vault_bump: u8,
     pub ext_mint_authority_bump: u8,
-    pub yield_config: YieldConfig,         // variant specific state
-    pub wrap_authorities: Vec<Pubkey>,     // accounts permissioned to wrap/unwrap the ext_mint
+    pub yield_config: YieldConfig,     // variant specific state
+    pub wrap_authorities: Vec<Pubkey>, // accounts permissioned to wrap/unwrap the ext_mint
 }
 
 impl ExtGlobalV2 {

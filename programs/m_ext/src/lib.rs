@@ -191,9 +191,7 @@ pub mod m_ext {
 
     // Open instructions (Crank variant only)
     #[cfg(feature = "crank")]
-    pub fn remove_orphaned_earner(
-        ctx: Context<RemoveOrphanedEarner>,
-    ) -> Result<()> {
+    pub fn remove_orphaned_earner(ctx: Context<RemoveOrphanedEarner>) -> Result<()> {
         RemoveOrphanedEarner::handler(ctx)
     }
 }
