@@ -61,7 +61,7 @@ impl WhitelistExt<'_> {
 
         // Check that the mint matches the extension global account
         let data = self.ext_global.try_borrow_data()?;
-        let mint = Pubkey::new_from_array(data[32..64].try_into().unwrap());
+        let mint = Pubkey::new_from_array(data[40..72].try_into().unwrap());
 
         if !self.ext_mint.key().eq(&mint) {
             return err!(SwapError::InvalidExtension);
