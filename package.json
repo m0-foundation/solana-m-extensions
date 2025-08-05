@@ -11,16 +11,17 @@
     "make:dev": "source .env.dev && make"
   },
   "dependencies": {
-    "@coral-xyz/anchor": "^0.31.1",
-    "@m0-foundation/solana-m-sdk": "https://gitpkg.vercel.app/m0-foundation/solana-m/sdk?0991eb829a52f6ba5969fd47d3100ef6871f0a6d&scripts.postinstall=yarn%20build",
-    "@solana-developers/helpers": "^2.7.0",
-    "@solana/buffer-layout": "^4.0.1",
-    "@solana/buffer-layout-utils": "^0.2.0",
-    "@solana/spl-token": "^0.4.13",
-    "@solana/web3.js": "^1.98",
+    "@coral-xyz/anchor": "0.31.1",
+    "@m0-foundation/solana-m-sdk": "0.2.5",
+    "@solana-developers/helpers": "2.8.1",
+    "@solana/buffer-layout": "4.0.1",
+    "@solana/buffer-layout-utils": "0.2.0",
+    "@solana/spl-token": "0.4.13",
+    "@solana/web3.js": "1.98.2",
     "anchor-litesvm": "0.1.2",
-    "bn.js": "^5.2.1",
-    "litesvm": "0.2.0"
+    "bn.js": "5.2.2",
+    "litesvm": "0.2.0",
+    "sha3": "^2.1.4"
   },
   "devDependencies": {
     "@coral-xyz/anchor": "catalog:",
@@ -29,17 +30,16 @@
     "@solana/spl-token-metadata": "~0.1.6",
     "@solana/web3.js": "catalog:",
     "@types/bn.js": "catalog:",
-    "@types/jest": "~29.0.3",
-    "@types/node": "^22.15.32",
+    "@types/jest": "29.0.3",
+    "@types/node": "22.15.32",
     "anchor-litesvm": "~0.1.1",
     "bn.js": "catalog:",
     "fastestsmallesttextencoderdecoder": "catalog:",
-    "jest": "~29.0.3",
-    "litesvm": "~0.1.0",
-    "nock": "~14.0.2",
+    "jest": "29.0.3",
+    "nock": "14.0.5",
     "prettier": "catalog:",
-    "ts-jest": "~29.0.2",
-    "ts-node": "~10.9.2",
+    "ts-jest": "29.0.5",
+    "ts-node": "10.9.2",
     "typescript": "catalog:"
   }
 }
