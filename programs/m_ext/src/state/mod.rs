@@ -6,7 +6,8 @@ pub const EXT_GLOBAL_SEED: &[u8] = b"global";
 
 #[account]
 pub struct ExtGlobalV2 {
-    pub admin: Pubkey, // can update config values
+    pub admin: Pubkey,                 // can update config values
+    pub pending_admin: Option<Pubkey>, // pending admin for two-step admin transfer
     pub ext_mint: Pubkey,
     pub m_mint: Pubkey,
     pub m_earn_global_account: Pubkey,
@@ -21,6 +22,7 @@ impl ExtGlobalV2 {
     pub fn size(wrap_authorities: usize) -> usize {
         8 + // discriminator
         32 + // admin
+        1 + 32 + // pending_admin (Option<Pubkey>)
         32 + // ext_mint
         32 + // m_mint
         32 + // m_earn_global_account

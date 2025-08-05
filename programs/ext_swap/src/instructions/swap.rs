@@ -69,6 +69,7 @@ pub struct Swap<'info> {
     )]
     pub to_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
+        mut,
         associated_token::mint = m_mint,
         associated_token::authority = swap_global,
         associated_token::token_program = m_token_program,
@@ -228,7 +229,7 @@ impl<'info> Swap<'info> {
             CpiContext::new_with_signer(
                 ctx.accounts.to_ext_program.to_account_info(),
                 Wrap {
-                    token_authority: ctx.accounts.signer.to_account_info(),
+                    token_authority: ctx.accounts.swap_global.to_account_info(),
                     wrap_authority: Some(wrap_authority),
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.to_mint.to_account_info(),
