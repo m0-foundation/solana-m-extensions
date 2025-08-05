@@ -27,13 +27,13 @@ build-test-programs:
 	anchor build -p m_ext
 	@mv target/deploy/m_ext.so tests/programs/ext_a.so
 	$(call update-program-id,HSMnbWEkB7sEQAGSzBPeACNUCXC9FgNeeESLnHtKfoy3)
-	anchor build -p m_ext 
+	anchor build -p m_ext -- --features scaled-ui --no-default-features
 	@mv target/deploy/m_ext.so tests/programs/ext_b.so
 	$(call update-program-id,81gYpXqg8ZT9gdkFSe35eqiitqBWqVfYwDwVfXuk8Xfw)
-	sed -i '' '/pub ext_token_program: Program<'\''info, Token2022>,/a\'$$'\n''\ pub dummy_account: Program<'\''info, Token2022>,' programs/m_ext/src/instructions/wrap.rs
+	sed -i '' '/pub ext_token_program: Interface<'\''info, TokenInterface>,/a\'$$'\n''\ pub dummy_account: Interface<'\''info, TokenInterface>,' programs/m_ext/src/instructions/wrap.rs
 	cargo fmt
 	anchor build -p m_ext --skip-lint
 	@mv target/deploy/m_ext.so tests/programs/ext_c.so
-	sed -i '' '/pub dummy_account: Program<'\''info, Token2022>,/d' programs/m_ext/src/instructions/wrap.rs
+	sed -i '' '/pub dummy_account: Interface<'\''info, TokenInterface>,/d' programs/m_ext/src/instructions/wrap.rs
 	$(call update-program-id,3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da)
 	anchor build -p m_ext

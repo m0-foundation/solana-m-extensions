@@ -1,18 +1,8 @@
 import { BN } from "@coral-xyz/anchor";
-import {
-  PublicKey,
-  Keypair,
-  LAMPORTS_PER_SOL,
-  Transaction,
-  SystemProgram,
-} from "@solana/web3.js";
+import { PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import {
   TOKEN_2022_PROGRAM_ID,
   getMint,
-  getAccountLen,
-  ExtensionType,
-  createInitializeAccountInstruction,
-  createInitializeImmutableOwnerInstruction,
   getAssociatedTokenAddressSync,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_PROGRAM_ID,

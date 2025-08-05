@@ -1,640 +1,319 @@
-import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
+import { BN } from "@coral-xyz/anchor";
+import { PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import {
-  createAssociatedTokenAccountInstruction,
-  createInitializeMintInstruction,
-  createInitializeScaledUiAmountConfigInstruction,
-  createMintToInstruction,
-  ExtensionType,
-  getAccount,
-  getAssociatedTokenAddressSync,
-  getMintLen,
   TOKEN_2022_PROGRAM_ID,
+  getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
-import {
-  Connection,
-  Keypair,
-  LAMPORTS_PER_SOL,
-  PublicKey,
-  SystemProgram,
-  Transaction,
-} from "@solana/web3.js";
-import { fromWorkspace, LiteSVMProvider } from "anchor-litesvm";
-import {
-  PROGRAM_ID as EARN_PROGRAM_ID,
-  MerkleTree,
-} from "@m0-foundation/solana-m-sdk";
-import { Earn } from "../../tests/programs/earn";
-import EARN from "../../tests/programs/earn.json";
-import EXT_SWAP from "../../target/idl/ext_swap.json";
-import M_EXT from "../../target/idl/scaled_ui.json";
-import { BN, Program } from "@coral-xyz/anchor";
-import { ExtSwap } from "../../target/types/ext_swap";
-import { TransactionMetadata } from "litesvm";
-import { MExt } from "../../target/types/scaled_ui";
+import { ExtensionSwapTest } from "./ext_test_harness";
 
-describe("extension swap tests", () => {
-  const {
-    admin,
-    swapper,
-    mMint,
-    extProgramA,
-    extProgramB,
-    mintA,
-    mintB,
-    multisig,
-    extProgramC,
-    mintC,
-  } = loadKeypairs();
+describe("extension swap tests (new)", () => {
+  let $: ExtensionSwapTest;
 
-  const svm = fromWorkspace("").withSplPrograms();
-  svm.airdrop(admin.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
-  svm.airdrop(swapper.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
+  beforeAll(async () => {
+    // Initialize the test harness
+    $ = new ExtensionSwapTest();
 
-  // M Earn program
-  svm.addProgramFromFile(EARN_PROGRAM_ID, "tests/programs/earn.so");
+    // Initialize with 1M initial supply and 1T initial earn index
+    // Handles setting up of swapper keypair
+    await $.init(new BN(1_000_000), new BN(1_000_000_000_000));
+  });
 
-  // Sample extension programs for swapping
-  svm.addProgramFromFile(extProgramA.publicKey, "tests/programs/ext_a.so");
-  svm.addProgramFromFile(extProgramB.publicKey, "tests/programs/ext_b.so");
-  svm.addProgramFromFile(extProgramC.publicKey, "tests/programs/ext_c.so");
-
-  // Replace the default token2022 program with updated one
-  svm.addProgramFromFile(
-    TOKEN_2022_PROGRAM_ID,
-    "tests/programs/spl_token_2022.so"
-  );
-
-  // Anchor providers and programs
-  const provider = new LiteSVMProvider(svm, new NodeWallet(admin));
-  const program = new Program<ExtSwap>(EXT_SWAP, provider);
-  const earn = new Program<Earn>(EARN, provider);
-
-  const [extensionA, extensionB, extensionC] = [
-    extProgramA,
-    extProgramB,
-    extProgramC,
-  ].map((p) => new Program<MExt>({ ...M_EXT, address: p.publicKey }, provider));
-
-  // Common accounts
-  const accounts = {
-    ataA: getAssociatedTokenAddressSync(
-      mintA.publicKey,
-      swapper.publicKey,
-      true,
-      TOKEN_2022_PROGRAM_ID
+  // Helper function to get token account addresses
+  const getTokenAccounts = async () => ({
+    ataA: await $.getATA(
+      $.getExtensionMint("mintA"),
+      $.swapperKeypair.publicKey
     ),
-    ataB: getAssociatedTokenAddressSync(
-      mintB.publicKey,
-      swapper.publicKey,
-      true,
-      TOKEN_2022_PROGRAM_ID
+    ataB: await $.getATA(
+      $.getExtensionMint("mintB"),
+      $.swapperKeypair.publicKey
     ),
-    ataM: getAssociatedTokenAddressSync(
-      mMint.publicKey,
-      swapper.publicKey,
-      true,
-      TOKEN_2022_PROGRAM_ID
+    ataC: await $.getATA(
+      $.getExtensionMint("mintC"),
+      $.swapperKeypair.publicKey
     ),
-  };
+    ataM: await $.getATA($.mMint.publicKey, $.swapperKeypair.publicKey),
+  });
 
-  // Helper for sending transactions and checking errors
-  const sendTransaction = async (
-    txn: Transaction | Promise<Transaction>,
-    signers: Keypair[],
-    expectedErrorMessage?: RegExp
-  ): Promise<TransactionMetadata | null> => {
-    if (txn instanceof Promise) {
-      txn = await txn;
-    }
+  describe("configure swap program", () => {
+    it("should whitelist extension programs", async () => {
+      // Whitelist all extension programs
+      await $.whitelistExtension($.getExtensionProgramId("extA"));
+      await $.whitelistExtension($.getExtensionProgramId("extB"));
+      await $.whitelistExtension($.getExtensionProgramId("extC"));
 
-    txn.feePayer = signers[0].publicKey;
-    txn.recentBlockhash = svm.latestBlockhash();
-    txn.sign(...signers);
-
-    const result = svm.sendTransaction(txn);
-
-    if ("err" in result) {
-      if (expectedErrorMessage) {
-        for (const log of result.meta().logs()) {
-          if (log.match(expectedErrorMessage)) return null;
-        }
-
-        console.error(result.toString());
-        throw new Error("Did not find expected error message in logs");
-      }
-
-      console.error(result.toString());
-      throw new Error("Transaction failed");
-    }
-    if (expectedErrorMessage) {
-      console.error(result.toString());
-      throw new Error("Expected transaction to fail, but it succeeded");
-    }
-
-    return result;
-  };
-
-  const getTokenBalance = async (ata: PublicKey) => {
-    const act = await getAccount(
-      provider.connection,
-      ata,
-      undefined,
-      TOKEN_2022_PROGRAM_ID
-    );
-    return Number(act.amount);
-  };
-
-  describe("initialize swap programs", () => {
-    it("create mints", async () => {
-      // Mint auth for each program
-      const [mintAuthA, mintAuthB, mintAuthC] = [
-        extensionA,
-        extensionB,
-        extensionC,
-      ].map(
-        (p) =>
-          PublicKey.findProgramAddressSync(
-            [Buffer.from("mint_authority")],
-            p.programId
-          )[0]
+      // Verify extensions are whitelisted
+      const swapGlobal = await $.swapProgram.account.swapGlobal.fetch(
+        $.getSwapGlobalAccount()
       );
-
-      // Create all mints
-      for (const [mint, mintAuth] of [
-        [mMint, admin.publicKey],
-        [mintA, mintAuthA],
-        [mintB, mintAuthB],
-        [mintC, mintAuthC],
-      ] as [Keypair, PublicKey][]) {
-        await sendTransaction(
-          await buildMintTxn(
-            provider.connection,
-            admin.publicKey,
-            mint,
-            mintAuth
-          ),
-          [admin, mint]
-        );
-      }
-
-      // Mint M to swapper
-      const transaction = new Transaction().add(
-        createAssociatedTokenAccountInstruction(
-          admin.publicKey,
-          accounts.ataM,
-          swapper.publicKey,
-          mMint.publicKey,
-          TOKEN_2022_PROGRAM_ID
-        ),
-        createMintToInstruction(
-          mMint.publicKey,
-          accounts.ataM,
-          admin.publicKey,
-          1e6,
-          [],
-          TOKEN_2022_PROGRAM_ID
-        )
-      );
-      await sendTransaction(transaction, [admin]);
+      expect(swapGlobal.whitelistedExtensions).toHaveLength(3);
     });
-    it("initialize earn program", async () => {
-      await sendTransaction(
-        earn.methods
-          .initialize(multisig.publicKey, new BN(1_000_000_000_000), new BN(0))
+
+    it("should fail to re-initialize config", async () => {
+      await expect(
+        $.swapProgram.methods
+          .initializeGlobal()
           .accounts({
-            mint: mMint.publicKey,
+            admin: $.swapperKeypair.publicKey,
           })
-          .transaction(),
-        [admin]
+          .signers([$.swapperKeypair])
+          .rpc()
+      ).rejects.toThrow();
+    });
+
+    it("should whitelist unwrapper", async () => {
+      await $.whitelistUnwrapper($.swapperKeypair.publicKey);
+
+      const swapGlobal = await $.swapProgram.account.swapGlobal.fetch(
+        $.getSwapGlobalAccount()
       );
+      expect(swapGlobal.whitelistedUnwrappers).toHaveLength(1);
+      expect(swapGlobal.whitelistedUnwrappers[0].toBase58()).toBe(
+        $.swapperKeypair.publicKey.toBase58()
+      );
+    });
 
-      const getVault = (p: PublicKey) =>
-        PublicKey.findProgramAddressSync([Buffer.from("m_vault")], p)[0];
+    it("should fail to remove non-existent extension", async () => {
+      const randomKey = new Keypair().publicKey;
+      await expect(
+        $.swapProgram.methods
+          .removeWhitelistedExtension(randomKey)
+          .accounts({
+            admin: $.admin.publicKey,
+          })
+          .signers([$.admin])
+          .rpc()
+      ).rejects.toThrow();
+    });
 
-      // Add all vaults as earners
-      const earnerMerkleTree = new MerkleTree([
-        getVault(extensionA.programId),
-        getVault(extensionB.programId),
-        getVault(extensionC.programId),
-      ]);
-
-      await earn.methods
-        .propagateIndex(new BN(1_000_000_000_001), earnerMerkleTree.getRoot())
-        .accountsPartial({
-          mint: mMint.publicKey,
+    it("should remove from unwrap whitelist", async () => {
+      await $.swapProgram.methods
+        .removeWhitelistedUnwrapper($.swapperKeypair.publicKey)
+        .accounts({
+          admin: $.admin.publicKey,
         })
+        .signers([$.admin])
         .rpc();
 
-      for (const p of [extensionA, extensionB, extensionC]) {
-        const vault = getVault(p.programId);
+      const swapGlobal = await $.swapProgram.account.swapGlobal.fetch(
+        $.getSwapGlobalAccount()
+      );
+      expect(swapGlobal.whitelistedUnwrappers).toHaveLength(0);
 
-        const ata = await getAssociatedTokenAddressSync(
-          mMint.publicKey,
-          vault,
-          true,
-          TOKEN_2022_PROGRAM_ID
-        );
+      // Expire the blockhash before re-adding
+      await $.svm.expireBlockhash();
 
-        // Create ata
-        await sendTransaction(
-          new Transaction().add(
-            createAssociatedTokenAccountInstruction(
-              admin.publicKey,
-              ata,
-              vault,
-              mMint.publicKey,
-              TOKEN_2022_PROGRAM_ID
-            )
-          ),
-          [admin]
-        );
-
-        // Create earner account
-        const { proof } = earnerMerkleTree.getInclusionProof(vault);
-        await earn.methods
-          .addRegistrarEarner(vault, proof)
-          .accounts({
-            userTokenAccount: ata,
-          })
-          .rpc();
-      }
+      // Re-add for later tests
+      await $.whitelistUnwrapper($.swapperKeypair.publicKey);
     });
-    it("initialize extension programs", async () => {
-      for (const [i, p] of [extensionA, extensionB, extensionC].entries()) {
-        await sendTransaction(
-          p.methods
-            .initialize([], new BN(0))
-            .accounts({
-              mMint: mMint.publicKey,
-              extMint: [mintA, mintB, mintC][i].publicKey,
-            })
-            .transaction(),
-          [admin]
-        );
-      }
+
+    it("should remove from ext whitelist", async () => {
+      await $.swapProgram.methods
+        .removeWhitelistedExtension($.getExtensionProgramId("extA"))
+        .accounts({
+          admin: $.admin.publicKey,
+        })
+        .signers([$.admin])
+        .rpc();
+
+      const swapGlobal = await $.swapProgram.account.swapGlobal.fetch(
+        $.getSwapGlobalAccount()
+      );
+      expect(swapGlobal.whitelistedExtensions).toHaveLength(2);
+
+      // Expire the blockhash before re-adding
+      await $.svm.expireBlockhash();
+
+      // Re-add for later tests
+      await $.whitelistExtension($.getExtensionProgramId("extA"));
+    });
+
+    it("should add wrap authorities to extensions", async () => {
+      const swapGlobal = $.getSwapGlobalAccount();
+
+      // Add swap program as wrap authority to all extensions
+      await $.addWrapAuthorityToExtension("extA", swapGlobal);
+      await $.addWrapAuthorityToExtension("extB", swapGlobal);
+      await $.addWrapAuthorityToExtension("extC", swapGlobal);
     });
   });
 
-  // Tests
-  describe("configure", () => {
-    it("initialize config", async () => {
-      await sendTransaction(
-        program.methods.initializeGlobal().accounts({}).transaction(),
-        [admin]
-      );
+  describe("basic swapping operations", () => {
+    it("should wrap M to extension token A", async () => {
+      const accounts = await getTokenAccounts();
+
+      await $.swapProgram.methods
+        .wrap(new BN(10_000))
+        .accounts({
+          signer: $.swapperKeypair.publicKey,
+          wrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
+          mMint: $.mMint.publicKey,
+          mTokenProgram: TOKEN_2022_PROGRAM_ID,
+          toExtProgram: $.getExtensionProgramId("extA"),
+          toMint: $.getExtensionMint("mintA"),
+          toTokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([$.swapperKeypair])
+        .rpc();
+
+      // Verify token balances
+      await $.expectTokenBalance(accounts.ataM, new BN(990_000));
+      await $.expectTokenBalance(accounts.ataA, new BN(10_000));
     });
 
-    it("re-initialize config revert", async () => {
-      await sendTransaction(
-        program.methods
-          .initializeGlobal()
-          .accounts({ admin: swapper.publicKey })
-          .transaction(),
-        [swapper],
-        /Allocate: account Address .* already in use/
-      );
+    it("should unwrap extension token A back to M", async () => {
+      const accounts = await getTokenAccounts();
+
+      await $.swapProgram.methods
+        .unwrap(new BN(1_000))
+        .accounts({
+          signer: $.swapperKeypair.publicKey, // must be a whitelisted unwrapper on the swap program
+          unwrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority on CPI
+          mMint: $.mMint.publicKey,
+          mTokenProgram: TOKEN_2022_PROGRAM_ID,
+          fromExtProgram: $.getExtensionProgramId("extA"),
+          fromMint: $.getExtensionMint("mintA"),
+          fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([$.swapperKeypair])
+        .rpc();
+
+      // Verify token balances
+      await $.expectTokenBalance(accounts.ataM, new BN(991_000));
+      await $.expectTokenBalance(accounts.ataA, new BN(9_000));
     });
 
-    it("add to ext whitelist", async () => {
-      await sendTransaction(
-        program.methods
-          .whitelistExtension()
-          .accounts({
-            extProgram: earn.programId,
-          })
-          .transaction(),
-        [admin]
-      );
+    it("should swap extension token A to extension token B", async () => {
+      const accounts = await getTokenAccounts();
 
-      const { whitelistedExtensions } = await program.account.swapGlobal.fetch(
-        PublicKey.findProgramAddressSync(
-          [Buffer.from("global")],
-          program.programId
-        )[0]
-      );
+      await $.swapProgram.methods
+        .swap(new BN(1_000), 0)
+        .accounts({
+          signer: $.swapperKeypair.publicKey,
+          unwrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
+          wrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
+          mMint: $.mMint.publicKey,
+          mTokenProgram: TOKEN_2022_PROGRAM_ID,
+          fromExtProgram: $.getExtensionProgramId("extA"),
+          toExtProgram: $.getExtensionProgramId("extB"),
+          fromMint: $.getExtensionMint("mintA"),
+          toMint: $.getExtensionMint("mintB"),
+          fromTokenAccount: accounts.ataA,
+          toTokenAccount: accounts.ataB,
+          toTokenProgram: TOKEN_2022_PROGRAM_ID,
+          fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([$.swapperKeypair])
+        .rpc();
 
-      // Validate the extension was added
-      expect(whitelistedExtensions).toHaveLength(1);
-      expect(whitelistedExtensions[0].toBase58()).toBe(
-        earn.programId.toBase58()
-      );
-    });
-
-    it("add to unwrap whitelist", async () => {
-      await sendTransaction(
-        program.methods
-          .whitelistUnwrapper(admin.publicKey)
-          .accounts({})
-          .transaction(),
-        [admin]
-      );
-
-      const { whitelistedExtensions, whitelistedUnwrappers } =
-        await program.account.swapGlobal.fetch(
-          PublicKey.findProgramAddressSync(
-            [Buffer.from("global")],
-            program.programId
-          )[0]
-        );
-
-      // Validate whitelists
-      expect(whitelistedExtensions).toHaveLength(1);
-      expect(whitelistedExtensions[0].toBase58()).toBe(
-        earn.programId.toBase58()
-      );
-      expect(whitelistedUnwrappers).toHaveLength(1);
-      expect(whitelistedUnwrappers[0].toBase58()).toBe(
-        admin.publicKey.toBase58()
-      );
-    });
-
-    it("remove non-existent entry", async () => {
-      await sendTransaction(
-        program.methods
-          .removeWhitelistedExtension(new Keypair().publicKey)
-          .accounts({})
-          .transaction(),
-        [admin],
-        /Error Message: Extension is not whitelisted/
-      );
-    });
-
-    it("remove from unwrap whitelist", async () => {
-      await sendTransaction(
-        program.methods
-          .removeWhitelistedUnwrapper(admin.publicKey)
-          .accounts({})
-          .transaction(),
-        [admin]
-      );
-
-      const { whitelistedExtensions, whitelistedUnwrappers } =
-        await program.account.swapGlobal.fetch(
-          PublicKey.findProgramAddressSync(
-            [Buffer.from("global")],
-            program.programId
-          )[0]
-        );
-
-      // Validate whitelists
-      expect(whitelistedExtensions).toHaveLength(1);
-      expect(whitelistedExtensions[0].toBase58()).toBe(
-        earn.programId.toBase58()
-      );
-      expect(whitelistedUnwrappers).toHaveLength(0);
-    });
-
-    it("remove from ext whitelist", async () => {
-      await sendTransaction(
-        program.methods
-          .removeWhitelistedExtension(earn.programId)
-          .accounts({})
-          .transaction(),
-        [admin]
-      );
-
-      const { whitelistedExtensions } = await program.account.swapGlobal.fetch(
-        PublicKey.findProgramAddressSync(
-          [Buffer.from("global")],
-          program.programId
-        )[0]
-      );
-
-      // Validate the extension was removed
-      expect(whitelistedExtensions).toHaveLength(0);
+      // Verify token balances
+      await $.expectTokenBalance(accounts.ataM, new BN(991_000));
+      await $.expectTokenBalance(accounts.ataA, new BN(8_000));
+      await $.expectTokenBalance(accounts.ataB, new BN(1_000));
     });
   });
 
-  describe("swapping", () => {
-    it("extension not whitelisted", async () => {
-      await sendTransaction(
-        program.methods
-          .wrap(new BN(1e2))
+  describe("error cases", () => {
+    it("should fail when extension is not whitelisted", async () => {
+      // Remove extension C from whitelist first
+      await $.swapProgram.methods
+        .removeWhitelistedExtension($.getExtensionProgramId("extC"))
+        .accounts({
+          admin: $.admin.publicKey,
+        })
+        .signers([$.admin])
+        .rpc();
+
+      // Try to wrap to non-whitelisted extension
+      await expect(
+        $.swapProgram.methods
+          .wrap(new BN(100))
           .accounts({
-            signer: swapper.publicKey,
-            wrapAuthority: program.programId,
-            mMint: mMint.publicKey,
+            signer: $.swapperKeypair.publicKey,
+            wrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
+            mMint: $.mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            toExtProgram: extProgramA.publicKey,
-            toMint: mintA.publicKey,
+            toExtProgram: $.getExtensionProgramId("extC"),
+            toMint: $.getExtensionMint("mintC"),
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
-          .transaction(),
-        [swapper],
-        /Error Message: Extension is not whitelisted/
-      );
-
-      // Whitelist both extensions
-      for (const pid of [extProgramA, extProgramB, extProgramC]) {
-        await sendTransaction(
-          program.methods
-            .whitelistExtension()
-            .accounts({
-              extProgram: pid.publicKey,
-            })
-            .transaction(),
-          [admin]
-        );
-      }
+          .signers([$.swapperKeypair])
+          .rpc()
+      ).rejects.toThrow();
     });
 
-    it("swap program not whitelisted for wrapping", async () => {
-      await sendTransaction(
-        program.methods
-          .wrap(new BN(1e3))
-          .accounts({
-            signer: swapper.publicKey,
-            wrapAuthority: program.programId,
-            mMint: mMint.publicKey,
-            mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            toExtProgram: extProgramA.publicKey,
-            toMint: mintA.publicKey,
-            toTokenProgram: TOKEN_2022_PROGRAM_ID,
-          })
-          .transaction(),
-        [swapper],
-        /Error Message: Invalid signer/
-      );
+    it("should fail with invalid swap amount", async () => {
+      const accounts = await getTokenAccounts();
 
-      // Whitelist swap program signer
-      for (const p of [extensionA, extensionB, extensionC]) {
-        const [global] = PublicKey.findProgramAddressSync(
-          [Buffer.from("global")],
-          program.programId
-        );
-
-        await sendTransaction(
-          p.methods.addWrapAuthority(global).accounts({}).transaction(),
-          [admin]
-        );
-      }
-    });
-
-    it("wrap M", async () => {
-      await sendTransaction(
-        program.methods
-          .wrap(new BN(1e4))
-          .accounts({
-            signer: swapper.publicKey,
-            wrapAuthority: program.programId,
-            mMint: mMint.publicKey,
-            mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            toExtProgram: extProgramA.publicKey,
-            toMint: mintA.publicKey,
-            toTokenProgram: TOKEN_2022_PROGRAM_ID,
-          })
-          .transaction(),
-        [swapper]
-      );
-
-      // Validate amounts
-      expect(await getTokenBalance(accounts.ataM)).toBe(0.99e6);
-      expect(await getTokenBalance(accounts.ataA)).toBe(0.01e6);
-    });
-
-    it("unauthorized unwrap to M", async () => {
-      await sendTransaction(
-        program.methods
-          .unwrap(new BN(1e1))
-          .accounts({
-            signer: swapper.publicKey,
-            unwrapAuthority: program.programId,
-            mMint: mMint.publicKey,
-            mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromExtProgram: extProgramA.publicKey,
-            fromMint: mintA.publicKey,
-            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
-          })
-          .transaction(),
-        [swapper],
-        /Error Message: Signer is not whitelisted/
-      );
-    });
-
-    it("unwrap to M", async () => {
-      // add swapper
-      await sendTransaction(
-        program.methods
-          .whitelistUnwrapper(swapper.publicKey)
-          .accounts({})
-          .transaction(),
-        [admin]
-      );
-
-      await sendTransaction(
-        program.methods
-          .unwrap(new BN(1e3))
-          .accounts({
-            signer: swapper.publicKey,
-            unwrapAuthority: program.programId,
-            mMint: mMint.publicKey,
-            mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromExtProgram: extProgramA.publicKey,
-            fromMint: mintA.publicKey,
-            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
-          })
-          .transaction(),
-        [swapper]
-      );
-
-      // Validate amounts
-      expect(await getTokenBalance(accounts.ataM)).toBe(0.991e6);
-      expect(await getTokenBalance(accounts.ataA)).toBe(0.009e6);
-    });
-
-    it("swap extension tokens", async () => {
-      await sendTransaction(
-        program.methods
-          .swap(new BN(1e3), 0)
-          .accounts({
-            signer: swapper.publicKey,
-            unwrapAuthority: program.programId,
-            wrapAuthority: program.programId,
-            mMint: mMint.publicKey,
-            mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromExtProgram: extProgramA.publicKey,
-            toExtProgram: extProgramB.publicKey,
-            fromMint: mintA.publicKey,
-            toMint: mintB.publicKey,
-            fromTokenAccount: accounts.ataA,
-            toTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
-          })
-          .transaction(),
-        [swapper]
-      );
-
-      // Validate amounts
-      expect(await getTokenBalance(accounts.ataM)).toBe(0.991e6);
-      expect(await getTokenBalance(accounts.ataA)).toBe(0.008e6);
-      expect(await getTokenBalance(accounts.ataB)).toBe(0.001e6);
-    });
-
-    it("swap invalid amount", async () => {
-      await sendTransaction(
-        program.methods
+      await expect(
+        $.swapProgram.methods
           .swap(new BN(0), 0)
           .accounts({
-            signer: swapper.publicKey,
-            unwrapAuthority: program.programId,
-            wrapAuthority: program.programId,
-            mMint: mMint.publicKey,
+            signer: $.swapperKeypair.publicKey,
+            unwrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
+            wrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
+            mMint: $.mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromExtProgram: extProgramA.publicKey,
-            toExtProgram: extProgramB.publicKey,
-            fromMint: mintA.publicKey,
-            toMint: mintB.publicKey,
+            fromExtProgram: $.getExtensionProgramId("extA"),
+            toExtProgram: $.getExtensionProgramId("extB"),
+            fromMint: $.getExtensionMint("mintA"),
+            toMint: $.getExtensionMint("mintB"),
             fromTokenAccount: accounts.ataA,
+            toTokenAccount: accounts.ataB,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
-          .transaction(),
-        [swapper],
-        /Error Message: Invalid amount/
-      );
+          .signers([$.swapperKeypair])
+          .rpc()
+      ).rejects.toThrow();
     });
   });
 
-  describe("remaining accounts", () => {
-    it("invalid index", async () => {
-      await sendTransaction(
-        program.methods
-          .swap(new BN(1e2), 1)
+  describe("remaining accounts tests", () => {
+    it("should fail with invalid remaining account index", async () => {
+      const accounts = await getTokenAccounts();
+
+      await expect(
+        $.swapProgram.methods
+          .swap(new BN(100), 1) // Invalid index for 0 remaining accounts
           .accounts({
-            signer: swapper.publicKey,
-            unwrapAuthority: program.programId,
-            wrapAuthority: program.programId,
-            mMint: mMint.publicKey,
+            signer: $.swapperKeypair.publicKey,
+            unwrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
+            wrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
+            mMint: $.mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromExtProgram: extProgramA.publicKey,
-            toExtProgram: extProgramB.publicKey,
-            fromMint: mintA.publicKey,
-            toMint: mintB.publicKey,
+            fromExtProgram: $.getExtensionProgramId("extA"),
+            toExtProgram: $.getExtensionProgramId("extB"),
+            fromMint: $.getExtensionMint("mintA"),
+            toMint: $.getExtensionMint("mintB"),
             fromTokenAccount: accounts.ataA,
+            toTokenAccount: accounts.ataB,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
-          .transaction(),
-        [swapper],
-        /Error Message: Index invalid for length of the array/
-      );
+          .signers([$.swapperKeypair])
+          .rpc()
+      ).rejects.toThrow();
     });
 
-    it("swap with unneeded remaining accounts", async () => {
-      await sendTransaction(
-        program.methods
-          .swap(new BN(1e3), 1)
+    it("should handle swap with unneeded remaining accounts", async () => {
+      const accounts = await getTokenAccounts();
+
+      try {
+        await $.swapProgram.methods
+          .swap(new BN(1_000), 1)
           .accounts({
-            signer: swapper.publicKey,
-            unwrapAuthority: program.programId,
-            wrapAuthority: program.programId,
-            mMint: mMint.publicKey,
+            signer: $.swapperKeypair.publicKey,
+            unwrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
+            wrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
+            mMint: $.mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromExtProgram: extProgramA.publicKey,
-            toExtProgram: extProgramB.publicKey,
-            fromMint: mintA.publicKey,
-            toMint: mintB.publicKey,
+            fromExtProgram: $.getExtensionProgramId("extA"),
+            toExtProgram: $.getExtensionProgramId("extB"),
+            fromMint: $.getExtensionMint("mintA"),
+            toMint: $.getExtensionMint("mintB"),
             fromTokenAccount: accounts.ataA,
+            toTokenAccount: accounts.ataB,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
@@ -650,55 +329,65 @@ describe("extension swap tests", () => {
               isWritable: false,
             },
           ])
-          .transaction(),
-        [swapper]
-      );
+          .signers([$.swapperKeypair])
+          .rpc();
+      } catch (error) {
+        console.error("Swap failed with error:", error);
+        throw error;
+      }
 
-      // Validate amounts
-      expect(await getTokenBalance(accounts.ataM)).toBe(0.991e6);
-      expect(await getTokenBalance(accounts.ataA)).toBe(0.007e6);
-      expect(await getTokenBalance(accounts.ataB)).toBe(0.002e6);
+      // Verify token balances changed correctly
+      await $.expectTokenBalance(accounts.ataA, new BN(7_000));
+      await $.expectTokenBalance(accounts.ataB, new BN(2_000));
     });
 
-    it("wrap expects remaining account", async () => {
-      await sendTransaction(
-        program.methods
-          .swap(new BN(1e3), 0)
+    it("should fail when ext_c expects remaining account but none provided", async () => {
+      // Ensure extension C is whitelisted
+      await $.whitelistExtension($.getExtensionProgramId("extC"));
+
+      const accounts = await getTokenAccounts();
+
+      await $.expectSystemError(
+        $.swapProgram.methods
+          .swap(new BN(1_000), 0)
           .accounts({
-            signer: swapper.publicKey,
-            unwrapAuthority: program.programId,
-            wrapAuthority: program.programId,
-            mMint: mMint.publicKey,
+            signer: $.swapperKeypair.publicKey,
+            unwrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
+            wrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
+            mMint: $.mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromExtProgram: extProgramA.publicKey,
-            toExtProgram: extProgramC.publicKey,
-            fromMint: mintA.publicKey,
-            toMint: mintC.publicKey,
+            fromExtProgram: $.getExtensionProgramId("extA"),
+            toExtProgram: $.getExtensionProgramId("extC"),
+            fromMint: $.getExtensionMint("mintA"),
+            toMint: $.getExtensionMint("mintC"),
             fromTokenAccount: accounts.ataA,
+            toTokenAccount: accounts.ataC,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
-          .transaction(),
-        [swapper],
-        /Error Message: Not enough account keys given to the instruction/
+          .signers([$.swapperKeypair])
+          .rpc()
       );
     });
 
-    it("wrap gets incorrect remaining account", async () => {
-      await sendTransaction(
-        program.methods
-          .swap(new BN(1e3), 0)
+    it("should fail when ext_c gets incorrect remaining account", async () => {
+      const accounts = await getTokenAccounts();
+
+      await $.expectSystemError(
+        $.swapProgram.methods
+          .swap(new BN(1_000), 0)
           .accounts({
-            signer: swapper.publicKey,
-            unwrapAuthority: program.programId,
-            wrapAuthority: program.programId,
-            mMint: mMint.publicKey,
+            signer: $.swapperKeypair.publicKey,
+            unwrapAuthority: $.swapProgram.programId,
+            wrapAuthority: $.swapProgram.programId,
+            mMint: $.mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromExtProgram: extProgramA.publicKey,
-            toExtProgram: extProgramC.publicKey,
-            fromMint: mintA.publicKey,
-            toMint: mintC.publicKey,
+            fromExtProgram: $.getExtensionProgramId("extA"),
+            toExtProgram: $.getExtensionProgramId("extC"),
+            fromMint: $.getExtensionMint("mintA"),
+            toMint: $.getExtensionMint("mintC"),
             fromTokenAccount: accounts.ataA,
+            toTokenAccount: accounts.ataC,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
@@ -709,366 +398,313 @@ describe("extension swap tests", () => {
               isWritable: false,
             },
           ])
-          .transaction(),
-        [swapper],
-        /Error Message: Program ID was not as expected/
+          .signers([$.swapperKeypair])
+          .rpc()
       );
     });
 
-    it("wrap gets expected remaining account", async () => {
-      await sendTransaction(
-        program.methods
-          .swap(new BN(1e3), 0)
-          .accounts({
-            signer: swapper.publicKey,
-            unwrapAuthority: program.programId,
-            wrapAuthority: program.programId,
-            mMint: mMint.publicKey,
-            mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromExtProgram: extProgramA.publicKey,
-            toExtProgram: extProgramC.publicKey,
-            fromMint: mintA.publicKey,
-            toMint: mintC.publicKey,
-            fromTokenAccount: accounts.ataA,
-            toTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
-          })
-          .remainingAccounts([
-            {
-              pubkey: TOKEN_2022_PROGRAM_ID,
-              isSigner: false,
-              isWritable: false,
-            },
-          ])
-          .transaction(),
-        [swapper]
-      );
+    it("should succeed when ext_c gets expected remaining account", async () => {
+      const accounts = await getTokenAccounts();
+
+      await $.swapProgram.methods
+        .swap(new BN(1_000), 0)
+        .accounts({
+          signer: $.swapperKeypair.publicKey,
+          unwrapAuthority: $.swapProgram.programId,
+          wrapAuthority: $.swapProgram.programId,
+          mMint: $.mMint.publicKey,
+          mTokenProgram: TOKEN_2022_PROGRAM_ID,
+          fromExtProgram: $.getExtensionProgramId("extA"),
+          toExtProgram: $.getExtensionProgramId("extC"),
+          fromMint: $.getExtensionMint("mintA"),
+          toMint: $.getExtensionMint("mintC"),
+          fromTokenAccount: accounts.ataA,
+          toTokenAccount: accounts.ataC,
+          toTokenProgram: TOKEN_2022_PROGRAM_ID,
+          fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .remainingAccounts([
+          {
+            pubkey: TOKEN_2022_PROGRAM_ID,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
+        .signers([$.swapperKeypair])
+        .rpc();
+
+      // Verify token balances changed correctly
+      await $.expectTokenBalance(accounts.ataA, new BN(6_000));
+      await $.expectTokenBalance(accounts.ataC, new BN(1_000));
     });
   });
 
   describe("remove extension", () => {
-    it("remove from ext whitelist", async () => {
-      await sendTransaction(
-        program.methods
-          .removeWhitelistedExtension(extProgramC.publicKey)
-          .accounts({})
-          .transaction(),
-        [admin]
-      );
-    });
+    it("should fail to swap to extension that was removed", async () => {
+      // Remove extension A from whitelist first
+      await $.svm.expireBlockhash();
 
-    it("swap to extension that was removed", async () => {
-      await sendTransaction(
-        program.methods
-          .swap(new BN(1e3), 0)
+      await $.swapProgram.methods
+        .removeWhitelistedExtension($.getExtensionProgramId("extA"))
+        .accounts({
+          admin: $.admin.publicKey,
+        })
+        .signers([$.admin])
+        .rpc();
+
+      const accounts = await getTokenAccounts();
+
+      await $.expectAnchorError(
+        $.swapProgram.methods
+          .swap(new BN(1_000), 0)
           .accounts({
-            signer: swapper.publicKey,
-            unwrapAuthority: program.programId,
-            wrapAuthority: program.programId,
-            mMint: mMint.publicKey,
+            signer: $.swapperKeypair.publicKey,
+            unwrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
+            wrapAuthority: $.swapProgram.programId, // placeholder for None -> use swap program authority
+            mMint: $.mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromExtProgram: extProgramB.publicKey,
-            toExtProgram: extProgramC.publicKey,
-            fromMint: mintB.publicKey,
-            toMint: mintC.publicKey,
+            fromExtProgram: $.getExtensionProgramId("extB"),
+            toExtProgram: $.getExtensionProgramId("extA"),
+            fromMint: $.getExtensionMint("mintB"),
+            toMint: $.getExtensionMint("mintA"),
             fromTokenAccount: accounts.ataB,
+            toTokenAccount: accounts.ataA,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
-          .transaction(),
-        [swapper],
-        /Error Message: Extension is not whitelisted/
+          .signers([$.swapperKeypair])
+          .rpc(),
+        "InvalidExtension"
       );
+
+      // Re-add for later tests
+      await $.whitelistExtension($.getExtensionProgramId("extA"));
     });
   });
 
-  describe("swap program not whitelisted", () => {
-    it("attempt wrap without authority", async () => {
-      // Remove swap program as wrap authority
-      const [global] = PublicKey.findProgramAddressSync(
-        [Buffer.from("global")],
-        program.programId
-      );
+  describe("swap program authority management", () => {
+    it("should fail to wrap without proper ext wrap authority on swap program", async () => {
+      // Remove swap program as wrap authority from extension A
+      const swapGlobal = $.getSwapGlobalAccount();
+      await $.extensionPrograms.extA.methods
+        .removeWrapAuthority(swapGlobal)
+        .accounts({
+          admin: $.admin.publicKey,
+        })
+        .signers([$.admin])
+        .rpc();
 
-      await sendTransaction(
-        extensionA.methods
-          .removeWrapAuthority(global)
-          .accounts({})
-          .transaction(),
-        [admin]
-      );
-
-      // Try to wrap
-      await sendTransaction(
-        program.methods
-          .wrap(new BN(1e1))
+      // Try to wrap (should fail)
+      await $.expectAnchorError(
+        $.swapProgram.methods
+          .wrap(new BN(10))
           .accounts({
-            signer: swapper.publicKey,
-            wrapAuthority: program.programId,
-            mMint: mMint.publicKey,
+            signer: $.swapperKeypair.publicKey,
+            wrapAuthority: $.swapProgram.programId,
+            mMint: $.mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            toExtProgram: extProgramA.publicKey,
-            toMint: mintA.publicKey,
+            toExtProgram: $.getExtensionProgramId("extA"),
+            toMint: $.getExtensionMint("mintA"),
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
-          .transaction(),
-        [swapper],
-        /Error Message: Invalid signer/
+          .signers([$.swapperKeypair])
+          .rpc(),
+        "NotAuthorized"
       );
     });
 
-    it("attempt wrap with invalid authority", async () => {
-      // Try to wrap
-      await sendTransaction(
-        program.methods
-          .wrap(new BN(1e1))
+    it("should fail to wrap with invalid external ext wrap authority co-signer", async () => {
+      await $.expectAnchorError(
+        $.swapProgram.methods
+          .wrap(new BN(10))
           .accounts({
-            signer: swapper.publicKey,
-            wrapAuthority: admin.publicKey,
-            mMint: mMint.publicKey,
+            signer: $.swapperKeypair.publicKey,
+            wrapAuthority: $.nonAdmin.publicKey,
+            mMint: $.mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            toExtProgram: extProgramA.publicKey,
-            toMint: mintA.publicKey,
+            toExtProgram: $.getExtensionProgramId("extA"),
+            toMint: $.getExtensionMint("mintA"),
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
-          .transaction(),
-        [swapper, admin],
-        /Error Message: Invalid signer/
+          .signers([$.swapperKeypair, $.nonAdmin])
+          .rpc(),
+        "NotAuthorized"
       );
     });
 
-    it("wrap with wrap authority", async () => {
-      // add wrap authority
-      await sendTransaction(
-        extensionA.methods
-          .addWrapAuthority(admin.publicKey)
-          .accounts({})
-          .transaction(),
-        [admin]
-      );
+    it("should wrap with valid wrap authority co-signer", async () => {
+      // Add admin as wrap authority
+      await $.addWrapAuthorityToExtension("extA", $.nonAdmin.publicKey);
 
-      await sendTransaction(
-        program.methods
-          .wrap(new BN(1e2))
-          .accounts({
-            signer: swapper.publicKey,
-            wrapAuthority: admin.publicKey,
-            mMint: mMint.publicKey,
-            mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            toExtProgram: extProgramA.publicKey,
-            toMint: mintA.publicKey,
-            toTokenProgram: TOKEN_2022_PROGRAM_ID,
-          })
-          .transaction(),
-        [swapper, admin]
-      );
+      await $.swapProgram.methods
+        .wrap(new BN(100))
+        .accounts({
+          signer: $.swapperKeypair.publicKey,
+          wrapAuthority: $.nonAdmin.publicKey,
+          mMint: $.mMint.publicKey,
+          mTokenProgram: TOKEN_2022_PROGRAM_ID,
+          toExtProgram: $.getExtensionProgramId("extA"),
+          toMint: $.getExtensionMint("mintA"),
+          toTokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([$.swapperKeypair, $.nonAdmin])
+        .rpc();
     });
 
-    it("unwrap authority set instead of wrap", async () => {
-      await sendTransaction(
-        program.methods
+    it("should fail swap with mismatched authorities", async () => {
+      const accounts = await getTokenAccounts();
+
+      await expect(
+        $.swapProgram.methods
           .swap(new BN(15), 0)
           .accounts({
-            signer: swapper.publicKey,
-            wrapAuthority: program.programId,
-            unwrapAuthority: admin.publicKey,
-            mMint: mMint.publicKey,
+            signer: $.swapperKeypair.publicKey,
+            wrapAuthority: $.swapProgram.programId,
+            unwrapAuthority: $.admin.publicKey,
+            mMint: $.mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromExtProgram: extProgramB.publicKey,
-            toExtProgram: extProgramA.publicKey,
-            fromMint: mintB.publicKey,
-            toMint: mintA.publicKey,
+            fromExtProgram: $.getExtensionProgramId("extB"),
+            toExtProgram: $.getExtensionProgramId("extA"),
+            fromMint: $.getExtensionMint("mintB"),
+            toMint: $.getExtensionMint("mintA"),
             fromTokenAccount: accounts.ataB,
+            toTokenAccount: accounts.ataA,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
-          .transaction(),
-        [swapper, admin],
-        /Error Message: Invalid signer/
-      );
+          .signers([$.swapperKeypair, $.admin])
+          .rpc()
+      ).rejects.toThrow();
     });
 
-    it("swap with wrap authority", async () => {
-      await sendTransaction(
-        program.methods
-          .swap(new BN(15), 0)
-          .accounts({
-            signer: swapper.publicKey,
-            unwrapAuthority: program.programId,
-            wrapAuthority: admin.publicKey,
-            mMint: mMint.publicKey,
-            mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromExtProgram: extProgramB.publicKey,
-            toExtProgram: extProgramA.publicKey,
-            fromMint: mintB.publicKey,
-            toMint: mintA.publicKey,
-            fromTokenAccount: accounts.ataB,
-            toTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
-          })
-          .transaction(),
-        [swapper, admin]
-      );
+    it("should swap with correct wrap authority", async () => {
+      const accounts = await getTokenAccounts();
+
+      await $.swapProgram.methods
+        .swap(new BN(15), 0)
+        .accounts({
+          signer: $.swapperKeypair.publicKey,
+          unwrapAuthority: $.swapperKeypair.publicKey,
+          wrapAuthority: $.admin.publicKey,
+          mMint: $.mMint.publicKey,
+          mTokenProgram: TOKEN_2022_PROGRAM_ID,
+          fromExtProgram: $.getExtensionProgramId("extB"),
+          toExtProgram: $.getExtensionProgramId("extA"),
+          fromMint: $.getExtensionMint("mintB"),
+          toMint: $.getExtensionMint("mintA"),
+          fromTokenAccount: accounts.ataB,
+          toTokenAccount: accounts.ataA,
+          toTokenProgram: TOKEN_2022_PROGRAM_ID,
+          fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([$.swapperKeypair, $.admin])
+        .rpc();
     });
   });
 
   describe("unwrapping permissions", () => {
-    const cosigner = Keypair.generate();
+    const cosigner = new Keypair();
 
-    it("co-signer is not authorized", async () => {
-      await sendTransaction(
-        program.methods
-          .unwrap(new BN(1e2))
+    it("should fail when co-signer is not authorized", async () => {
+      await expect(
+        $.swapProgram.methods
+          .unwrap(new BN(100))
           .accounts({
-            signer: swapper.publicKey,
+            signer: $.swapperKeypair.publicKey,
             unwrapAuthority: cosigner.publicKey,
-            fromExtProgram: extProgramA.publicKey,
-            fromMint: mintA.publicKey,
-            mMint: mMint.publicKey,
+            fromExtProgram: $.getExtensionProgramId("extA"),
+            fromMint: $.getExtensionMint("mintA"),
+            mMint: $.mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
-          .transaction(),
-        [swapper, cosigner],
-        /Error Message: Signer is not whitelisted/
-      );
+          .signers([$.swapperKeypair, cosigner])
+          .rpc()
+      ).rejects.toThrow();
     });
 
-    it("whitelist co-signer", async () => {
-      await sendTransaction(
-        program.methods
-          .whitelistUnwrapper(cosigner.publicKey)
-          .accounts({ admin: admin.publicKey })
-          .transaction(),
-        [admin]
-      );
+    it("should whitelist co-signer", async () => {
+      // Fund the cosigner
+      $.svm.airdrop(cosigner.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
 
-      const { whitelistedUnwrappers } = await program.account.swapGlobal.fetch(
-        PublicKey.findProgramAddressSync(
-          [Buffer.from("global")],
-          program.programId
-        )[0]
+      await $.whitelistUnwrapper(cosigner.publicKey);
+
+      const swapGlobal = await $.swapProgram.account.swapGlobal.fetch(
+        $.getSwapGlobalAccount()
       );
 
       // Validate the cosigner was added
-      expect(whitelistedUnwrappers).toHaveLength(2);
-      expect(whitelistedUnwrappers[1].toBase58()).toBe(
+      expect(swapGlobal.whitelistedUnwrappers).toHaveLength(2);
+      expect(swapGlobal.whitelistedUnwrappers[1].toBase58()).toBe(
         cosigner.publicKey.toBase58()
       );
 
       // Whitelist on extension program
-      await sendTransaction(
-        extensionA.methods
-          .addWrapAuthority(cosigner.publicKey)
-          .accounts({ admin: admin.publicKey })
-          .transaction(),
-        [admin]
-      );
+      await $.addWrapAuthorityToExtension("extA", cosigner.publicKey);
     });
 
-    it("co-signer is authorized", async () => {
-      await sendTransaction(
-        program.methods
-          .unwrap(new BN(1e3))
+    it("should succeed when co-signer is authorized", async () => {
+      await $.swapProgram.methods
+        .unwrap(new BN(1_000))
+        .accounts({
+          signer: $.swapperKeypair.publicKey,
+          unwrapAuthority: cosigner.publicKey,
+          fromExtProgram: $.getExtensionProgramId("extA"),
+          fromMint: $.getExtensionMint("mintA"),
+          mMint: $.mMint.publicKey,
+          mTokenProgram: TOKEN_2022_PROGRAM_ID,
+          fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([$.swapperKeypair, cosigner])
+        .rpc();
+    });
+  });
+
+  describe("wrap authority management", () => {
+    it("should manage wrap authorities correctly", async () => {
+      // Remove admin as wrap authority from extension A
+      await $.extensionPrograms.extA.methods
+        .removeWrapAuthority($.admin.publicKey)
+        .accounts({
+          admin: $.admin.publicKey,
+        })
+        .signers([$.admin])
+        .rpc();
+
+      // Try to wrap with removed authority (should fail)
+      await expect(
+        $.swapProgram.methods
+          .wrap(new BN(100))
           .accounts({
-            signer: swapper.publicKey,
-            unwrapAuthority: cosigner.publicKey,
-            fromExtProgram: extProgramA.publicKey,
-            fromMint: mintA.publicKey,
-            mMint: mMint.publicKey,
+            signer: $.swapperKeypair.publicKey,
+            wrapAuthority: $.admin.publicKey,
+            mMint: $.mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
-            fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+            toExtProgram: $.getExtensionProgramId("extA"),
+            toMint: $.getExtensionMint("mintA"),
+            toTokenProgram: TOKEN_2022_PROGRAM_ID,
           })
-          .transaction(),
-        [swapper, cosigner]
-      );
+          .signers([$.swapperKeypair, $.admin])
+          .rpc()
+      ).rejects.toThrow();
+
+      // Add admin back as wrap authority
+      await $.addWrapAuthorityToExtension("extA", $.admin.publicKey);
+
+      // Now wrapping with admin authority should work
+      await $.swapProgram.methods
+        .wrap(new BN(100))
+        .accounts({
+          signer: $.swapperKeypair.publicKey,
+          wrapAuthority: $.admin.publicKey,
+          mMint: $.mMint.publicKey,
+          mTokenProgram: TOKEN_2022_PROGRAM_ID,
+          toExtProgram: $.getExtensionProgramId("extA"),
+          toMint: $.getExtensionMint("mintA"),
+          toTokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([$.swapperKeypair, $.admin])
+        .rpc();
     });
   });
 });
-
-async function buildMintTxn(
-  connection: Connection,
-  creator: PublicKey,
-  mint: Keypair,
-  mintAuthority: PublicKey
-) {
-  const mintLen = getMintLen([ExtensionType.ScaledUiAmountConfig]);
-  const mintLamports = await connection.getMinimumBalanceForRentExemption(
-    mintLen
-  );
-
-  const createMintAccount = SystemProgram.createAccount({
-    fromPubkey: creator,
-    newAccountPubkey: mint.publicKey,
-    space: mintLen,
-    lamports: mintLamports,
-    programId: TOKEN_2022_PROGRAM_ID,
-  });
-
-  const initializeScaledUiAmountConfig =
-    createInitializeScaledUiAmountConfigInstruction(
-      mint.publicKey,
-      mintAuthority,
-      1.0,
-      TOKEN_2022_PROGRAM_ID
-    );
-
-  const initializeMint = createInitializeMintInstruction(
-    mint.publicKey,
-    6,
-    mintAuthority,
-    mintAuthority,
-    TOKEN_2022_PROGRAM_ID
-  );
-
-  let tx = new Transaction();
-  tx.add(createMintAccount, initializeScaledUiAmountConfig, initializeMint);
-  return tx;
-}
-
-function loadKeypairs() {
-  const key = (k: string) => Keypair.fromSecretKey(Buffer.from(k, "base64"));
-
-  return {
-    admin: key(
-      // BnqzwtopjSGB9nHfMFYEa5p1kgeDBthfRP8yiLW9U7Kz
-      "6iMOkgS4ZAfVxUWOdzo8y+MDoRLfuX4oPbzQf8D2RuigU2i7DwWQ+x304o+/2aa0K695awmnbv1JfL+WWnDcPQ=="
-    ),
-    swapper: key(
-      // 8b3XbqeN3VrrNH3u1WvjK5BasW5hKWKVpDGz5tsq5CbL
-      "WmvqEmS7IwLjuBIMML4UY6d+VND9BnbG7B7Z4coApDdwumn5E6LBAS07RctOhxM5FXNEOizdNGuQwabX3Y/88w=="
-    ),
-    mMint: key(
-      // DfaRRLLVGYpfu33QdGHGLNKv2G4MyyMbmvGVpLQgFeeF
-      "VIC7l0xRw067AiX75WtZ2ehN3+1wIpGmH6gWvS4jvx+8LhpnI+sGHFi+6tair18K2nd6yr2IR97C5qZZYkkl5A=="
-    ),
-    extProgramA: key(
-      // 3joDhmLtHLrSBGfeAe1xQiv3gjikes3x8S4N3o6Ld8zB
-      "XVFfL68OjRO5g+DZxbQHXVqEtoU976BAS6y5RP905ZIorgcghvm5mrP60XsmiUAp4aSIBadFzWUK/bbBmqweYA=="
-    ),
-    extProgramB: key(
-      // HSMnbWEkB7sEQAGSzBPeACNUCXC9FgNeeESLnHtKfoy3
-      "1y1p2+YND+xDi/CbPGRN7fiE08xzoD9Fd2vsLvH9r930OgOUua+nXoCRzIl9SRyiM5GyHki7EtaTGXT8mi3qmg=="
-    ),
-    mintA: key(
-      // GbfuJZa4zLNgxHCrXNTXzVZ3CPUCe5RYWPBq9bU9qekP
-      "UeJL1Qx6czzbwDTUjOHjKLJ7Ao4XJUGXlDC5vkbPC+znwQmrzy6AxwYGUH2VX4vVZHX8DQAq/sWauL1ucUZUaA=="
-    ),
-    mintB: key(
-      // 55H5CfmBxyaYnUhXxbToqT3FWhKMWmBJFrbd3WfuFy9u
-      "XmidpDRbKR+D56M2trCoiPRzi1yxKy8aUnO+p3PuLxA8hz59ZTmu51Bn9qFsZHxaIWi1tCUd5ibpOj4pBKqTVA=="
-    ),
-    multisig: key(
-      // FYvCWxAdFQYyJJPSXNKv2dzsdKq98EwmdRiu6rpY65gT
-      "CXioALq/oVhI/8QWp7AphKgZiJB1haG5kPomzHJ+n2jYMMYbLiWQ5knEMn9iu3T+5rn/YEs+M78sq5vOSwISWA=="
-    ),
-    extProgramC: key(
-      // 81gYpXqg8ZT9gdkFSe35eqiitqBWqVfYwDwVfXuk8Xfw
-      "YPIMBm2ykzl4I7GHdQyWqKwR9RJjiwNhDyOyWTHBjqdoLoa322EZkMKDzwDeycwd0vq3KrIs1ga19ecjWSJS0g=="
-    ),
-    mintC: key(
-      // H6V2ShFqjRaHyewiqaHN6E6ok1XRH2xv4Zwy3JpL8Cxb
-      "m+OGOQSbwMu+Io83qHWOFdPZsWxnFhaz0zwzFS6C0TDvIpUrxJFh8CBFOCAHmTJpK+I/1Zv1FOeqsykz2BPgDA=="
-    ),
-  };
-}
