@@ -3773,7 +3773,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               $.nonWrapAuthority,
               $.wrapAuthority.publicKey,
               $.extMint.publicKey,
-              unwrapPrincipal
+              unwrapPrincipal,
+              $.useToken2022ForExt
             );
             toMTokenAccount = await $.getATA(
               $.mMint.publicKey,
@@ -4133,7 +4134,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               $.nonWrapAuthority,
               $.nonAdmin.publicKey,
               $.extMint.publicKey,
-              wrappedAmount
+              wrappedAmount,
+              $.useToken2022ForExt
             );
 
             // Cache initial balances
