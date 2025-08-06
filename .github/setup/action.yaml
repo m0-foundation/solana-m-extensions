@@ -12,7 +12,7 @@ inputs:
   anchor-version:
     description: "Anchor CLI version"
     required: false
-    default: "0.31.1"
+    default: "v0.31.1"
 runs:
   using: "composite"
   steps:
@@ -50,7 +50,7 @@ runs:
     - name: Install Anchor CLI
       shell: bash
       run: |
-        cargo install --git https://github.com/coral-xyz/anchor --tag "v${{ inputs.anchor-version  }}" anchor-cli --force
+        cargo install --git https://github.com/solana-foundation/anchor --tag "v${{ inputs.anchor-version  }}" anchor-cli --force
         anchor --version
 
     - name: Build programs
