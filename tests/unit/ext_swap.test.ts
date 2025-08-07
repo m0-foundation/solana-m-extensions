@@ -97,6 +97,24 @@ describe("extension swap tests", () => {
     ),
   };
 
+  // Helper functions for deriving PDAs
+  const getVault = (p: PublicKey) =>
+    PublicKey.findProgramAddressSync([Buffer.from("m_vault")], p)[0];
+
+  const getMEarnerAccount = (vaultMTokenAccount: PublicKey) =>
+    PublicKey.findProgramAddressSync(
+      [Buffer.from("earner"), vaultMTokenAccount.toBuffer()],
+      EARN_PROGRAM_ID
+    )[0];
+
+  const getVaultMTokenAccount = (vault: PublicKey) =>
+    getAssociatedTokenAddressSync(
+      mMint.publicKey,
+      vault,
+      true,
+      TOKEN_2022_PROGRAM_ID
+    );
+
   // Helper for sending transactions and checking errors
   const sendTransaction = async (
     txn: Transaction | Promise<Transaction>,
@@ -207,9 +225,6 @@ describe("extension swap tests", () => {
           .transaction(),
         [admin]
       );
-
-      const getVault = (p: PublicKey) =>
-        PublicKey.findProgramAddressSync([Buffer.from("m_vault")], p)[0];
 
       // Add all vaults as earners
       const earnerMerkleTree = new MerkleTree([
@@ -418,6 +433,9 @@ describe("extension swap tests", () => {
             toExtProgram: extProgramA.publicKey,
             toMint: mintA.publicKey,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
           })
           .transaction(),
         [swapper],
@@ -450,6 +468,9 @@ describe("extension swap tests", () => {
             toExtProgram: extProgramA.publicKey,
             toMint: mintA.publicKey,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
           })
           .transaction(),
         [swapper],
@@ -482,6 +503,9 @@ describe("extension swap tests", () => {
             toExtProgram: extProgramA.publicKey,
             toMint: mintA.publicKey,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
           })
           .transaction(),
         [swapper]
@@ -504,6 +528,9 @@ describe("extension swap tests", () => {
             fromExtProgram: extProgramA.publicKey,
             fromMint: mintA.publicKey,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
           })
           .transaction(),
         [swapper],
@@ -532,6 +559,9 @@ describe("extension swap tests", () => {
             fromExtProgram: extProgramA.publicKey,
             fromMint: mintA.publicKey,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
           })
           .transaction(),
         [swapper]
@@ -559,6 +589,12 @@ describe("extension swap tests", () => {
             fromTokenAccount: accounts.ataA,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramB.publicKey))
+            ),
           })
           .transaction(),
         [swapper]
@@ -587,6 +623,12 @@ describe("extension swap tests", () => {
             fromTokenAccount: accounts.ataA,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramB.publicKey))
+            ),
           })
           .transaction(),
         [swapper],
@@ -613,6 +655,12 @@ describe("extension swap tests", () => {
             fromTokenAccount: accounts.ataA,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramB.publicKey))
+            ),
           })
           .transaction(),
         [swapper],
@@ -637,6 +685,12 @@ describe("extension swap tests", () => {
             fromTokenAccount: accounts.ataA,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramB.publicKey))
+            ),
           })
           .remainingAccounts([
             {
@@ -677,6 +731,12 @@ describe("extension swap tests", () => {
             fromTokenAccount: accounts.ataA,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramC.publicKey))
+            ),
           })
           .transaction(),
         [swapper],
@@ -701,6 +761,12 @@ describe("extension swap tests", () => {
             fromTokenAccount: accounts.ataA,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramC.publicKey))
+            ),
           })
           .remainingAccounts([
             {
@@ -732,6 +798,12 @@ describe("extension swap tests", () => {
             fromTokenAccount: accounts.ataA,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramC.publicKey))
+            ),
           })
           .remainingAccounts([
             {
@@ -774,6 +846,12 @@ describe("extension swap tests", () => {
             fromTokenAccount: accounts.ataB,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramB.publicKey))
+            ),
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramC.publicKey))
+            ),
           })
           .transaction(),
         [swapper],
@@ -810,6 +888,9 @@ describe("extension swap tests", () => {
             toExtProgram: extProgramA.publicKey,
             toMint: mintA.publicKey,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
           })
           .transaction(),
         [swapper],
@@ -830,6 +911,9 @@ describe("extension swap tests", () => {
             toExtProgram: extProgramA.publicKey,
             toMint: mintA.publicKey,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
           })
           .transaction(),
         [swapper, admin],
@@ -858,6 +942,9 @@ describe("extension swap tests", () => {
             toExtProgram: extProgramA.publicKey,
             toMint: mintA.publicKey,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
           })
           .transaction(),
         [swapper, admin]
@@ -881,6 +968,12 @@ describe("extension swap tests", () => {
             fromTokenAccount: accounts.ataB,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramB.publicKey))
+            ),
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
           })
           .transaction(),
         [swapper, admin],
@@ -905,6 +998,12 @@ describe("extension swap tests", () => {
             fromTokenAccount: accounts.ataB,
             toTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramB.publicKey))
+            ),
+            toMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
           })
           .transaction(),
         [swapper, admin]
@@ -927,6 +1026,9 @@ describe("extension swap tests", () => {
             mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
           })
           .transaction(),
         [swapper, cosigner],
@@ -978,6 +1080,9 @@ describe("extension swap tests", () => {
             mMint: mMint.publicKey,
             mTokenProgram: TOKEN_2022_PROGRAM_ID,
             fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+            fromMEarnerAccount: getMEarnerAccount(
+              getVaultMTokenAccount(getVault(extProgramA.publicKey))
+            ),
           })
           .transaction(),
         [swapper, cosigner]
