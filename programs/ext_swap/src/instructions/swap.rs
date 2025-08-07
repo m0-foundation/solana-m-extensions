@@ -125,7 +125,7 @@ pub struct Swap<'info> {
 
     /// CHECK: This is validated by the CPI to the to_ext_program
     pub from_m_earner_account: UncheckedAccount<'info>,
-    
+
     /// CHECK: This is validated by the CPI to the to_ext_program
     pub to_m_earner_account: UncheckedAccount<'info>,
 

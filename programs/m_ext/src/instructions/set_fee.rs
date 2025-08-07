@@ -2,7 +2,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use earn::{
-    state::{EARNER_SEED,Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
+    state::{Global as EarnGlobal, EARNER_SEED, GLOBAL_SEED as EARN_GLOBAL_SEED},
     ID as EARN_PROGRAM,
 };
 
@@ -104,7 +104,7 @@ impl SetFee<'_> {
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[signer_bump]]],
             &ctx.accounts.ext_token_program,
-            &ctx.accounts.m_earner_account
+            &ctx.accounts.m_earner_account,
         )?;
 
         // Set the new fee

@@ -10,7 +10,7 @@ use crate::{
     },
 };
 use earn::{
-    state::{EARNER_SEED, Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
+    state::{Global as EarnGlobal, EARNER_SEED, GLOBAL_SEED as EARN_GLOBAL_SEED},
     ID as EARN_PROGRAM,
 };
 
@@ -133,7 +133,7 @@ impl Unwrap<'_> {
             &ctx.accounts.ext_mint_authority,
             authority_seeds,
             &ctx.accounts.ext_token_program,
-            &ctx.accounts.m_earner_account
+            &ctx.accounts.m_earner_account,
         )?;
 
         // Calculate the principal amount of ext tokens to burn

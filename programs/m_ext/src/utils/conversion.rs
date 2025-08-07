@@ -46,7 +46,7 @@ pub fn sync_multiplier<'info>(
 
             // Check if the extension is earning, i.e. that it has an active earner account.
             // If it is earning, update the M index and the multiplier.
-            // If not, only update the M index. The reason is so that yield accrual can 
+            // If not, only update the M index. The reason is so that yield accrual can
             // start again from a future point without issuing retroactive yield.
             if !m_earner_account.data_is_empty() {
                 // Update the multiplier and timestamp in the mint account
@@ -78,7 +78,7 @@ pub fn sync_multiplier<'info>(
 
                 // Return the current ext multiplier
                 return Ok(scaled_ui_config.new_multiplier.into());
-            }            
+            }
         } else {
             // Ext tokens are 1:1 with M tokens and we don't need to sync this
             return Ok(1.0);
