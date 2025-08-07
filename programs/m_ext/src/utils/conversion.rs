@@ -26,6 +26,7 @@ pub fn sync_multiplier<'info>(
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
     token_program: &Program<'info, Token2022>,
+    m_earner_account: &AccountInfo<'info>,
 ) -> Result<f64> {
     cfg_if! {
         if #[cfg(feature = "scaled-ui")] {
@@ -43,28 +44,41 @@ pub fn sync_multiplier<'info>(
                 return Ok(multiplier);
             }
 
-            // Update the multiplier and timestamp in the mint account
-            invoke_signed(
-                &spl_token_2022::extension::scaled_ui_amount::instruction::update_multiplier(
-                    &token_program.key(),
-                    &ext_mint.key(),
-                    &authority.key(),
-                    &[],
-                    multiplier,
-                    timestamp,
-                )?,
-                &[ext_mint.to_account_info(), authority.clone()],
-                authority_seeds,
-            )?;
+            // Check if the extension is earning, i.e. that it has an active earner account.
+            // If it is earning, update the M index and the multiplier.
+            // If not, only update the M index. The reason is so that yield accrual can 
+            // start again from a future point without issuing retroactive yield.
+            if !m_earner_account.data_is_empty() {
+                // Update the multiplier and timestamp in the mint account
+                invoke_signed(
+                    &spl_token_2022::extension::scaled_ui_amount::instruction::update_multiplier(
+                        &token_program.key(),
+                        &ext_mint.key(),
+                        &authority.key(),
+                        &[],
+                        multiplier,
+                        timestamp,
+                    )?,
+                    &[ext_mint.to_account_info(), authority.clone()],
+                    authority_seeds,
+                )?;
 
-            // Reload the mint account so the new multiplier is reflected
-            ext_mint.reload()?;
+                // Reload the mint account so the new multiplier is reflected
+                ext_mint.reload()?;
 
-            // Update the last m index and last ext index in the global account
-            ext_global_account.yield_config.last_m_index = m_earn_global_account.index;
-            ext_global_account.yield_config.last_ext_index = (multiplier * INDEX_SCALE_F64).floor() as u64;
+                // Update the last m index and last ext index in the global account
+                ext_global_account.yield_config.last_m_index = m_earn_global_account.index;
+                ext_global_account.yield_config.last_ext_index = (multiplier * INDEX_SCALE_F64).floor() as u64;
 
-            return Ok(multiplier);
+                // Return the latest multiplier
+                return Ok(multiplier);
+            } else {
+                // If not earning, just update the last m index
+                ext_global_account.yield_config.last_m_index = m_earn_global_account.index;
+
+                // Return the current ext multiplier
+                return Ok(scaled_ui_config.new_multiplier.into());
+            }            
         } else {
             // Ext tokens are 1:1 with M tokens and we don't need to sync this
             return Ok(1.0);

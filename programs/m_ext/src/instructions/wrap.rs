@@ -10,7 +10,7 @@ use crate::{
     },
 };
 use earn::{
-    state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
+    state::{EARNER_SEED, Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
     ID as EARN_PROGRAM,
 };
 
@@ -82,6 +82,16 @@ pub struct Wrap<'info> {
     )]
     pub to_ext_token_account: InterfaceAccount<'info, TokenAccount>,
 
+    /// CHECK: We partially validate this account is the correct address
+    /// via the seed, but we delay full validation to the handler
+    /// so we can handle cases where the account has been closed.
+    #[account(
+        seeds = [EARNER_SEED, vault_m_token_account.key().as_ref()],
+        seeds::program = EARN_PROGRAM,
+        bump,
+    )]
+    pub m_earner_account: UncheckedAccount<'info>,
+
     // we have duplicate entries for the token2022 program since the interface needs to be consistent
     // but we want to leave open the possibility that either may not have to be token2022 in the future
     pub m_token_program: Program<'info, Token2022>,
@@ -123,6 +133,7 @@ impl Wrap<'_> {
             &ctx.accounts.ext_mint_authority,
             authority_seeds,
             &ctx.accounts.ext_token_program,
+            &ctx.accounts.m_earner_account
         )?;
 
         // Transfer the amount of m tokens from the user to the m vault
