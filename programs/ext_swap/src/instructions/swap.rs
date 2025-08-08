@@ -152,11 +152,7 @@ impl<'info> Swap<'info> {
         remaining_accounts_split_idx: usize,
     ) -> Result<()> {
         for ext_program in [&self.from_ext_program, &self.to_ext_program] {
-            if !self
-                .swap_global
-                .whitelisted_extensions
-                .contains(ext_program.key)
-            {
+            if !self.swap_global.is_extension_whitelisted(ext_program.key) {
                 return err!(SwapError::InvalidExtension);
             }
         }

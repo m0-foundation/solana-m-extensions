@@ -38,9 +38,18 @@ describe("extension swap tests (new)", () => {
   describe("configure swap program", () => {
     it("should whitelist extension programs", async () => {
       // Whitelist all extension programs
-      await $.whitelistExtension($.getExtensionProgramId("extA"));
-      await $.whitelistExtension($.getExtensionProgramId("extB"));
-      await $.whitelistExtension($.getExtensionProgramId("extC"));
+      await $.whitelistExtension(
+        $.getExtensionProgramId("extA"),
+        $.getExtensionMint("mintA")
+      );
+      await $.whitelistExtension(
+        $.getExtensionProgramId("extB"),
+        $.getExtensionMint("mintB")
+      );
+      await $.whitelistExtension(
+        $.getExtensionProgramId("extC"),
+        $.getExtensionMint("mintC")
+      );
 
       // Verify extensions are whitelisted
       const swapGlobal = await $.swapProgram.account.swapGlobal.fetch(
@@ -125,7 +134,59 @@ describe("extension swap tests (new)", () => {
       $.svm.expireBlockhash();
 
       // Re-add for later tests
-      await $.whitelistExtension($.getExtensionProgramId("extA"));
+      await $.whitelistExtension(
+        $.getExtensionProgramId("extA"),
+        $.getExtensionMint("mintA")
+      );
+    });
+
+    it("should reset whitelists", async () => {
+      let swapGlobal = await $.swapProgram.account.swapGlobal.fetch(
+        $.getSwapGlobalAccount()
+      );
+      expect(swapGlobal.whitelistedExtensions).toHaveLength(3);
+      expect(swapGlobal.whitelistedUnwrappers).toHaveLength(1);
+
+      // Reset whitelists
+      await $.swapProgram.methods
+        .resetWhitelists()
+        .accounts({
+          admin: $.admin.publicKey,
+        })
+        .signers([$.admin])
+        .rpc();
+
+      swapGlobal = await $.swapProgram.account.swapGlobal.fetch(
+        $.getSwapGlobalAccount()
+      );
+      expect(swapGlobal.whitelistedExtensions).toHaveLength(0);
+      expect(swapGlobal.whitelistedUnwrappers).toHaveLength(0);
+
+      // Expire the blockhash before re-adding
+      $.svm.expireBlockhash();
+
+      // Re-add for later tests
+      await $.whitelistExtension(
+        $.getExtensionProgramId("extA"),
+        $.getExtensionMint("mintA")
+      );
+      await $.whitelistExtension(
+        $.getExtensionProgramId("extB"),
+        $.getExtensionMint("mintB")
+      );
+      await $.whitelistExtension(
+        $.getExtensionProgramId("extC"),
+        $.getExtensionMint("mintC")
+      );
+      await $.whitelistUnwrapper($.swapperKeypair.publicKey);
+
+      swapGlobal = await $.swapProgram.account.swapGlobal.fetch(
+        $.getSwapGlobalAccount()
+      );
+      expect(swapGlobal.whitelistedExtensions).toHaveLength(3);
+      expect(swapGlobal.whitelistedUnwrappers).toHaveLength(1);
+
+      $.svm.expireBlockhash();
     });
 
     it("should add wrap authorities to extensions", async () => {
@@ -351,7 +412,10 @@ describe("extension swap tests (new)", () => {
 
     it("should fail when ext_c expects remaining account but none provided", async () => {
       // Ensure extension C is whitelisted
-      await $.whitelistExtension($.getExtensionProgramId("extC"));
+      await $.whitelistExtension(
+        $.getExtensionProgramId("extC"),
+        $.getExtensionMint("mintC")
+      );
 
       const accounts = await getTokenAccounts();
 
@@ -486,7 +550,10 @@ describe("extension swap tests (new)", () => {
       );
 
       // Re-add for later tests
-      await $.whitelistExtension($.getExtensionProgramId("extA"));
+      await $.whitelistExtension(
+        $.getExtensionProgramId("extA"),
+        $.getExtensionMint("mintA")
+      );
     });
   });
 

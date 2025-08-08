@@ -2105,12 +2105,16 @@ export class ExtensionSwapTest extends ExtensionTestBase {
   }
 
   // Helper methods for swap testing
-  public async whitelistExtension(extensionProgramId: PublicKey) {
+  public async whitelistExtension(
+    extensionProgramId: PublicKey,
+    mint: PublicKey
+  ) {
     await this.swapProgram.methods
       .whitelistExtension()
       .accountsPartial({
         admin: this.admin.publicKey,
         extProgram: extensionProgramId,
+        extMint: mint,
       })
       .signers([this.admin])
       .rpc();
