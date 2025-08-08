@@ -1,6 +1,5 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::Mint;
-use m_ext::state::EXT_GLOBAL_SEED;
 
 use crate::{
     errors::SwapError,
@@ -31,15 +30,6 @@ pub struct WhitelistExt<'info> {
     /// CHECK: This account is validated in the `validate` function
     pub ext_program: AccountInfo<'info>,
 
-    #[account(
-        mut,
-        seeds = [EXT_GLOBAL_SEED],
-        seeds::program = ext_program.key(),
-        bump,
-    )]
-    /// CHECK: PDA that is owned by the extension program
-    pub ext_global: AccountInfo<'info>,
-
     #[account(mut)]
     pub ext_mint: InterfaceAccount<'info, Mint>,
 }
@@ -56,14 +46,6 @@ impl WhitelistExt<'_> {
 
         // Check that the extension program is a valid program
         if !self.ext_program.executable {
-            return err!(SwapError::InvalidExtension);
-        }
-
-        // Check that the mint matches the extension global account
-        let data = self.ext_global.try_borrow_data()?;
-        let mint = Pubkey::new_from_array(data[40..72].try_into().unwrap());
-
-        if !self.ext_mint.key().eq(&mint) {
             return err!(SwapError::InvalidExtension);
         }
 
