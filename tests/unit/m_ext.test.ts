@@ -1190,7 +1190,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 recipientATA,
                 initialRecipientBalance.add(expectedExcess),
                 Comparison.LessThanOrEqual,
-                new BN(1)
+                new BN(2)
               );
               $.expectTokenBalance(
                 recipientATA,

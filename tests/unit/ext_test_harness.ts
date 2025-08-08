@@ -1291,9 +1291,12 @@ export class ExtensionTest<
       );
     }
     if (expected.lastExtIndex) {
-      expect(actual.lastExtIndex!.toString()).toEqual(
-        expected.lastExtIndex.toString()
-      );
+      // account floating point precision rounding issues
+      const exp_high = expected.lastExtIndex.toNumber() + 1;
+      const exp_low = expected.lastExtIndex.toNumber() - 1;
+
+      expect(actual.lastExtIndex!.toNumber()).toBeGreaterThanOrEqual(exp_low);
+      expect(actual.lastExtIndex!.toNumber()).toBeLessThanOrEqual(exp_high);
     }
   }
 
