@@ -98,6 +98,18 @@ pub mod m_ext {
         ClaimFees::handler(ctx)
     }
 
+    pub fn transfer_admin(ctx: Context<TransferAdmin>, new_admin: Pubkey) -> Result<()> {
+        TransferAdmin::handler(ctx, new_admin)
+    }
+
+    pub fn accept_admin(ctx: Context<AcceptAdmin>) -> Result<()> {
+        AcceptAdmin::handler(ctx)
+    }
+
+    pub fn revoke_admin_transfer(ctx: Context<RevokeAdminTransfer>) -> Result<()> {
+        RevokeAdminTransfer::handler(ctx)
+    }
+
     #[cfg(feature = "crank")]
     pub fn set_earn_authority(
         ctx: Context<SetEarnAuthority>,
@@ -175,5 +187,11 @@ pub mod m_ext {
     #[cfg(feature = "crank")]
     pub fn set_recipient(ctx: Context<SetRecipient>) -> Result<()> {
         SetRecipient::handler(ctx)
+    }
+
+    // Open instructions (Crank variant only)
+    #[cfg(feature = "crank")]
+    pub fn remove_orphaned_earner(ctx: Context<RemoveOrphanedEarner>) -> Result<()> {
+        RemoveOrphanedEarner::handler(ctx)
     }
 }

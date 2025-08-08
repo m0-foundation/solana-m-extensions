@@ -12,6 +12,8 @@ import {
 import {
   ACCOUNT_SIZE,
   ASSOCIATED_TOKEN_PROGRAM_ID,
+  AccountState,
+  AuthorityType,
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
   createInitializeMintInstruction,
@@ -22,30 +24,31 @@ import {
   getAccountLen,
   getMint,
   getMintLen,
-  getMinimumBalanceForRentExemptMultisig,
   getAssociatedTokenAddressSync,
   createInitializeAccountInstruction,
-  createInitializeMultisigInstruction,
+  createInitializeDefaultAccountStateInstruction,
+  createInitializePermanentDelegateInstruction,
+  createInitializeScaledUiAmountConfigInstruction,
   createMintToCheckedInstruction,
+  createSetAuthorityInstruction,
+  createUpdateDefaultAccountStateInstruction,
   ExtensionType,
   getExtensionData,
   createApproveCheckedInstruction,
 } from "@solana/spl-token";
 import {
-  Earn,
-  EARN_IDL,
-  PROGRAM_ID as EARN_PROGRAM_ID,
-  MerkleTree,
-  ProofElement,
-} from "@m0-foundation/solana-m-sdk";
-import {
   ZERO_WORD,
   InitializeScaledUiAmountConfigInstructionData,
   ScaledUiAmountConfig,
   ScaledUiAmountConfigLayout,
+  MerkleTree,
+  ProofElement,
 } from "../test-utils";
 import { MExt as ScaledUIExt } from "../../target/types/scaled_ui";
 import { MExt as NoYieldExt } from "../../target/types/no_yield";
+import { MExt as CrankExt } from "../../target/types/crank";
+import { Earn } from "../programs/earn";
+import { ExtSwap } from "../../target/types/ext_swap";
 
 export enum Comparison {
   Equal,
@@ -58,22 +61,36 @@ export enum Comparison {
 // Type definitions for accounts to make it easier to do comparisons
 
 export enum Variant {
-  ScaledUiAmount = "scaled_ui",
   NoYield = "no_yield",
+  ScaledUi = "scaled_ui",
+  Crank = "crank",
 }
 
-type MExt = ScaledUIExt | NoYieldExt;
+type MExt = NoYieldExt | ScaledUIExt | CrankExt;
 
-export type YieldConfig<V extends Variant> = V extends Variant.ScaledUiAmount
+type YieldVariant = { noYield: {} } | { scaledUi: {} } | { crank: {} };
+
+export type YieldConfig<V extends Variant> = V extends Variant.ScaledUi
   ? {
+      yieldVariant?: YieldVariant;
       feeBps?: BN;
       lastMIndex?: BN;
       lastExtIndex?: BN;
     }
-  : {};
+  : V extends Variant.Crank
+  ? {
+      yieldVariant?: YieldVariant;
+      earnAuthority?: PublicKey;
+      index?: BN;
+      timestamp?: BN;
+    }
+  : {
+      yieldVariant?: YieldVariant;
+    };
 
 export type ExtGlobal<V extends Variant> = {
   admin?: PublicKey;
+  pendingAdmin?: PublicKey | null;
   extMint?: PublicKey;
   mMint?: PublicKey;
   mEarnGlobalAccount?: PublicKey;
@@ -84,31 +101,40 @@ export type ExtGlobal<V extends Variant> = {
   yieldConfig?: YieldConfig<V>;
 };
 
+export type EarnManager = {
+  earnManager?: PublicKey;
+  isActive?: boolean;
+  feeBps?: BN;
+  feeTokenAccount?: PublicKey | null;
+  bump?: number;
+};
+
+export type Earner = {
+  lastClaimIndex?: BN;
+  lastClaimTimestamp?: BN;
+  bump?: number;
+  user?: PublicKey;
+  userTokenAccount?: PublicKey;
+  earnManager?: PublicKey;
+  recipientTokenAccount?: PublicKey | null;
+};
+
 const PROGRAM_ID = new PublicKey(
   "3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da"
 );
 
-// Test harness for the MExt program that encapsulates all the necessary setup and helper functions to test a given program variant
-export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
-  public variant: V;
+class ExtensionTestBase {
   public svm: LiteSVM;
   public provider: LiteSVMProvider;
-  public accounts: Record<string, PublicKey | null> = {};
   public earn: Program<Earn>;
-  public ext: Program<MExt>;
   public admin: Keypair;
   public mMint: Keypair;
-  public extMint: Keypair;
   public mMintAuthority: Keypair;
-  public earnAuthority: Keypair;
-  public wrapAuthority: Keypair;
   public nonAdmin: Keypair;
-  public nonWrapAuthority: Keypair;
   public mEarnerList: PublicKey[] = [];
 
-  constructor(variant: V, addresses: PublicKey[]) {
-    this.variant = variant;
-    const M_EXT_IDL = require(`../../target/idl/${variant}.json`);
+  constructor(addresses: PublicKey[]) {
+    const EARN_IDL = require("../programs/earn.json");
 
     // Initialize the SVM instance with all necessary configurations
     this.svm = new LiteSVM()
@@ -119,7 +145,10 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       .withBlockhashCheck(true); // Optional: disable blockhash checking for tests
 
     // Add the earn program to the SVM instance
-    this.svm.addProgramFromFile(EARN_PROGRAM_ID, "tests/programs/earn.so");
+    this.svm.addProgramFromFile(
+      new PublicKey(EARN_IDL.address),
+      "tests/programs/earn.so"
+    );
 
     // Replace the default token2022 program with the (newer) one from the workspace
     this.svm.addProgramFromFile(
@@ -127,32 +156,21 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       "tests/programs/spl_token_2022.so"
     );
 
-    // Add the ext program to the SVM instance
-    this.svm.addProgramFromFile(PROGRAM_ID, `target/deploy/${variant}.so`);
-
     // Create an anchor provider from the liteSVM instance
     this.provider = new LiteSVMProvider(this.svm);
 
     // Create program instances
     this.earn = new Program<Earn>(EARN_IDL, this.provider);
-    this.ext = new Program<MExt>(M_EXT_IDL, this.provider);
 
     // Generate keypairs for various roles and fund them
     this.admin = new Keypair();
     this.mMint = new Keypair();
-    this.extMint = new Keypair();
     this.mMintAuthority = new Keypair();
-    this.earnAuthority = new Keypair();
-    this.wrapAuthority = new Keypair();
     this.nonAdmin = new Keypair();
-    this.nonWrapAuthority = new Keypair();
 
     addresses = addresses.concat([
       this.admin.publicKey,
-      this.earnAuthority.publicKey,
-      this.wrapAuthority.publicKey,
       this.nonAdmin.publicKey,
-      this.nonWrapAuthority.publicKey,
     ]);
 
     for (const address of addresses) {
@@ -160,36 +178,12 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     }
   }
 
-  public async init(initialSupply: BN, initialIndex: BN, claimCooldown: BN) {
+  async _init(initialSupply: BN, initialIndex: BN) {
     // Create the M token mint
-    await this.createMintWithMultisig(this.mMint, this.mMintAuthority);
-
-    // Create the Ext token mint
-    switch (this.variant) {
-      case Variant.ScaledUiAmount:
-        await this.createScaledUiMint(this.extMint, this.getExtMintAuthority());
-        break;
-      case Variant.NoYield:
-        await this.createMint(this.extMint, this.getExtMintAuthority());
-        break;
-      default:
-        throw new Error("Unsupported variant for MExt");
-    }
-
-    // Mint some m tokens to have a non-zero supply
-    await this.mintM(this.admin.publicKey, initialSupply);
+    await this.createMMint(this.mMint, initialSupply);
 
     // Initialize the earn program
-    await this.initializeEarn(
-      this.mMint.publicKey,
-      this.earnAuthority.publicKey,
-      initialIndex,
-      claimCooldown
-    );
-
-    // Add the m vault as an M earner
-    const mVault = this.getMVault();
-    await this.addMEarner(mVault);
+    await this.initializeEarn(initialIndex);
   }
 
   // Helper functions for token operations and checks on the SVM instance
@@ -197,14 +191,15 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     tokenAccount: PublicKey,
     expectedBalance: BN,
     op: Comparison = Comparison.Equal,
-    tolerance?: BN
+    tolerance?: BN,
+    use2022: boolean = true
   ) {
     const balance = (
       await getAccount(
         this.provider.connection,
         tokenAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
       )
     ).amount;
 
@@ -264,23 +259,20 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     op: Comparison = Comparison.Equal,
     tolerance?: BN
   ) {
-    const rawBalance = (
-      await getAccount(
-        this.provider.connection,
-        tokenAccount,
-        undefined,
-        TOKEN_2022_PROGRAM_ID
-      )
-    ).amount;
+    const account = await getAccount(
+      this.provider.connection,
+      tokenAccount,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
 
-    const multiplier = (
-      await this.getScaledUiAmountConfig(this.extMint.publicKey)
-    ).multiplier;
+    const multiplier = (await this.getScaledUiAmountConfig(account.mint))
+      .multiplier;
 
     const scale = 1e12;
 
     const uiBalance =
-      (rawBalance * BigInt(Math.floor(multiplier * scale))) / BigInt(scale);
+      (account.amount * BigInt(Math.floor(multiplier * scale))) / BigInt(scale);
 
     switch (op) {
       case Comparison.GreaterThan:
@@ -437,13 +429,17 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     return { tokenAccount: tokenAccount.publicKey };
   }
 
-  public async closeTokenAccount(owner: Keypair, tokenAccount: PublicKey) {
+  public async closeTokenAccount(
+    owner: Keypair,
+    tokenAccount: PublicKey,
+    use2022: boolean = true
+  ) {
     const closeIx = createCloseAccountInstruction(
       tokenAccount,
       owner.publicKey,
       owner.publicKey,
       [],
-      TOKEN_2022_PROGRAM_ID
+      use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
     );
 
     let tx = new Transaction().add(closeIx);
@@ -593,59 +589,112 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     return ScaledUiAmountConfigLayout.decode(extensionData);
   }
 
-  public async createMintWithMultisig(mint: Keypair, mintAuthority: Keypair) {
-    // Create and initialize multisig mint authority on the token program
-    const multisigLen = 355;
-    // const multisigLamports = await provider.connection.getMinimumBalanceForRentExemption(multisigLen);
-    const multisigLamports = await getMinimumBalanceForRentExemptMultisig(
-      this.provider.connection
+  public async createMMint(mint: Keypair, initialSupply: BN) {
+    // mint size with extensions
+    const mintLen = getMintLen([
+      ExtensionType.ScaledUiAmountConfig,
+      ExtensionType.DefaultAccountState,
+      ExtensionType.PermanentDelegate,
+    ]);
+
+    const lamports =
+      await this.provider.connection.getMinimumBalanceForRentExemption(mintLen);
+
+    const earnAuth = this.getEarnGlobalAccount();
+
+    const instructions = [
+      SystemProgram.createAccount({
+        fromPubkey: this.admin.publicKey,
+        newAccountPubkey: mint.publicKey,
+        space: mintLen,
+        lamports,
+        programId: TOKEN_2022_PROGRAM_ID,
+      }),
+      createInitializeScaledUiAmountConfigInstruction(
+        mint.publicKey,
+        earnAuth,
+        1.0,
+        TOKEN_2022_PROGRAM_ID
+      ),
+      createInitializeDefaultAccountStateInstruction(
+        mint.publicKey,
+        AccountState.Initialized,
+        TOKEN_2022_PROGRAM_ID
+      ),
+      createInitializePermanentDelegateInstruction(
+        mint.publicKey,
+        earnAuth,
+        TOKEN_2022_PROGRAM_ID
+      ),
+      createInitializeMintInstruction(
+        mint.publicKey,
+        6,
+        this.admin.publicKey,
+        this.admin.publicKey,
+        TOKEN_2022_PROGRAM_ID
+      ),
+    ];
+
+    const tokenAccount = getAssociatedTokenAddressSync(
+      mint.publicKey,
+      this.admin.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID
     );
 
-    const createMultisigAccount = SystemProgram.createAccount({
-      fromPubkey: this.admin.publicKey,
-      newAccountPubkey: mintAuthority.publicKey,
-      space: multisigLen,
-      lamports: multisigLamports,
-      programId: TOKEN_2022_PROGRAM_ID,
-    });
+    // Mint initial supply of tokens to admin
+    instructions.push(
+      createAssociatedTokenAccountInstruction(
+        this.admin.publicKey,
+        tokenAccount,
+        this.admin.publicKey,
+        mint.publicKey,
+        TOKEN_2022_PROGRAM_ID
+      ),
+      createMintToCheckedInstruction(
+        mint.publicKey,
+        tokenAccount,
+        this.admin.publicKey,
+        initialSupply.toNumber(),
+        6,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      )
+    );
 
-    const earnTokenAuthority = this.getEarnTokenAuthority();
+    // Set the default account state to frozen
+    instructions.push(
+      createUpdateDefaultAccountStateInstruction(
+        mint.publicKey,
+        AccountState.Frozen,
+        this.admin.publicKey,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      )
+    );
 
-    const initializeMultisig = createInitializeMultisigInstruction(
-      mintAuthority.publicKey, // account
-      [this.admin, earnTokenAuthority],
-      1,
-      TOKEN_2022_PROGRAM_ID
+    // Set authorities
+    instructions.push(
+      createSetAuthorityInstruction(
+        mint.publicKey,
+        this.admin.publicKey,
+        AuthorityType.FreezeAccount,
+        earnAuth,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      ),
+      createSetAuthorityInstruction(
+        mint.publicKey,
+        this.admin.publicKey,
+        AuthorityType.MintTokens,
+        this.mMintAuthority.publicKey,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      )
     );
 
     let tx = new Transaction();
-    tx.add(createMultisigAccount, initializeMultisig);
-
-    await this.provider.sendAndConfirm!(tx, [this.admin, mintAuthority]);
-
-    // Create and initialize mint account
-
-    const mintLen = getMintLen([]);
-    const mintLamports =
-      await this.provider.connection.getMinimumBalanceForRentExemption(mintLen);
-    const createMintWithMultisigAccount = SystemProgram.createAccount({
-      fromPubkey: this.admin.publicKey,
-      newAccountPubkey: mint.publicKey,
-      space: mintLen,
-      lamports: mintLamports,
-      programId: TOKEN_2022_PROGRAM_ID,
-    });
-
-    const initializeMint = createInitializeMintInstruction(
-      mint.publicKey,
-      6, // decimals
-      mintAuthority.publicKey, // mint authority
-      null, // freeze authority
-      TOKEN_2022_PROGRAM_ID
-    );
-
-    tx = new Transaction();
-    tx.add(createMintWithMultisigAccount, initializeMint);
+    tx.add(...instructions);
 
     await this.provider.sendAndConfirm!(tx, [this.admin, mint]);
 
@@ -656,8 +705,6 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     if (!mintInfo) {
       throw new Error("Mint account was not created");
     }
-
-    return mint.publicKey;
   }
 
   public async mintM(to: PublicKey, amount: BN) {
@@ -667,24 +714,28 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       this.mMint.publicKey,
       toATA,
       this.mMintAuthority.publicKey,
-      BigInt(amount.toString()),
+      amount.toNumber(),
       6,
-      [this.admin],
+      undefined,
       TOKEN_2022_PROGRAM_ID
     );
 
     let tx = new Transaction();
     tx.add(mintToInstruction);
-    await this.provider.sendAndConfirm!(tx, [this.admin]);
+    await this.provider.sendAndConfirm!(tx, [this.mMintAuthority]);
   }
 
-  public async getTokenBalance(tokenAccount: PublicKey) {
+  public async getTokenBalance(
+    tokenAccount: PublicKey,
+    use2022: boolean = true
+  ) {
     const tokenAccountInfo = await getAccount(
       this.provider.connection,
       tokenAccount,
       undefined,
-      TOKEN_2022_PROGRAM_ID
+      use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
     );
+
     if (!tokenAccountInfo) {
       throw new Error("Account not created");
     }
@@ -717,7 +768,25 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     return new BN(uiBalance.toString());
   }
 
-  public async getTokenSupply(mint: PublicKey) {
+  async getTokenSupply(
+    mint: PublicKey,
+    multiplier: number = 1.0,
+    use2022: boolean = true
+  ) {
+    const mintInfo = await getMint(
+      this.provider.connection,
+      mint,
+      undefined,
+      use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
+    );
+    if (!mintInfo) {
+      throw new Error("Mint not found");
+    }
+
+    return new BN(Math.floor(Number(mintInfo.supply) * multiplier));
+  }
+
+  public async toUiAmount(mint: PublicKey, principal: BN): Promise<BN> {
     const mintInfo = await getMint(
       this.provider.connection,
       mint,
@@ -728,18 +797,47 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       throw new Error("Mint not found");
     }
 
-    return new BN(
-      Math.floor(Number(mintInfo.supply) * (await this.getCurrentMultiplier()))
+    const scaledUiAmountConfig = await this.getScaledUiAmountConfig(mint);
+    const scale = new BN(1e12);
+    const multiplier = scaledUiAmountConfig.multiplier;
+
+    return principal
+      .mul(new BN(Math.floor(multiplier * scale.toNumber())))
+      .div(scale);
+  }
+
+  public async toPrincipal(mint: PublicKey, uiAmount: BN): Promise<BN> {
+    const mintInfo = await getMint(
+      this.provider.connection,
+      mint,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
     );
+    if (!mintInfo) {
+      throw new Error("Mint not found");
+    }
+
+    const scaledUiAmountConfig = await this.getScaledUiAmountConfig(mint);
+    const scale = new BN(1e12);
+    const multiplier = scaledUiAmountConfig.multiplier;
+
+    return uiAmount
+      .mul(scale)
+      .div(new BN(Math.floor(multiplier * scale.toNumber())));
   }
 
   public async approve(
     source: Keypair,
     delegate: PublicKey,
     mint: PublicKey,
-    amount: BN
+    amount: BN,
+    use2022: boolean = true
   ) {
-    const sourceATA: PublicKey = await this.getATA(mint, source.publicKey);
+    const sourceATA: PublicKey = await this.getATA(
+      mint,
+      source.publicKey,
+      use2022
+    );
 
     const approveIx = createApproveCheckedInstruction(
       sourceATA,
@@ -749,7 +847,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       BigInt(amount.toString()),
       6, // decimals
       [],
-      TOKEN_2022_PROGRAM_ID
+      use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
     );
 
     let tx = new Transaction();
@@ -791,70 +889,6 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     return earnTokenAuthority;
   }
 
-  public getExtGlobalAccount(): PublicKey {
-    const [globalAccount] = PublicKey.findProgramAddressSync(
-      [Buffer.from("global")],
-      this.ext.programId
-    );
-
-    return globalAccount;
-  }
-
-  public getExtMintAuthority(): PublicKey {
-    const [extMintAuthority] = PublicKey.findProgramAddressSync(
-      [Buffer.from("mint_authority")],
-      this.ext.programId
-    );
-
-    return extMintAuthority;
-  }
-
-  public getMVault(): PublicKey {
-    const [mVault] = PublicKey.findProgramAddressSync(
-      [Buffer.from("m_vault")],
-      this.ext.programId
-    );
-
-    return mVault;
-  }
-
-  public getMEarnerAccount(tokenAccount: PublicKey): PublicKey {
-    const [earnerAccount] = PublicKey.findProgramAddressSync(
-      [Buffer.from("earner"), tokenAccount.toBuffer()],
-      this.earn.programId
-    );
-
-    return earnerAccount;
-  }
-
-  public async getNewMultiplier(newIndex: BN): Promise<number> {
-    if (this.variant === Variant.NoYield) {
-      return 1.0;
-    }
-
-    const yieldConfig: YieldConfig<Variant.ScaledUiAmount> = (
-      await this.ext.account.extGlobal.fetch(this.getExtGlobalAccount())
-    ).yieldConfig;
-
-    return (
-      (yieldConfig.lastExtIndex!.toNumber() / 1e12) *
-      (newIndex.toNumber() / yieldConfig.lastMIndex!.toNumber()) **
-        (1 - yieldConfig.feeBps!.toNumber() / 1e4)
-    );
-  }
-
-  public async getCurrentMultiplier(): Promise<number> {
-    if (this.variant === Variant.NoYield) {
-      return 1.0;
-    }
-
-    const yieldConfig: YieldConfig<Variant.ScaledUiAmount> = (
-      await this.ext.account.extGlobal.fetch(this.getExtGlobalAccount())
-    ).yieldConfig;
-
-    return yieldConfig.lastExtIndex!.toNumber() / 1e12;
-  }
-
   // Utility functions for the tests
   public expectAccountEmpty(account: PublicKey) {
     const accountInfo = this.svm.getAccount(account);
@@ -891,12 +925,326 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     }
   }
 
+  createUniqueKeyArray = (size: number) => {
+    return new Array(size).fill(PublicKey.default).map((_, i, arr) => {
+      let key = PublicKey.unique();
+      while (key.equals(PublicKey.default) || arr.includes(key)) {
+        key = PublicKey.unique();
+      }
+      return key;
+    });
+  };
+
+  padKeyArray = (array: PublicKey[], desiredLen: number) => {
+    const currentLen = array.length;
+
+    if (currentLen > desiredLen) {
+      throw new Error("Array is too long");
+    }
+
+    const padding = new Array(desiredLen - currentLen).fill(PublicKey.default);
+    return array.concat(padding);
+  };
+
+  // instruction convenience functions for earn program
+  async initializeEarn(initialIndex: BN) {
+    // Send the transaction
+    try {
+      await this.earn.methods
+        .initialize(initialIndex)
+        .accounts({
+          admin: this.admin.publicKey,
+          mMint: this.mMint.publicKey,
+        })
+        .signers([this.admin])
+        .rpc();
+    } catch (e) {
+      console.log(e);
+      throw e;
+    }
+  }
+
+  public async propagateIndex(
+    newIndex: BN,
+    earnerMerkleRoot: number[] = ZERO_WORD
+  ) {
+    // Send the instruction
+    await this.earn.methods
+      .propagateIndex(newIndex, earnerMerkleRoot)
+      .accounts({
+        signer: this.admin.publicKey,
+      })
+      .signers([this.admin])
+      .rpc();
+  }
+
+  async addRegistrarEarner(
+    earner: PublicKey,
+    proof: ProofElement[],
+    earnerTokenAccount?: PublicKey
+  ) {
+    // Get the earner ATA
+    const tokenAccount =
+      earnerTokenAccount ?? (await this.getATA(this.mMint.publicKey, earner));
+
+    // Send the instruction
+    await this.earn.methods
+      .addRegistrarEarner(earner, proof)
+      .accountsPartial({
+        signer: this.nonAdmin.publicKey,
+        userTokenAccount: tokenAccount,
+      })
+      .signers([this.nonAdmin])
+      .rpc();
+  }
+
+  async removeRegistrarEarner(
+    earner: PublicKey,
+    proofs: ProofElement[][],
+    neighbors: number[][],
+    earnerTokenAccount?: PublicKey
+  ) {
+    // Get the earner ATA
+    const tokenAccount =
+      earnerTokenAccount ?? (await this.getATA(this.mMint.publicKey, earner));
+
+    // Send the instruction
+    await this.earn.methods
+      .removeRegistrarEarner(proofs, neighbors)
+      .accountsPartial({
+        signer: this.nonAdmin.publicKey,
+        userTokenAccount: tokenAccount,
+      })
+      .signers([this.nonAdmin])
+      .rpc();
+  }
+
+  public async addMEarner(earner: PublicKey, earnerTokenAccount?: PublicKey) {
+    // Check that the earner is not already in the list
+    if (this.mEarnerList.map((e) => e.toBase58()).includes(earner.toBase58())) {
+      throw new Error("Earner already exists in the list");
+    }
+
+    // Add the earner to the list and get the merkle tree
+    this.mEarnerList.push(earner);
+    const earnerMerkleTree = new MerkleTree(this.mEarnerList);
+
+    // Get the current index to reuse
+    const mScaledUiConfig = await this.getScaledUiAmountConfig(
+      this.mMint.publicKey
+    );
+
+    const currentIndex = new BN(Math.ceil(mScaledUiConfig.multiplier * 1e12));
+
+    // Propagate the merkle root
+    await this.propagateIndex(currentIndex, earnerMerkleTree.getRoot());
+
+    // Create the earner token for the m token
+    const tokenAccount =
+      earnerTokenAccount ?? (await this.getATA(this.mMint.publicKey, earner));
+
+    // Add the earner to the earn program
+    const { proof } = earnerMerkleTree.getInclusionProof(earner);
+    await this.addRegistrarEarner(earner, proof, tokenAccount);
+  }
+
+  public async removeMEarner(
+    earner: PublicKey,
+    earnerTokenAccount?: PublicKey
+  ) {
+    // Check that the earner is in the list
+    if (
+      !this.mEarnerList.map((e) => e.toBase58()).includes(earner.toBase58())
+    ) {
+      throw new Error("Earner does not exist in the list");
+    }
+
+    // Remove the earner from the list and get the merkle tree
+    this.mEarnerList = this.mEarnerList.filter((e) => !e.equals(earner));
+    const earnerMerkleTree = new MerkleTree(this.mEarnerList);
+
+    // Get the current index to reuse
+    const mScaledUiConfig = await this.getScaledUiAmountConfig(
+      this.mMint.publicKey
+    );
+    const currentIndex = new BN(mScaledUiConfig.newMultiplier * 1e12);
+
+    // Propagate the merkle root
+    await this.propagateIndex(currentIndex, earnerMerkleTree.getRoot());
+
+    // Get the earner token account
+    const tokenAccount =
+      earnerTokenAccount ?? (await this.getATA(this.mMint.publicKey, earner));
+
+    // Remove the earner from the earn program
+    const { proofs, neighbors } = earnerMerkleTree.getExclusionProof(earner);
+    await this.removeRegistrarEarner(earner, proofs, neighbors, tokenAccount);
+  }
+}
+
+// Test harness for the MExt program that encapsulates all the necessary setup and helper functions to test a given program variant
+export class ExtensionTest<
+  V extends Variant = Variant.ScaledUi
+> extends ExtensionTestBase {
+  public variant: V;
+  public ext: Program<MExt>;
+  public extMint: Keypair;
+  public extTokenProgram: PublicKey;
+  public earnAuthority: Keypair;
+  public wrapAuthority: Keypair;
+  public nonWrapAuthority: Keypair;
+
+  constructor(variant: V, extTokenProgram: PublicKey, addresses: PublicKey[]) {
+    super(addresses);
+
+    this.variant = variant;
+    this.extTokenProgram = extTokenProgram;
+
+    if (
+      variant === Variant.ScaledUi &&
+      extTokenProgram !== TOKEN_2022_PROGRAM_ID
+    ) {
+      throw new Error("Scaled UI variant must use the TOKEN_2022_PROGRAM_ID");
+    }
+
+    const M_EXT_IDL = require(`../../target/idl/${variant}.json`);
+
+    // Add the ext program to the SVM instance
+    this.svm.addProgramFromFile(PROGRAM_ID, `target/deploy/${variant}.so`);
+
+    // Create program instances
+    this.ext = new Program<MExt>(M_EXT_IDL, this.provider);
+
+    // Generate keypairs for various roles and fund them
+    this.extMint = new Keypair();
+    this.earnAuthority = new Keypair();
+    this.wrapAuthority = new Keypair();
+    this.nonWrapAuthority = new Keypair();
+
+    const toFund = [
+      this.earnAuthority.publicKey,
+      this.wrapAuthority.publicKey,
+      this.nonWrapAuthority.publicKey,
+    ];
+
+    for (const address of toFund) {
+      this.svm.airdrop(address, BigInt(10 * LAMPORTS_PER_SOL));
+    }
+  }
+
+  public async init(initialSupply: BN, initialIndex: BN) {
+    // Call the base init function
+    await this._init(initialSupply, initialIndex);
+
+    // Create the Ext token mint
+    switch (this.variant) {
+      case Variant.NoYield:
+        await this.createMint(
+          this.extMint,
+          this.getExtMintAuthority(),
+          this.extTokenProgram === TOKEN_2022_PROGRAM_ID
+        );
+        break;
+      case Variant.ScaledUi:
+        await this.createScaledUiMint(this.extMint, this.getExtMintAuthority());
+        break;
+      case Variant.Crank:
+        await this.createMint(
+          this.extMint,
+          this.getExtMintAuthority(),
+          this.extTokenProgram === TOKEN_2022_PROGRAM_ID
+        );
+        break;
+      default:
+        throw new Error("Unsupported variant for MExt");
+    }
+
+    // Add the m vault as an M earner
+    const mVault = this.getMVault();
+    await this.addMEarner(mVault);
+  }
+
+  public async getExtTokenSupply(mint: PublicKey, use2022: boolean) {
+    const mintInfo = await getMint(
+      this.provider.connection,
+      mint,
+      undefined,
+      use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
+    );
+    if (!mintInfo) {
+      throw new Error("Mint not found");
+    }
+
+    return new BN(
+      Math.floor(Number(mintInfo.supply) * (await this.getCurrentMultiplier()))
+    );
+  }
+
+  // MExt program PDAs
+  public getExtGlobalAccount(): PublicKey {
+    const [globalAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("global")],
+      this.ext.programId
+    );
+
+    return globalAccount;
+  }
+
+  public getExtMintAuthority(): PublicKey {
+    const [extMintAuthority] = PublicKey.findProgramAddressSync(
+      [Buffer.from("mint_authority")],
+      this.ext.programId
+    );
+
+    return extMintAuthority;
+  }
+
+  public getMVault(): PublicKey {
+    const [mVault] = PublicKey.findProgramAddressSync(
+      [Buffer.from("m_vault")],
+      this.ext.programId
+    );
+
+    return mVault;
+  }
+
+  public async getNewMultiplier(newIndex: BN): Promise<number> {
+    if (this.variant !== Variant.ScaledUi) {
+      return 1.0;
+    }
+
+    const yieldConfig: YieldConfig<Variant.ScaledUi> = (
+      await this.ext.account.extGlobalV2.fetch(this.getExtGlobalAccount())
+    ).yieldConfig;
+
+    return (
+      (yieldConfig.lastExtIndex!.toNumber() / 1e12) *
+      (newIndex.toNumber() / yieldConfig.lastMIndex!.toNumber()) **
+        (1 - yieldConfig.feeBps!.toNumber() / 1e4)
+    );
+  }
+
+  public async getCurrentMultiplier(): Promise<number> {
+    if (this.variant !== Variant.ScaledUi) {
+      return 1.0;
+    }
+
+    const yieldConfig: YieldConfig<Variant.ScaledUi> = (
+      await this.ext.account.extGlobalV2.fetch(this.getExtGlobalAccount())
+    ).yieldConfig;
+
+    return yieldConfig.lastExtIndex!.toNumber() / 1e12;
+  }
+
   public async expectExtGlobalState(expected: ExtGlobal<V>) {
-    const state = await this.ext.account.extGlobal.fetch(
+    const state = await this.ext.account.extGlobalV2.fetch(
       this.getExtGlobalAccount()
     );
 
     if (expected.admin) expect(state.admin).toEqual(expected.admin);
+    if (expected.pendingAdmin !== undefined) {
+      expect(state.pendingAdmin).toEqual(expected.pendingAdmin);
+    }
     if (expected.extMint) expect(state.extMint).toEqual(expected.extMint);
     if (expected.mMint) expect(state.mMint).toEqual(expected.mMint);
     if (expected.mEarnGlobalAccount)
@@ -904,11 +1252,19 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
 
     if (expected.yieldConfig) {
       switch (this.variant) {
-        case Variant.ScaledUiAmount:
-          this.expectScaledUiYieldConfig(state.yieldConfig);
-          break;
         case Variant.NoYield:
-          expect(state.yieldConfig).toEqual({});
+          expect(state.yieldConfig).toEqual({
+            yieldVariant: { noYield: {} },
+          });
+          break;
+        case Variant.ScaledUi:
+          this.expectScaledUiYieldConfig(
+            state.yieldConfig,
+            expected.yieldConfig
+          );
+          break;
+        case Variant.Crank:
+          this.expectCrankYieldConfig(state.yieldConfig, expected.yieldConfig);
           break;
         default:
           throw new Error("Unsupported variant for yield config");
@@ -921,24 +1277,82 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       expect(state.extMintAuthorityBump).toEqual(expected.extMintAuthorityBump);
   }
 
-  private expectScaledUiYieldConfig<V extends Variant.ScaledUiAmount>(
-    yieldConfig: YieldConfig<V>
+  private expectScaledUiYieldConfig<V extends Variant.ScaledUi>(
+    actual: YieldConfig<V>,
+    expected: YieldConfig<V>
   ) {
-    if (yieldConfig.feeBps) {
-      expect(yieldConfig.feeBps.toString()).toEqual(
-        yieldConfig.feeBps.toString()
+    expect(actual.yieldVariant!).toEqual({ scaledUi: {} }); // scaled ui amount variant
+    if (expected.feeBps) {
+      expect(actual.feeBps!.toString()).toEqual(expected.feeBps.toString());
+    }
+    if (expected.lastMIndex) {
+      expect(actual.lastMIndex!.toString()).toEqual(
+        expected.lastMIndex.toString()
       );
     }
-    if (yieldConfig.lastMIndex) {
-      expect(yieldConfig.lastMIndex.toString()).toEqual(
-        yieldConfig.lastMIndex.toString()
+    if (expected.lastExtIndex) {
+      expect(actual.lastExtIndex!.toString()).toEqual(
+        expected.lastExtIndex.toString()
       );
     }
-    if (yieldConfig.lastExtIndex) {
-      expect(yieldConfig.lastExtIndex.toString()).toEqual(
-        yieldConfig.lastExtIndex.toString()
+  }
+
+  private expectCrankYieldConfig<V extends Variant.Crank>(
+    actual: YieldConfig<V>,
+    expected: YieldConfig<V>
+  ) {
+    expect(actual.yieldVariant!).toEqual({ crank: {} }); // crank variant
+
+    if (expected.earnAuthority) {
+      expect(actual.earnAuthority!).toEqual(expected.earnAuthority);
+    }
+    if (expected.index) {
+      expect(actual.index!.toString()).toEqual(expected.index.toString());
+    }
+    if (expected.timestamp) {
+      expect(actual.timestamp!.toString()).toEqual(
+        expected.timestamp.toString()
       );
     }
+  }
+
+  public async expectEarnManagerState(
+    earnManagerAccount: PublicKey,
+    expected: EarnManager
+  ) {
+    const state = await this.ext.account.earnManager.fetch(earnManagerAccount);
+
+    if (expected.earnManager)
+      expect(state.earnManager).toEqual(expected.earnManager);
+    if (expected.isActive !== undefined)
+      expect(state.isActive).toEqual(expected.isActive);
+    if (expected.feeBps)
+      expect(state.feeBps.toString()).toEqual(expected.feeBps.toString());
+    if (expected.feeTokenAccount)
+      expect(state.feeTokenAccount).toEqual(expected.feeTokenAccount);
+  }
+
+  public async expectEarnerState(earnerAccount: PublicKey, expected: Earner) {
+    const state = await this.ext.account.earner.fetch(earnerAccount);
+
+    if (expected.lastClaimIndex)
+      expect(state.lastClaimIndex.toString()).toEqual(
+        expected.lastClaimIndex.toString()
+      );
+    if (expected.lastClaimTimestamp)
+      expect(state.lastClaimTimestamp.toString()).toEqual(
+        expected.lastClaimTimestamp.toString()
+      );
+    if (expected.bump) expect(state.bump).toEqual(expected.bump);
+    if (expected.user) expect(state.user).toEqual(expected.user);
+    if (expected.userTokenAccount)
+      expect(state.userTokenAccount).toEqual(expected.userTokenAccount);
+    if (expected.earnManager)
+      expect(state.earnManager).toEqual(expected.earnManager);
+    if (expected.recipientTokenAccount)
+      expect(state.recipientTokenAccount).toEqual(
+        expected.recipientTokenAccount
+      );
   }
 
   public async expectScaledUiAmountConfig(
@@ -981,224 +1395,50 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   };
 
   public async expectExtSolvent() {
-    const extSupply = await this.getTokenSupply(this.extMint.publicKey);
-    const mVaultBalance = await this.getTokenBalance(
+    const extSupply = await this.getExtTokenSupply(
+      this.extMint.publicKey,
+      this.useToken2022ForExt
+    );
+    const mVaultUiBalance = await this.getTokenUiBalance(
       await this.getATA(this.mMint.publicKey, this.getMVault())
     );
 
-    this.variant === Variant.ScaledUiAmount
-      ? expect(BigInt(mVaultBalance.toString())).toBeGreaterThan(
+    this.variant === Variant.ScaledUi
+      ? expect(BigInt(mVaultUiBalance.toString())).toBeGreaterThan(
           BigInt(extSupply.sub(BN.min(new BN(2), extSupply)).toString())
         ) // allow for a rounding error of 2 for scaled ui due to precision issues
-      : expect(BigInt(mVaultBalance.toString())).toBeGreaterThanOrEqual(
+      : expect(BigInt(mVaultUiBalance.toString())).toBeGreaterThanOrEqual(
           BigInt(extSupply.toString())
         );
   }
 
-  padKeyArray = (array: PublicKey[], desiredLen: number) => {
-    const currentLen = array.length;
-
-    if (currentLen > desiredLen) {
-      throw new Error("Array is too long");
-    }
-
-    const padding = new Array(desiredLen - currentLen).fill(PublicKey.default);
-    return array.concat(padding);
-  };
-
-  // instruction convenience functions for earn program
-
-  public async initializeEarn(
-    mint: PublicKey,
-    earnAuthority: PublicKey,
-    initialIndex: BN,
-    claimCooldown: BN
-  ) {
-    // Send the transaction
-    try {
-      await this.earn.methods
-        .initialize(earnAuthority, initialIndex, claimCooldown)
-        .accounts({
-          admin: this.admin.publicKey,
-          mint,
-        })
-        .signers([this.admin])
-        .rpc();
-    } catch (e) {
-      console.log(e);
-      throw e;
-    }
-  }
-
-  public async propagateIndex(
-    newIndex: BN,
-    earnerMerkleRoot: number[] = ZERO_WORD
-  ) {
-    // Send the instruction
-    await this.earn.methods
-      .propagateIndex(newIndex, earnerMerkleRoot)
-      .accounts({
-        signer: this.admin.publicKey,
-      })
-      .signers([this.admin])
-      .rpc();
-  }
-
-  public async mClaimFor(earner: PublicKey, balance?: BN) {
-    const earnerATA = await this.getATA(this.mMint.publicKey, earner);
-    const earnerAccount = this.getMEarnerAccount(earnerATA);
-    const snapshotBalance = balance ?? (await this.getTokenBalance(earnerATA));
-
-    // Send the instruction
-    await this.earn.methods
-      .claimFor(snapshotBalance)
-      .accounts({
-        earnAuthority: this.earnAuthority.publicKey,
-        mint: this.mMint.publicKey,
-        mintMultisig: this.mMintAuthority.publicKey,
-        userTokenAccount: earnerATA,
-        earnerAccount,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      })
-      .signers([this.earnAuthority])
-      .rpc();
-  }
-
-  public async mCompleteClaims() {
-    // Send the instruction
-    await this.earn.methods
-      .completeClaims()
-      .accounts({
-        earnAuthority: this.earnAuthority.publicKey,
-      })
-      .signers([this.earnAuthority])
-      .rpc();
-  }
-
-  async addRegistrarEarner(
-    earner: PublicKey,
-    proof: ProofElement[],
-    earnerTokenAccount?: PublicKey
-  ) {
-    // Get the earner ATA
-    const tokenAccount =
-      earnerTokenAccount ?? (await this.getATA(this.mMint.publicKey, earner));
-
-    // Send the instruction
-    await this.earn.methods
-      .addRegistrarEarner(earner, proof)
-      .accountsPartial({
-        signer: this.nonAdmin.publicKey,
-        userTokenAccount: tokenAccount,
-      })
-      .signers([this.nonAdmin])
-      .rpc();
-  }
-
-  async removeRegistrarEarner(
-    earner: PublicKey,
-    proofs: ProofElement[][],
-    neighbors: PublicKey[],
-    earnerTokenAccount?: PublicKey
-  ) {
-    // Get the earner ATA
-    const tokenAccount =
-      earnerTokenAccount ?? (await this.getATA(this.mMint.publicKey, earner));
-    const earnerAccount = this.getMEarnerAccount(tokenAccount);
-
-    // Send the instruction
-    await this.earn.methods
-      .removeRegistrarEarner(proofs, neighbors)
-      .accountsPartial({
-        signer: this.nonAdmin.publicKey,
-        userTokenAccount: tokenAccount,
-        earnerAccount,
-      })
-      .signers([this.nonAdmin])
-      .rpc();
-  }
-
-  public async addMEarner(
-    earner: PublicKey,
-    earnerTokenAccount?: PublicKey
-  ): Promise<PublicKey> {
-    // Check that the earner is not already in the list
-    if (this.mEarnerList.map((e) => e.toBase58()).includes(earner.toBase58())) {
-      throw new Error("Earner already exists in the list");
-    }
-
-    // Add the earner to the list and get the merkle tree
-    this.mEarnerList.push(earner);
-    const earnerMerkleTree = new MerkleTree(this.mEarnerList);
-
-    // Get the current index to reuse
-    const currentIndex = (
-      await this.earn.account.global.fetch(this.getEarnGlobalAccount())
-    ).index;
-
-    // Propagate the merkle root
-    await this.propagateIndex(currentIndex, earnerMerkleTree.getRoot());
-
-    // Create the earner token for the m token
-    const tokenAccount =
-      earnerTokenAccount ?? (await this.getATA(this.mMint.publicKey, earner));
-
-    // Add the earner to the earn program
-    const { proof } = earnerMerkleTree.getInclusionProof(earner);
-    await this.addRegistrarEarner(earner, proof, tokenAccount);
-
-    // Get the earner account address
-    const earnerAccount = this.getMEarnerAccount(tokenAccount);
-
-    return earnerAccount;
-  }
-
-  public async removeMEarner(
-    earner: PublicKey,
-    earnerTokenAccount?: PublicKey
-  ): Promise<void> {
-    // Check that the earner is in the list
-    if (
-      !this.mEarnerList.map((e) => e.toBase58()).includes(earner.toBase58())
-    ) {
-      throw new Error("Earner does not exist in the list");
-    }
-
-    // Remove the earner from the list and get the merkle tree
-    this.mEarnerList = this.mEarnerList.filter((e) => !e.equals(earner));
-    const earnerMerkleTree = new MerkleTree(this.mEarnerList);
-
-    // Get the current index to reuse
-    const currentIndex = (
-      await this.earn.account.global.fetch(this.getEarnGlobalAccount())
-    ).index;
-
-    // Propagate the merkle root
-    await this.propagateIndex(currentIndex, earnerMerkleTree.getRoot());
-
-    // Get the earner token account
-    const tokenAccount =
-      earnerTokenAccount ?? (await this.getATA(this.mMint.publicKey, earner));
-
-    // Remove the earner from the earn program
-    const { proofs, neighbors } = earnerMerkleTree.getExclusionProof(earner);
-    await this.removeRegistrarEarner(earner, proofs, neighbors, tokenAccount);
-  }
   // Helper functions for executing MExt instructions
-
-  public async initializeExt(wrapAuthorities: PublicKey[], fee_bps?: BN) {
+  public async initializeExt(wrapAuthorities: PublicKey[], feeBps?: BN) {
     switch (this.variant) {
-      case Variant.ScaledUiAmount:
-        if (!fee_bps) {
+      case Variant.ScaledUi:
+        if (!feeBps) {
           throw new Error("fee_bps is required for Scaled UI variant");
         }
         // Send the transaction
         await this.ext.methods
-          .initialize(wrapAuthorities, fee_bps)
+          .initialize(wrapAuthorities, feeBps)
           .accounts({
             admin: this.admin.publicKey,
             mMint: this.mMint.publicKey,
             extMint: this.extMint.publicKey,
+            extTokenProgram: this.extTokenProgram,
+          })
+          .signers([this.admin])
+          .rpc();
+        break;
+      case Variant.Crank:
+        await this.ext.methods
+          .initialize(wrapAuthorities, this.earnAuthority.publicKey)
+          .accounts({
+            admin: this.admin.publicKey,
+            mMint: this.mMint.publicKey,
+            extMint: this.extMint.publicKey,
+            extTokenProgram: this.extTokenProgram,
           })
           .signers([this.admin])
           .rpc();
@@ -1211,6 +1451,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
             admin: this.admin.publicKey,
             mMint: this.mMint.publicKey,
             extMint: this.extMint.publicKey,
+            extTokenProgram: this.extTokenProgram,
           })
           .signers([this.admin])
           .rpc();
@@ -1257,7 +1498,11 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       fromMTokenAccount ?? (await this.getATA(this.mMint.publicKey, from));
     toExtTokenAccount =
       toExtTokenAccount ??
-      (await this.getATA(this.extMint.publicKey, to ?? from));
+      (await this.getATA(
+        this.extMint.publicKey,
+        to ?? from,
+        this.useToken2022ForExt
+      ));
     vaultMTokenAccount =
       vaultMTokenAccount ?? (await this.getATA(this.mMint.publicKey, mVault));
 
@@ -1293,6 +1538,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
           : this.ext.programId,
         fromMTokenAccount,
         toExtTokenAccount,
+        extTokenProgram: this.extTokenProgram,
       })
       .signers(
         wrapAuthority ? [tokenAuthority, wrapAuthority] : [tokenAuthority]
@@ -1319,7 +1565,12 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
     toMTokenAccount =
       toMTokenAccount ?? (await this.getATA(this.mMint.publicKey, to ?? from));
     fromExtTokenAccount =
-      fromExtTokenAccount ?? (await this.getATA(this.extMint.publicKey, from));
+      fromExtTokenAccount ??
+      (await this.getATA(
+        this.extMint.publicKey,
+        from,
+        this.useToken2022ForExt
+      ));
     vaultMTokenAccount =
       vaultMTokenAccount ?? (await this.getATA(this.mMint.publicKey, mVault));
 
@@ -1355,6 +1606,7 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
           : this.ext.programId,
         toMTokenAccount,
         fromExtTokenAccount,
+        extTokenProgram: this.extTokenProgram,
       })
       .signers(
         wrapAuthority ? [tokenAuthority, wrapAuthority] : [tokenAuthority]
@@ -1365,12 +1617,34 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   }
 
   public async sync(): Promise<PublicKey> {
-    if (this.variant === Variant.NoYield) {
-      throw new Error("sync is not supported for No Yield variant");
+    switch (this.variant) {
+      case Variant.NoYield:
+        throw new Error("sync is not supported for No Yield variant");
+        break;
+      case Variant.ScaledUi:
+        // Sync is open to any address
+        await this.ext.methods
+          .sync()
+          .accounts({
+            extTokenProgram: this.extTokenProgram,
+          })
+          .signers([])
+          .rpc();
+        break;
+      case Variant.Crank:
+        // For Crank variant, we have to use the earn authority to sync
+        await this.ext.methods
+          .sync()
+          .accounts({
+            earnAuthority: this.earnAuthority.publicKey,
+            extTokenProgram: this.extTokenProgram,
+          })
+          .signers([this.earnAuthority])
+          .rpc();
+        break;
+      default:
+        throw new Error("Unsupported variant for sync");
     }
-
-    // Send the instruction
-    await this.ext.methods.sync().accounts({}).signers([]).rpc();
 
     return this.getExtGlobalAccount();
   }
@@ -1380,7 +1654,11 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
   ): Promise<{ recipientExtTokenAccount: PublicKey }> {
     const recipientExtTokenAccount =
       toTokenAccount ??
-      (await this.getATA(this.extMint.publicKey, this.admin.publicKey, true));
+      (await this.getATA(
+        this.extMint.publicKey,
+        this.admin.publicKey,
+        this.useToken2022ForExt
+      ));
 
     // Send the instruction
     await this.ext.methods
@@ -1388,10 +1666,520 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       .accountsPartial({
         admin: this.admin.publicKey,
         recipientExtTokenAccount,
+        extTokenProgram: this.extTokenProgram,
       })
       .signers([this.admin])
       .rpc();
 
     return { recipientExtTokenAccount };
+  }
+
+  // Helper functions for Crank variant functionality
+
+  public getEarnManagerAccount(earnManager: PublicKey): PublicKey {
+    const [earnManagerAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("earn_manager"), earnManager.toBuffer()],
+      this.ext.programId
+    );
+
+    return earnManagerAccount;
+  }
+
+  public getEarnerAccount(userTokenAccount: PublicKey): PublicKey {
+    const [earnerAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("earner"), userTokenAccount.toBuffer()],
+      this.ext.programId
+    );
+
+    return earnerAccount;
+  }
+
+  public async addEarnManager(
+    earnManager: PublicKey,
+    feeBps: BN,
+    feeTokenAccount?: PublicKey
+  ) {
+    if (this.variant !== Variant.Crank) {
+      throw new Error("addEarnManager is only available for Crank variant");
+    }
+
+    const feeTokenATA =
+      feeTokenAccount ??
+      (await this.getATA(
+        this.extMint.publicKey,
+        earnManager,
+        this.useToken2022ForExt
+      ));
+
+    await this.ext.methods
+      .addEarnManager(earnManager, feeBps)
+      .accountsPartial({
+        admin: this.admin.publicKey,
+        feeTokenAccount: feeTokenATA,
+      })
+      .signers([this.admin])
+      .rpc();
+  }
+
+  public async removeEarnManager(earnManager: PublicKey) {
+    if (this.variant !== Variant.Crank) {
+      throw new Error("removeEarnManager is only available for Crank variant");
+    }
+
+    await this.ext.methods
+      .removeEarnManager()
+      .accountsPartial({
+        admin: this.admin.publicKey,
+        earnManagerAccount: this.getEarnManagerAccount(earnManager),
+      })
+      .signers([this.admin])
+      .rpc();
+  }
+
+  public async setEarnAuthority(newEarnAuthority: PublicKey) {
+    if (this.variant !== Variant.Crank) {
+      throw new Error("setEarnAuthority is only available for Crank variant");
+    }
+
+    await this.ext.methods
+      .setEarnAuthority(newEarnAuthority)
+      .accounts({
+        admin: this.admin.publicKey,
+      })
+      .signers([this.admin])
+      .rpc();
+  }
+
+  public async addEarner(
+    earnManager: Keypair,
+    user: PublicKey,
+    userTokenAccount?: PublicKey
+  ) {
+    if (this.variant !== Variant.Crank) {
+      throw new Error("addEarner is only available for Crank variant");
+    }
+
+    const userTokenATA =
+      userTokenAccount ??
+      (await this.getATA(
+        this.extMint.publicKey,
+        user,
+        this.useToken2022ForExt
+      ));
+
+    await this.ext.methods
+      .addEarner(user)
+      .accounts({
+        signer: earnManager.publicKey,
+        userTokenAccount: userTokenATA,
+      })
+      .signers([earnManager])
+      .rpc();
+  }
+
+  public async removeEarner(earnManager: Keypair, userTokenAccount: PublicKey) {
+    if (this.variant !== Variant.Crank) {
+      throw new Error("removeEarner is only available for Crank variant");
+    }
+
+    await this.ext.methods
+      .removeEarner()
+      .accounts({
+        signer: earnManager.publicKey,
+      })
+      .signers([earnManager])
+      .rpc();
+  }
+
+  public async transferEarner(
+    fromEarnManager: Keypair,
+    toEarnManager: PublicKey,
+    userTokenAccount: PublicKey
+  ) {
+    if (this.variant !== Variant.Crank) {
+      throw new Error("transferEarner is only available for Crank variant");
+    }
+
+    await this.ext.methods
+      .transferEarner(toEarnManager)
+      .accountsPartial({
+        signer: fromEarnManager.publicKey,
+        earnerAccount: this.getEarnerAccount(userTokenAccount),
+      })
+      .signers([fromEarnManager])
+      .rpc();
+  }
+
+  public async configureEarnManager(
+    earnManager: Keypair,
+    feeBps?: BN,
+    feeTokenAccount?: PublicKey
+  ) {
+    if (this.variant !== Variant.Crank) {
+      throw new Error(
+        "configureEarnManager is only available for Crank variant"
+      );
+    }
+
+    await this.ext.methods
+      .configureEarnManager(feeBps || null)
+      .accounts({
+        signer: earnManager.publicKey,
+        feeTokenAccount: feeTokenAccount || null,
+      })
+      .signers([earnManager])
+      .rpc();
+  }
+
+  public async setRecipient(
+    signer: Keypair,
+    earnerAccount: PublicKey,
+    recipientTokenAccount?: PublicKey
+  ) {
+    if (this.variant !== Variant.Crank) {
+      throw new Error("setRecipient is only available for Crank variant");
+    }
+
+    await this.ext.methods
+      .setRecipient()
+      .accountsPartial({
+        signer: signer.publicKey,
+        earnerAccount,
+        recipientTokenAccount: recipientTokenAccount || null,
+      })
+      .signers([signer])
+      .rpc();
+  }
+
+  public async claimFor(
+    userTokenAccount: PublicKey,
+    snapshotBalance: BN,
+    feeTokenAccount?: PublicKey
+  ) {
+    if (this.variant !== Variant.Crank) {
+      throw new Error("claimFor is only available for Crank variant");
+    }
+
+    const earnerAccount = this.getEarnerAccount(userTokenAccount);
+    const earnerAccountInfo = await this.ext.account.earner.fetch(
+      earnerAccount
+    );
+    const earnManagerAccount = this.getEarnManagerAccount(
+      earnerAccountInfo.earnManager
+    );
+
+    await this.ext.methods
+      .claimFor(snapshotBalance)
+      .accountsPartial({
+        earnAuthority: this.earnAuthority.publicKey,
+        userTokenAccount,
+        earnerAccount,
+        earnManagerAccount,
+        earnManagerTokenAccount: feeTokenAccount,
+        extTokenProgram: this.extTokenProgram,
+      })
+      .signers([this.earnAuthority])
+      .rpc();
+  }
+
+  // Helper method to determine if we should use TOKEN_2022_PROGRAM_ID for ext mint operations
+  public get useToken2022ForExt(): boolean {
+    return this.extTokenProgram === TOKEN_2022_PROGRAM_ID;
+  }
+
+  // Admin transfer helper methods
+
+  public async transferAdmin(newAdmin: PublicKey) {
+    await this.ext.methods
+      .transferAdmin(newAdmin)
+      .accounts({
+        admin: this.admin.publicKey,
+      })
+      .signers([this.admin])
+      .rpc();
+  }
+
+  public async acceptAdmin(pendingAdmin: Keypair) {
+    await this.ext.methods
+      .acceptAdmin()
+      .accounts({
+        pendingAdmin: pendingAdmin.publicKey,
+      })
+      .signers([pendingAdmin])
+      .rpc();
+  }
+
+  public async revokeAdminTransfer() {
+    await this.ext.methods
+      .revokeAdminTransfer()
+      .accounts({
+        admin: this.admin.publicKey,
+      })
+      .signers([this.admin])
+      .rpc();
+  }
+}
+
+// Extension Swap Test class that supports multiple extension programs and the swap program
+export class ExtensionSwapTest extends ExtensionTestBase {
+  public swapProgram: Program<ExtSwap>;
+  public extensionPrograms: { [key: string]: Program<MExt> } = {};
+  public extensionMints: { [key: string]: Keypair } = {};
+  public swapperKeypair: Keypair;
+
+  // Program IDs from the Makefile for test extension programs
+  private static readonly EXT_PROGRAM_IDS = {
+    extA: new PublicKey("3joDhmLtHLrSBGfeAe1xQiv3gjikes3x8S4N3o6Ld8zB"),
+    extB: new PublicKey("HSMnbWEkB7sEQAGSzBPeACNUCXC9FgNeeESLnHtKfoy3"),
+    extC: new PublicKey("81gYpXqg8ZT9gdkFSe35eqiitqBWqVfYwDwVfXuk8Xfw"),
+  };
+
+  constructor(addresses: PublicKey[] = []) {
+    // Initialize with ScaledUi variant and TOKEN_2022_PROGRAM_ID
+    super(addresses);
+
+    // Load and add extension programs
+    const NO_YIELD_IDL = require("../../target/idl/no_yield.json");
+    const SCALED_UI_IDL = require("../../target/idl/scaled_ui.json");
+
+    // Add the test extension programs to SVM
+    this.svm.addProgramFromFile(
+      ExtensionSwapTest.EXT_PROGRAM_IDS.extA,
+      "tests/programs/ext_a.so"
+    );
+    this.svm.addProgramFromFile(
+      ExtensionSwapTest.EXT_PROGRAM_IDS.extB,
+      "tests/programs/ext_b.so"
+    );
+    this.svm.addProgramFromFile(
+      ExtensionSwapTest.EXT_PROGRAM_IDS.extC,
+      "tests/programs/ext_c.so"
+    );
+
+    // Create program instances
+    this.extensionPrograms.extA = new Program<MExt>(
+      { ...NO_YIELD_IDL, address: ExtensionSwapTest.EXT_PROGRAM_IDS.extA },
+      this.provider
+    );
+    this.extensionPrograms.extB = new Program<MExt>(
+      { ...SCALED_UI_IDL, address: ExtensionSwapTest.EXT_PROGRAM_IDS.extB },
+      this.provider
+    );
+    this.extensionPrograms.extC = new Program<MExt>(
+      { ...NO_YIELD_IDL, address: ExtensionSwapTest.EXT_PROGRAM_IDS.extC },
+      this.provider
+    );
+
+    // Load and add swap program
+    const EXT_SWAP_IDL = require("../../target/idl/ext_swap.json");
+
+    // Add swap program to SVM
+    this.svm.addProgramFromFile(
+      new PublicKey(EXT_SWAP_IDL.address),
+      "target/deploy/ext_swap.so"
+    );
+
+    // Create swap program instance
+    this.swapProgram = new Program(EXT_SWAP_IDL, this.provider);
+
+    // Create swapper keypair
+    this.swapperKeypair = new Keypair();
+
+    // Fund the swapper
+    this.svm.airdrop(
+      this.swapperKeypair.publicKey,
+      BigInt(10 * LAMPORTS_PER_SOL)
+    );
+  }
+
+  public async init(initialSupply: BN, initialIndex: BN) {
+    // Initialize base MExt functionality
+    await this._init(initialSupply, initialIndex);
+
+    // Create extension mints BEFORE initializing extension programs
+    await this.createExtensionMints();
+
+    // Make the M vaults earners
+    await this.addAllExtensionVaultsAsEarners();
+
+    // Initialize extension programs AFTER mints are created
+    await this.initializeExtensionPrograms();
+
+    // Initialize swap program
+    await this.initializeSwapProgram();
+
+    // Setup swapper keypair
+    // Add swapper as an M earner, which unfreezes the ATA
+    await this.addMEarner(this.swapperKeypair.publicKey);
+
+    // Mint some M tokens to the swapper
+    await this.mintM(this.swapperKeypair.publicKey, new BN(1_000_000));
+  }
+
+  private async createExtensionMints() {
+    // Create mints for each extension
+    this.extensionMints.mintA = new Keypair();
+    this.extensionMints.mintB = new Keypair();
+    this.extensionMints.mintC = new Keypair();
+
+    // Create mint authorities for each extension program
+    const mintAuthA = PublicKey.findProgramAddressSync(
+      [Buffer.from("mint_authority")],
+      this.extensionPrograms.extA.programId
+    )[0];
+
+    const mintAuthB = PublicKey.findProgramAddressSync(
+      [Buffer.from("mint_authority")],
+      this.extensionPrograms.extB.programId
+    )[0];
+
+    const mintAuthC = PublicKey.findProgramAddressSync(
+      [Buffer.from("mint_authority")],
+      this.extensionPrograms.extC.programId
+    )[0];
+
+    // ext_a: no-yield variant - use regular TOKEN_2022 mint
+    await this.createMint(
+      this.extensionMints.mintA,
+      mintAuthA,
+      true // use TOKEN_2022_PROGRAM_ID
+    );
+
+    // ext_b: scaled-ui variant - use ScaledUi mint
+    await this.createScaledUiMint(this.extensionMints.mintB, mintAuthB);
+
+    // ext_c: no-yield variant with extra accounts - use regular TOKEN_2022 mint
+    await this.createMint(
+      this.extensionMints.mintC,
+      mintAuthC,
+      true // use TOKEN_2022_PROGRAM_ID
+    );
+  }
+
+  private async initializeExtensionPrograms() {
+    // ext_a: no-yield variant - initialize with just wrap authorities
+    await this.extensionPrograms.extA.methods
+      .initialize([this.admin.publicKey])
+      .accounts({
+        admin: this.admin.publicKey,
+        mMint: this.mMint.publicKey,
+        extMint: this.extensionMints.mintA.publicKey,
+        extTokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .signers([this.admin])
+      .rpc();
+
+    // ext_b: scaled-ui variant - initialize with wrap authorities and fee_bps
+    await this.extensionPrograms.extB.methods
+      .initialize([this.admin.publicKey], new BN(500)) // 5% fee
+      .accounts({
+        admin: this.admin.publicKey,
+        mMint: this.mMint.publicKey,
+        extMint: this.extensionMints.mintB.publicKey,
+        extTokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .signers([this.admin])
+      .rpc();
+
+    // ext_c: no-yield variant with extra accounts - initialize with just wrap authorities
+    await this.extensionPrograms.extC.methods
+      .initialize([this.admin.publicKey])
+      .accounts({
+        admin: this.admin.publicKey,
+        mMint: this.mMint.publicKey,
+        extMint: this.extensionMints.mintC.publicKey,
+        extTokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .signers([this.admin])
+      .rpc();
+  }
+
+  private async initializeSwapProgram() {
+    await this.swapProgram.methods
+      .initializeGlobal()
+      .accounts({
+        admin: this.admin.publicKey,
+      })
+      .signers([this.admin])
+      .rpc();
+  }
+
+  // Helper methods for swap testing
+  public async whitelistExtension(extensionProgramId: PublicKey) {
+    await this.swapProgram.methods
+      .whitelistExtension()
+      .accountsPartial({
+        admin: this.admin.publicKey,
+        extProgram: extensionProgramId,
+      })
+      .signers([this.admin])
+      .rpc();
+  }
+
+  public async whitelistUnwrapper(unwrapper: PublicKey) {
+    await this.swapProgram.methods
+      .whitelistUnwrapper(unwrapper)
+      .accounts({
+        admin: this.admin.publicKey,
+      })
+      .signers([this.admin])
+      .rpc();
+  }
+
+  public async addWrapAuthorityToExtension(
+    extensionKey: string,
+    authority: PublicKey
+  ) {
+    const program = this.extensionPrograms[extensionKey];
+    if (!program) throw new Error(`Extension ${extensionKey} not found`);
+
+    await program.methods
+      .addWrapAuthority(authority)
+      .accounts({
+        admin: this.admin.publicKey,
+      })
+      .signers([this.admin])
+      .rpc();
+  }
+
+  public getSwapGlobalAccount(): PublicKey {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("global")],
+      this.swapProgram.programId
+    )[0];
+  }
+
+  public getExtensionProgramId(key: string): PublicKey {
+    const program = this.extensionPrograms[key];
+    if (!program) throw new Error(`Extension ${key} not found`);
+    return program.programId;
+  }
+
+  public getExtensionMint(key: string): PublicKey {
+    const mint = this.extensionMints[key];
+    if (!mint) throw new Error(`Extension mint ${key} not found`);
+    return mint.publicKey;
+  }
+
+  // Override getMVault to support multiple extension programs
+  public getMVaultForExtension(extensionProgramId: PublicKey): PublicKey {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("m_vault")],
+      extensionProgramId
+    )[0];
+  }
+
+  // Update M earner setup to include all extension vaults
+  async addAllExtensionVaultsAsEarners() {
+    const vaults = [
+      this.getMVaultForExtension(this.extensionPrograms.extA.programId),
+      this.getMVaultForExtension(this.extensionPrograms.extB.programId),
+      this.getMVaultForExtension(this.extensionPrograms.extC.programId),
+    ];
+
+    // Add all vaults to the earner list
+    for (const vault of vaults) {
+      await this.addMEarner(vault);
+    }
   }
 }

@@ -119,8 +119,6 @@ impl Unwrap<'_> {
             earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
         let m_multiplier: f64 = m_scaled_ui_config.new_multiplier.into();
 
-        // TODO should we reduce ext_principal to the user's balance to avoid reverts?
-
         // Calculate the principal amount of m tokens
         // from the principal amount of ext tokens to unwrap
         let m_principal: u64 = amount_to_principal_down(
