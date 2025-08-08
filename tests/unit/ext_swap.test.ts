@@ -140,6 +140,55 @@ describe("extension swap tests (new)", () => {
       );
     });
 
+    it("should reset whitelists", async () => {
+      let swapGlobal = await $.swapProgram.account.swapGlobal.fetch(
+        $.getSwapGlobalAccount()
+      );
+      expect(swapGlobal.whitelistedExtensions).toHaveLength(3);
+      expect(swapGlobal.whitelistedUnwrappers).toHaveLength(1);
+
+      // Reset whitelists
+      await $.swapProgram.methods
+        .resetWhitelists()
+        .accounts({
+          admin: $.admin.publicKey,
+        })
+        .signers([$.admin])
+        .rpc();
+
+      swapGlobal = await $.swapProgram.account.swapGlobal.fetch(
+        $.getSwapGlobalAccount()
+      );
+      expect(swapGlobal.whitelistedExtensions).toHaveLength(0);
+      expect(swapGlobal.whitelistedUnwrappers).toHaveLength(0);
+
+      // Expire the blockhash before re-adding
+      $.svm.expireBlockhash();
+
+      // Re-add for later tests
+      await $.whitelistExtension(
+        $.getExtensionProgramId("extA"),
+        $.getExtensionMint("mintA")
+      );
+      await $.whitelistExtension(
+        $.getExtensionProgramId("extB"),
+        $.getExtensionMint("mintB")
+      );
+      await $.whitelistExtension(
+        $.getExtensionProgramId("extC"),
+        $.getExtensionMint("mintC")
+      );
+      await $.whitelistUnwrapper($.swapperKeypair.publicKey);
+
+      swapGlobal = await $.swapProgram.account.swapGlobal.fetch(
+        $.getSwapGlobalAccount()
+      );
+      expect(swapGlobal.whitelistedExtensions).toHaveLength(3);
+      expect(swapGlobal.whitelistedUnwrappers).toHaveLength(1);
+
+      $.svm.expireBlockhash();
+    });
+
     it("should add wrap authorities to extensions", async () => {
       const swapGlobal = $.getSwapGlobalAccount();
 

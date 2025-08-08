@@ -1,5 +1,5 @@
 build-programs:
-	anchor build -p ext_swap
+	anchor build -p ext_swap -- --features migrate --no-default-features
 	anchor build -p m_ext -- --features scaled-ui --no-default-features
 	@mv target/deploy/m_ext.so target/deploy/scaled_ui.so
 	@mv target/idl/m_ext.json target/idl/scaled_ui.json

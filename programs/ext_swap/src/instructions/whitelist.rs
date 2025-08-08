@@ -196,7 +196,7 @@ pub struct ResetWhitelists<'info> {
 impl ResetWhitelists<'_> {
     fn validate(&self) -> Result<()> {
         let data = self.swap_global.try_borrow_data()?;
-        let admin = Pubkey::new_from_array(data[1..33].try_into().unwrap());
+        let admin = Pubkey::new_from_array(data[9..41].try_into().unwrap());
 
         if !admin.eq(self.admin.key) {
             return err!(SwapError::NotAuthorized);
