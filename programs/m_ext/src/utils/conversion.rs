@@ -4,17 +4,13 @@ use cfg_if::cfg_if;
 use earn::state::Global as EarnGlobal;
 use spl_token_2022::extension::{BaseStateWithExtensions, StateWithExtensions};
 
-use crate::{
-    constants::{INDEX_SCALE_F64, INDEX_SCALE_U64},
-    errors::ExtError,
-    state::ExtGlobal,
-};
+use crate::{constants::INDEX_SCALE_U64, errors::ExtError, state::ExtGlobal};
 
 cfg_if! {
     if #[cfg(feature = "scaled-ui")] {
         use anchor_lang::solana_program::program::invoke_signed;
-        use spl_token_2022::extension::scaled_ui_amount::{PodF64, ScaledUiAmountConfig, UnixTimestamp};
-        use crate::constants::ONE_HUNDRED_PERCENT_F64;
+        use spl_token_2022::extension::scaled_ui_amount::ScaledUiAmountConfig;
+        use crate::constants::{INDEX_SCALE_F64, ONE_HUNDRED_PERCENT_F64};
     }
 }
 
@@ -27,21 +23,16 @@ pub fn sync_multiplier<'info>(
     authority_seeds: &[&[&[u8]]],
     token_program: &Program<'info, Token2022>,
     m_earner_account: &AccountInfo<'info>,
-) -> Result<f64> {
+) -> Result<u64> {
     cfg_if! {
         if #[cfg(feature = "scaled-ui")] {
             // Get the current index and timestamp from the m_earn_global_account and cached values
-            let (multiplier, timestamp): (f64, i64) =
-                get_latest_multiplier_and_timestamp(ext_global_account, m_earn_global_account)?;
+            let (index, timestamp): (u64, u64) =
+                get_latest_index_and_timestamp(ext_global_account, m_earn_global_account)?;
 
-            // Compare against the current multiplier
-            // If the multiplier is the same, we don't need to update
-            let scaled_ui_config = get_scaled_ui_config(ext_mint)?;
-
-            if scaled_ui_config.new_multiplier == PodF64::from(multiplier)
-                && scaled_ui_config.new_multiplier_effective_timestamp == UnixTimestamp::from(timestamp)
-            {
-                return Ok(multiplier);
+            // Compare against the current ext index, if the same, return early
+            if index == ext_global_account.yield_config.last_ext_index {
+                return Ok(ext_global_account.yield_config.last_ext_index);
             }
 
             // Check if the extension is earning, i.e. that it has an active earner account.
@@ -49,6 +40,8 @@ pub fn sync_multiplier<'info>(
             // If not, only update the M index. The reason is so that yield accrual can
             // start again from a future point without issuing retroactive yield.
             if !m_earner_account.data_is_empty() {
+                let multiplier: f64 = index as f64 / INDEX_SCALE_F64;
+
                 // Update the multiplier and timestamp in the mint account
                 invoke_signed(
                     &spl_token_2022::extension::scaled_ui_amount::instruction::update_multiplier(
@@ -57,7 +50,7 @@ pub fn sync_multiplier<'info>(
                         &authority.key(),
                         &[],
                         multiplier,
-                        timestamp,
+                        timestamp as i64,
                     )?,
                     &[ext_mint.to_account_info(), authority.clone()],
                     authority_seeds,
@@ -68,80 +61,73 @@ pub fn sync_multiplier<'info>(
 
                 // Update the last m index and last ext index in the global account
                 ext_global_account.yield_config.last_m_index = m_earn_global_account.index;
-                ext_global_account.yield_config.last_ext_index = (multiplier * INDEX_SCALE_F64).floor() as u64;
+                ext_global_account.yield_config.last_ext_index = index;
 
-                // Return the latest multiplier
-                return Ok(multiplier);
+                // Return the latest ext index
+                return Ok(index);
             } else {
                 // If not earning, just update the last m index
                 ext_global_account.yield_config.last_m_index = m_earn_global_account.index;
 
                 // Return the current ext multiplier
-                return Ok(scaled_ui_config.new_multiplier.into());
+                return Ok(ext_global_account.yield_config.last_ext_index);
             }
         } else {
             // Ext tokens are 1:1 with M tokens and we don't need to sync this
-            return Ok(1.0);
+            return Ok(INDEX_SCALE_U64);
         }
     }
 }
 
-pub fn amount_to_principal_down(amount: u64, multiplier: f64) -> Result<u64> {
-    // If the multiplier is 1, return the amount directly
-    if multiplier == 1.0 {
+pub fn amount_to_principal_down(amount: u64, index: u64) -> Result<u64> {
+    // If the index is 1, return the amount directly
+    if index == INDEX_SCALE_U64 {
         return Ok(amount);
     }
-
-    // We want to avoid precision errors with floating point numbers
-    // Therefore, we use integer math.
-    let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
 
     // Calculate the principal from the amount and index, rounding down
     let principal: u64 = (amount as u128)
         .checked_mul(INDEX_SCALE_U64 as u128)
         .ok_or(ExtError::MathOverflow)?
-        .checked_div(index)
+        .checked_div(index as u128)
         .ok_or(ExtError::MathUnderflow)?
         .try_into()?;
 
     Ok(principal)
 }
 
-pub fn amount_to_principal_up(amount: u64, multiplier: f64) -> Result<u64> {
-    // If the multiplier is 1, return the amount directly
-    if multiplier == 1.0 {
+pub fn amount_to_principal_up(amount: u64, index: u64) -> Result<u64> {
+    // If the index is 1, return the amount directly
+    if index == INDEX_SCALE_U64 {
         return Ok(amount);
     }
 
-    // We want to avoid precision errors with floating point numbers
-    // Therefore, we use integer math.
-    let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
-
     // Calculate the principal from the amount and index, rounding up
+    let index_128 = index as u128;
     let principal: u64 = (amount as u128)
         .checked_mul(INDEX_SCALE_U64 as u128)
         .ok_or(ExtError::MathOverflow)?
-        .checked_add(index.checked_sub(1u128).ok_or(ExtError::MathUnderflow)?)
+        .checked_add(
+            index_128
+                .checked_sub(1u128)
+                .ok_or(ExtError::MathUnderflow)?,
+        )
         .ok_or(ExtError::MathOverflow)?
-        .checked_div(index)
+        .checked_div(index_128)
         .ok_or(ExtError::MathUnderflow)?
         .try_into()?;
 
     Ok(principal)
 }
 
-pub fn principal_to_amount_down(principal: u64, multiplier: f64) -> Result<u64> {
-    // If the multiplier is 1, return the principal directly
-    if multiplier == 1.0 {
+pub fn principal_to_amount_down(principal: u64, index: u64) -> Result<u64> {
+    // If the index is 1, return the principal directly
+    if index == INDEX_SCALE_U64 {
         return Ok(principal);
     }
 
-    // We want to avoid precision errors with floating point numbers
-    // Therefore, we use integer math.
-    let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
-
     // Calculate the amount from the principal and index, rounding down
-    let amount: u64 = index
+    let amount: u64 = (index as u128)
         .checked_mul(principal as u128)
         .ok_or(ExtError::MathOverflow)?
         .checked_div(INDEX_SCALE_U64 as u128)
@@ -151,18 +137,14 @@ pub fn principal_to_amount_down(principal: u64, multiplier: f64) -> Result<u64> 
     Ok(amount)
 }
 
-pub fn principal_to_amount_up(principal: u64, multiplier: f64) -> Result<u64> {
-    // If the multiplier is 1, return the principal directly
-    if multiplier == 1.0 {
+pub fn principal_to_amount_up(principal: u64, index: u64) -> Result<u64> {
+    // If the index is 1, return the principal directly
+    if index == INDEX_SCALE_U64 {
         return Ok(principal);
     }
 
-    // We want to avoid precision errors with floating point numbers
-    // Therefore, we use integer math.
-    let index = (multiplier * INDEX_SCALE_F64).trunc() as u128;
-
     // Calculate the amount from the principal and index, rounding up
-    let amount: u64 = index
+    let amount: u64 = (index as u128)
         .checked_mul(principal as u128)
         .ok_or(ExtError::MathOverflow)?
         .checked_add(
@@ -208,56 +190,55 @@ cfg_if! {
         }
 
 
-        fn get_latest_multiplier_and_timestamp<'info>(
+        fn get_latest_index_and_timestamp<'info>(
             ext_global_account: &Account<'info, ExtGlobal>,
             m_earn_global_account: &Account<'info, EarnGlobal>,
-        ) -> Result<(f64, i64)> {
-            let latest_m_multiplier = m_earn_global_account.index as f64 / INDEX_SCALE_F64;
-            let cached_m_multiplier = ext_global_account.yield_config.last_m_index as f64 / INDEX_SCALE_F64;
-            let latest_timestamp: i64 = m_earn_global_account.timestamp as i64;
-            let cached_ext_multiplier =
-                ext_global_account.yield_config.last_ext_index as f64 / INDEX_SCALE_F64;
+        ) -> Result<(u64, u64)> {
+            let latest_m_index = m_earn_global_account.index;
+            let cached_m_index = ext_global_account.yield_config.last_m_index;
+            let latest_timestamp = m_earn_global_account.timestamp;
+            let cached_ext_index = ext_global_account.yield_config.last_ext_index;
 
             // If no change, return early
-            if latest_m_multiplier == cached_m_multiplier {
-                return Ok((cached_ext_multiplier, latest_timestamp));
+            if latest_m_index == cached_m_index {
+                return Ok((cached_ext_index, latest_timestamp));
             }
 
-            // Calculate the new ext multiplier based on the latest m multiplier and timestamp
-            let new_ext_multiplier = calculate_new_multiplier(
-                cached_ext_multiplier,
-                cached_m_multiplier,
-                latest_m_multiplier,
+            // Calculate the new ext index based on the latest m index and timestamp
+            let new_ext_index = calculate_new_index(
+                cached_ext_index,
+                cached_m_index,
+                latest_m_index,
                 ext_global_account.yield_config.fee_bps
             )?;
 
-            Ok((new_ext_multiplier, latest_timestamp))
+            Ok((new_ext_index, latest_timestamp))
         }
 
-        fn calculate_new_multiplier(
-            last_ext_multiplier: f64,
-            last_m_multiplier: f64,
-            new_m_multiplier: f64,
+        fn calculate_new_index(
+            last_ext_index: u64,
+            last_m_index: u64,
+            new_m_index: u64,
             fee_bps: u64,
-        ) -> Result<f64> {
+        ) -> Result<u64> {
             // Confirm the inputs are in the expected domain.
             // These checks ensure that the resultant value is >= 1.0,
             // are allowable values to set as the Token2022 Scaled UI multiplier,
-            // and the ext multiplier is monotonically increasing.
-            // While having the last ext multiplier <= last m multiplier isn't strictly necessary,
+            // and the ext index is monotonically increasing.
+            // While having the last ext index <= last m index isn't strictly necessary,
             // it arises naturally from our construction and provides a good sanity check.
-            if last_ext_multiplier < 1.0 ||
-               last_m_multiplier < last_ext_multiplier ||
-               new_m_multiplier < last_m_multiplier ||
-               new_m_multiplier > 100.0 || // we set a high, but finite upper bound on the multiplier to ensure it (or the other multipliers) don't lead to overflow.
+            if last_ext_index < INDEX_SCALE_U64 ||
+               last_m_index < last_ext_index ||
+               new_m_index < last_m_index ||
+               new_m_index > 100 * INDEX_SCALE_U64 || // we set a high, but finite upper bound on the index to ensure it (or the other indices) don't lead to overflow.
                fee_bps > 10000 {
                 return err!(ExtError::InvalidInput);
             }
 
-            // Calculate the new ext multiplier from the formula:
-            // new_ext_multiplier = last_ext_multiplier * (new_m_multiplier / last_m_multiplier) ^ (1 - fee_on_yield)
+            // Calculate the new ext index from the formula:
+            // new_ext_index = last_ext_index * ((new_m_index / last_m_index) ^ (1 - fee_on_yield))
             // The derivation of this formula is explained in this document: https://gist.github.com/Oighty/89dd1288a0a7fb53eb6f0314846cb746
-            let m_increase_factor = new_m_multiplier / last_m_multiplier;
+            let m_increase_factor: u64 = (new_m_index as u128).checked_mul(INDEX_SCALE_U64 as u128).ok_or(ExtError::MathOverflow)?.checked_div(last_m_index as u128).ok_or(ExtError::MathUnderflow)?.try_into()?;
 
             // Calculate the increase factor for the ext index, if the fee is zero, then the increase factor is the same as M
             let ext_increase_factor = if fee_bps == 0 {
@@ -268,15 +249,13 @@ cfg_if! {
                 // The precision of the powf operation is non-deterministic
                 // However, the margin of error is ~10^-16, which is smaller than the 10^-12 precision
                 // that we need for this use case. See: https://doc.rust-lang.org/std/primitive.f64.html#method.powf
-                m_increase_factor.powf(1.0f64 - fee_on_yield)
+                (((m_increase_factor as f64) / INDEX_SCALE_F64).powf(1.0f64 - fee_on_yield) * INDEX_SCALE_F64).floor() as u64
             };
 
-            // Calculate the new extension multiplier (index in f64 scaled down)
-            let new_ext_multiplier = last_ext_multiplier * ext_increase_factor;
+            // Calculate the new extension index
+            let new_ext_index: u64 = (last_ext_index as u128).checked_mul(ext_increase_factor as u128).ok_or(ExtError::MathOverflow)?.checked_div(INDEX_SCALE_U64 as u128).ok_or(ExtError::MathUnderflow)?.try_into()?;
 
-            // We need to round the new multiplier down and truncate at 10^-12
-            // to return a consistent value
-            Ok((new_ext_multiplier * INDEX_SCALE_F64).floor() / INDEX_SCALE_F64)
+            Ok(new_ext_index)
         }
     }
 }
@@ -288,64 +267,64 @@ mod tests {
     cfg_if! {
         if #[cfg(feature = "scaled-ui")] {
             #[test]
-            fn test_calculate_new_multiplier_no_fee() {
+            fn test_calculate_new_index_no_fee() {
                 // cases (starting from 1.0):
                 // no rounding
-                let expected = 1.125000000000;
-                let result = calculate_new_multiplier(1.0, 1.0, 1.125, 0).unwrap();
+                let expected = 1125000000000u64;
+                let result = calculate_new_index(1000000000000u64, 1000000000000u64, 1125000000000u64, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // would round up -> truncates
-                let expected = 1.666666666666;
-                let result = calculate_new_multiplier(1.0, 1.5, 2.5, 0).unwrap();
+                let expected = 1666666666666u64;
+                let result = calculate_new_index(1000000000000u64, 1500000000000u64, 2500000000000u64, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // would round down -> truncates
-                let expected = 1.333333333333;
-                let result = calculate_new_multiplier(1.0, 1.5, 2.0, 0).unwrap();
+                let expected = 1333333333333u64;
+                let result = calculate_new_index(1000000000000u64, 1500000000000u64, 2000000000000u64, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // cases (starting from truncated value that would have rounded up):
                 // no rounding
-                let expected = 1.749999999999; // off by one due to previous rounding
-                let result = calculate_new_multiplier(1.666666666666, 2.0, 2.1, 0).unwrap();
+                let expected = 1749999999999u64; // off by one due to previous rounding
+                let result = calculate_new_index(1666666666666u64, 2000000000000u64, 2100000000000u64, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // would round up -> truncates
-                let expected = 1.777777777777;
-                let result = calculate_new_multiplier(1.666666666666, 3.0, 3.2, 0).unwrap();
+                let expected = 1777777777777u64;
+                let result = calculate_new_index(1666666666666u64, 3000000000000u64, 3200000000000u64, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // would round down -> truncates
-                let expected = 2.333333333332; // off by one due to previous rounding
-                let result = calculate_new_multiplier(1.666666666666, 5.0, 7.0, 0).unwrap();
+                let expected = 2333333333332u64; // off by one due to previous rounding
+                let result = calculate_new_index(1666666666666u64, 5000000000000u64, 7000000000000u64, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // cases (starting from truncated value that would have rounded down)
-                let expected = 1.499999999999; // off by one due to previous rounding
-                let result = calculate_new_multiplier(1.333333333333, 2.0, 2.25, 0).unwrap();
+                let expected = 1499999999999u64; // off by one due to previous rounding
+                let result = calculate_new_index(1333333333333u64, 2000000000000u64, 2250000000000u64, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // would round up -> truncates
-                let expected = 1.666666666666;
-                let result = calculate_new_multiplier(1.333333333333, 2.0, 2.5, 0).unwrap();
+                let expected = 1666666666666u64;
+                let result = calculate_new_index(1333333333333u64, 2000000000000u64, 2500000000000u64, 0).unwrap();
                 assert_eq!(result, expected);
 
                 // would round down -> truncates
-                let expected = 2.333333333332;
-                let result = calculate_new_multiplier(1.333333333333, 4.0, 7.0, 0).unwrap();
+                let expected = 2333333333332u64;
+                let result = calculate_new_index(1333333333333u64, 4000000000000u64, 7000000000000u64, 0).unwrap();
                 assert_eq!(result, expected);
             }
 
-            // Helper function to trim the value to 12 decimal places after subtracting expected rounding error
-            // This is needed to deal with imprecision in floating point arithmetic
-            fn trim(value: f64) -> f64 {
-                // Truncate the value to 12 decimal places
-                (value * INDEX_SCALE_F64).ceil() / INDEX_SCALE_F64
-            }
+            // // Helper function to trim the value to 12 decimal places after subtracting expected rounding error
+            // // This is needed to deal with imprecision in floating point arithmetic
+            // fn trim(value: f64) -> f64 {
+            //     // Truncate the value to 12 decimal places
+            //     (value * INDEX_SCALE_F64).ceil() / INDEX_SCALE_F64
+            // }
 
             #[test]
-            fn test_calculate_new_multiplier_with_fee() {
+            fn test_calculate_new_index_with_fee() {
                 // there are three calculations here to test rounding behavior:
                 // 1. m_increase_factor = new_m_multiplier / last_m_multiplier
                 // 2. ext_increase_factor = m_increase_factor.powf(1.0 - fee_on_yield)
@@ -361,8 +340,8 @@ mod tests {
                 //   1. no rounding
                 //   2. rounds down
                 //   3. no rounding
-                let result = calculate_new_multiplier(1.0, 1.0, 1.125, 2500).unwrap();
-                let expected_actual = 1.092356486341; // wolfram alpha: 1.092356486341477...
+                let result = calculate_new_index(1000000000000u64, 10000000000u64, 11250000000u64, 2500).unwrap();
+                let expected_actual = 1092356486341; // wolfram alpha: 1.092356486341477...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
 
@@ -370,8 +349,8 @@ mod tests {
                 //   1. no rounding
                 //   2. rounds down
                 //   3. rounds down
-                let result = calculate_new_multiplier(1.3, 1.5, 1.65, 1500).unwrap();
-                let expected_actual = 1.409701411824; // wolfram alpha: 1.409701411824313...
+                let result = calculate_new_index(1300000000000u64, 1500000000000u64, 1650000000000u64, 1500).unwrap();
+                let expected_actual = 1409701411824; // wolfram alpha: 1.409701411824313...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
 
@@ -379,26 +358,26 @@ mod tests {
                 //  1. no rounding
                 //  2. rounds down
                 //  3. would round up -> truncates
-                let result = calculate_new_multiplier(1.2, 1.5, 1.65, 1500).unwrap();
-                let expected_actual = 1.301262841684; // wolfram alpha: 1.301262841683981...
-                let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
+                let result = calculate_new_index(1200000000000u64, 1500000000000u64, 1650000000000u64, 1500).unwrap();
+                let expected_actual = 1301262841684; // wolfram alpha: 1.301262841683981...
+                let expected = expected_actual - 1; // off by one due to truncation
                 assert_eq!(result, expected);
 
                 // D
                 //  1. no rounding
                 //  2. would round up -> truncates
                 //  3. no rounding
-                let result = calculate_new_multiplier(1.0, 1.5, 1.65, 1000).unwrap();
-                let expected_actual = 1.089565684036; // wolfram alpha: 1.089565684035973...
-                let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
+                let result = calculate_new_index(1000000000000u64, 1500000000000u64, 1650000000000u64, 1000).unwrap();
+                let expected_actual = 1089565684036; // wolfram alpha: 1.089565684035973...
+                let expected = expected_actual - 1; // off by one due to truncation
                 assert_eq!(result, expected);
 
                 // E
                 //  1. no rounding
                 //  2. would round up -> truncates
                 //  3. rounds down
-                let result = calculate_new_multiplier(1.2, 1.5, 1.65, 1000).unwrap();
-                let expected_actual = 1.307478820843; // wolfram alpha: 1.307478820843168...
+                let result = calculate_new_index(1200000000000u64, 1500000000000u64, 1650000000000u64, 1000).unwrap();
+                let expected_actual = 1307478820843; // wolfram alpha: 1.307478820843168...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
 
@@ -406,17 +385,17 @@ mod tests {
                 //  1. no rounding
                 //  2. would round up -> truncates
                 //  3. would round up -> truncates
-                let result = calculate_new_multiplier(1.3, 1.5, 1.65, 1000).unwrap();
-                let expected_actual = 1.416435389247; // wolfram alpha: 1.41643538924676614906538927073063715743660444837662580163175093387867947...
-                let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
+                let result = calculate_new_index(1300000000000u64, 1500000000000u64, 1650000000000u64, 1000).unwrap();
+                let expected_actual = 1416435389247; // wolfram alpha: 1.41643538924676614906538927073063715743660444837662580163175093387867947...
+                let expected = expected_actual - 1; // off by one due to truncation
                 assert_eq!(result, expected);
 
                 // G
                 //  1. rounds down
                 //  2. rounds down
                 //  3. no rounding
-                let result = calculate_new_multiplier(1.0, 1.125, 1.25, 1000).unwrap();
-                let expected_actual = 1.099465842451; // wolfram alpha: 1.099465842451349...
+                let result = calculate_new_index(1000000000000u64, 1125000000000u64, 1250000000000u64, 1000).unwrap();
+                let expected_actual = 1099465842451; // wolfram alpha: 1.099465842451349...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
 
@@ -424,8 +403,8 @@ mod tests {
                 //  1. rounds down
                 //  2. rounds down
                 //  3. rounds down
-                let result = calculate_new_multiplier(1.1, 1.125, 1.25, 1000).unwrap();
-                let expected_actual = 1.209412426696; // wolfram alpha: 1.209412426696484...
+                let result = calculate_new_index(1100000000000u64, 1125000000000u64, 1250000000000u64, 1000).unwrap();
+                let expected_actual = 1209412426696; // wolfram alpha: 1.209412426696484...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
 
@@ -433,26 +412,26 @@ mod tests {
                 //  1. rounds down
                 //  2. rounds down
                 //  3. would round up -> truncates
-                let result = calculate_new_multiplier(1.2, 1.125, 1.25, 1000).unwrap();
-                let expected_actual = 1.319359010942; // wolfram alpha: 1.319359010941619...
-                let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
+                let result = calculate_new_index(1200000000000u64, 1125000000000u64, 1250000000000u64, 1000).unwrap();
+                let expected_actual = 1319359010942; // wolfram alpha: 1.319359010941619...
+                let expected = expected_actual - 1; // off by one due to truncation
                 assert_eq!(result, expected);
 
                 // J
                 //  1. rounds down
                 //  2. would round up -> truncates
                 //  3. no rounding
-                let result = calculate_new_multiplier(1.0, 1.125, 1.25, 2000).unwrap();
-                let expected_actual = 1.087942624846; // wolfram alpha: 1.087942624845529...
-                let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
+                let result = calculate_new_index(1000000000000u64, 1125000000000u64, 1250000000000u64, 2000).unwrap();
+                let expected_actual = 1087942624846; // wolfram alpha: 1.087942624845529...
+                let expected = expected_actual - 1; // off by one due to truncation
                 assert_eq!(result, expected);
 
                 // K
                 //  1. rounds down
                 //  2. would round up -> truncates
                 //  3. rounds down
-                let result = calculate_new_multiplier(1.3, 1.125, 1.25, 2000).unwrap();
-                let expected_actual = 1.414325412299; // wolfram alpha: 1.414325412299188...
+                let result = calculate_new_index(1300000000000u64, 1125000000000u64, 1250000000000u64, 2000).unwrap();
+                let expected_actual = 1414325412299; // wolfram alpha: 1.414325412299188...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
 
@@ -460,17 +439,17 @@ mod tests {
                 //  1. rounds down
                 //  2. would round up -> truncates
                 //  3. would round up -> truncates
-                let result = calculate_new_multiplier(1.2, 1.125, 1.25, 2000).unwrap();
-                let expected_actual = 1.305531149815; // wolfram alpha: 1.305531149814635...
-                let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
+                let result = calculate_new_index(1200000000000u64, 1125000000000u64, 1250000000000u64, 2000).unwrap();
+                let expected_actual = 1305531149815; // wolfram alpha: 1.305531149814635...
+                let expected = expected_actual - 1; // off by one due to truncation
                 assert_eq!(result, expected);
 
                 // M
                 //  1. would round up -> truncates
                 //  2. rounds down
                 //  3. no rounding
-                let result = calculate_new_multiplier(1.0, 3.0, 3.2, 1000).unwrap();
-                let expected_actual = 1.059804724543; // wolfram alpha: 1.059804724543068...
+                let result = calculate_new_index(1000000000000u64, 3000000000000u64, 3200000000000u64, 1000).unwrap();
+                let expected_actual = 1059804724543; // wolfram alpha: 1.059804724543068...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
 
@@ -478,8 +457,8 @@ mod tests {
                 //  1. would round up -> truncates
                 //  2. rounds down
                 //  3. rounds down
-                let result = calculate_new_multiplier(1.4, 3.0, 3.2, 1000).unwrap();
-                let expected_actual = 1.483726614360; // wolfram alpha: 1.483726614360295...
+                let result = calculate_new_index(1400000000000u64, 3000000000000u64, 3200000000000u64, 1000).unwrap();
+                let expected_actual = 1483726614360; // wolfram alpha: 1.483726614360295...
                 let expected = expected_actual; // no error
                 assert_eq!(result, expected);
 
@@ -487,26 +466,26 @@ mod tests {
                 //  1. would round up -> truncates
                 //  2. rounds down
                 //  3. would round up -> truncates
-                let result = calculate_new_multiplier(1.2, 3.0, 3.2, 1000).unwrap();
-                let expected_actual = 1.271765669452; // wolfram alpha: 1.271765669451681...
-                let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
+                let result = calculate_new_index(1200000000000u64, 3000000000000u64, 3200000000000u64, 1000).unwrap();
+                let expected_actual = 1271765669452; // wolfram alpha: 1.271765669451681...
+                let expected = expected_actual - 1; // off by one due to truncation
                 assert_eq!(result, expected);
 
                 // P
                 //  1. would round up -> truncates
                 //  2. would round up -> truncates
                 //  3. no rounding
-                let result = calculate_new_multiplier(1.0, 3.0, 3.2, 2000).unwrap();
-                let expected_actual = 1.052986925779; // wolfram alpha: 1.052986925778570...
-                let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
+                let result = calculate_new_index(1000000000000u64, 3000000000000u64, 3200000000000u64, 2000).unwrap();
+                let expected_actual = 1052986925779; // wolfram alpha: 1.052986925778570...
+                let expected = expected_actual - 1; // off by one due to truncation
                 assert_eq!(result, expected);
 
                 // Q
                 //  1. would round up -> truncates
                 //  2. would round up -> truncates
                 //  3. rounds down
-                let result = calculate_new_multiplier(1.2, 3.0, 3.2, 2000).unwrap();
-                let expected_actual = 1.263584310934; // wolfram alpha: 1.263584310934284...
+                let result = calculate_new_index(1200000000000u64, 3000000000000u64, 3200000000000u64, 2000).unwrap();
+                let expected_actual = 1263584310934; // wolfram alpha: 1.263584310934284...
                 let expected = expected_actual;
                 assert_eq!(result, expected);
 
@@ -514,9 +493,9 @@ mod tests {
                 //  1. would round up -> truncates
                 //  2. would round up -> truncates
                 //  3. would round up -> truncates
-                let result = calculate_new_multiplier(1.4, 3.0, 3.2, 2000).unwrap();
-                let expected_actual = 1.474181696090; // wolfram alpha: 1.474181696089998...
-                let expected = trim(expected_actual - 0.000000000001); // off by one due to truncation
+                let result = calculate_new_index(1400000000000u64, 3000000000000u64, 3200000000000u64, 2000).unwrap();
+                let expected_actual = 1474181696090; // wolfram alpha: 1.474181696089998...
+                let expected = expected_actual - 1; // off by one due to truncation
                 assert_eq!(result, expected);
             }
         }

@@ -126,7 +126,7 @@ impl Wrap<'_> {
 
         // If necessary, sync the multiplier between M and Ext tokens
         // Return the current value to use for conversions
-        let multiplier = sync_multiplier(
+        let multiplier: u64 = sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
             &ctx.accounts.m_earn_global_account,
