@@ -1,13 +1,12 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022};
+use anchor_spl::token_interface::{Mint, TokenInterface};
 use cfg_if::cfg_if;
-use earn::state::Global as EarnGlobal;
 use spl_token_2022::extension::{BaseStateWithExtensions, StateWithExtensions};
 
 use crate::{
     constants::{INDEX_SCALE_F64, INDEX_SCALE_U64},
     errors::ExtError,
-    state::ExtGlobal,
+    state::ExtGlobalV2,
 };
 
 cfg_if! {
@@ -21,26 +20,36 @@ cfg_if! {
 #[allow(unused_variables)]
 pub fn sync_multiplier<'info>(
     ext_mint: &mut InterfaceAccount<'info, Mint>,
-    ext_global_account: &mut Account<'info, ExtGlobal>,
-    m_earn_global_account: &Account<'info, EarnGlobal>,
+    ext_global_account: &mut Account<'info, ExtGlobalV2>,
+    m_mint: &InterfaceAccount<'info, Mint>,
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
-    token_program: &Program<'info, Token2022>,
+    token_program: &Interface<'info, TokenInterface>,
 ) -> Result<f64> {
     cfg_if! {
         if #[cfg(feature = "scaled-ui")] {
-            // Get the current index and timestamp from the m_earn_global_account and cached values
-            let (multiplier, timestamp): (f64, i64) =
-                get_latest_multiplier_and_timestamp(ext_global_account, m_earn_global_account)?;
+            // Require the token program to be the token2022 program
+            // We checked this on the Initialize instruction
+            // but since we're CPIing into the provided program here,
+            // and this could be used by any instruction
+            // (which may not have checked ext_mint's token program),
+            // we check again as a safety measure
+            if token_program.key() != spl_token_2022::ID {
+                return err!(ExtError::InvalidTokenProgram);
+            }
+
+            // Get the current index and timestamp from the m_mint and cached values
+            let (m_multiplier, ext_multiplier, timestamp): (f64, f64, i64) =
+                get_latest_multiplier_and_timestamp(ext_global_account, m_mint)?;
 
             // Compare against the current multiplier
             // If the multiplier is the same, we don't need to update
             let scaled_ui_config = get_scaled_ui_config(ext_mint)?;
 
-            if scaled_ui_config.new_multiplier == PodF64::from(multiplier)
+            if scaled_ui_config.new_multiplier == PodF64::from(ext_multiplier)
                 && scaled_ui_config.new_multiplier_effective_timestamp == UnixTimestamp::from(timestamp)
             {
-                return Ok(multiplier);
+                return Ok(ext_multiplier);
             }
 
             // Update the multiplier and timestamp in the mint account
@@ -50,7 +59,7 @@ pub fn sync_multiplier<'info>(
                     &ext_mint.key(),
                     &authority.key(),
                     &[],
-                    multiplier,
+                    ext_multiplier,
                     timestamp,
                 )?,
                 &[ext_mint.to_account_info(), authority.clone()],
@@ -61,10 +70,10 @@ pub fn sync_multiplier<'info>(
             ext_mint.reload()?;
 
             // Update the last m index and last ext index in the global account
-            ext_global_account.yield_config.last_m_index = m_earn_global_account.index;
-            ext_global_account.yield_config.last_ext_index = (multiplier * INDEX_SCALE_F64).floor() as u64;
+            ext_global_account.yield_config.last_m_index = (m_multiplier * INDEX_SCALE_F64).floor() as u64;
+            ext_global_account.yield_config.last_ext_index = (ext_multiplier * INDEX_SCALE_F64).floor() as u64;
 
-            return Ok(multiplier);
+            return Ok(ext_multiplier);
         } else {
             // Ext tokens are 1:1 with M tokens and we don't need to sync this
             return Ok(1.0);
@@ -195,18 +204,19 @@ cfg_if! {
 
 
         fn get_latest_multiplier_and_timestamp<'info>(
-            ext_global_account: &Account<'info, ExtGlobal>,
-            m_earn_global_account: &Account<'info, EarnGlobal>,
-        ) -> Result<(f64, i64)> {
-            let latest_m_multiplier = m_earn_global_account.index as f64 / INDEX_SCALE_F64;
-            let cached_m_multiplier = ext_global_account.yield_config.last_m_index as f64 / INDEX_SCALE_F64;
-            let latest_timestamp: i64 = m_earn_global_account.timestamp as i64;
+            ext_global_account: &Account<'info, ExtGlobalV2>,
+            m_mint: &InterfaceAccount<'info, Mint>,
+        ) -> Result<(f64, f64, i64)> {
+            let m_scaled_ui_config = get_scaled_ui_config(m_mint)?;
+            let latest_m_multiplier: f64 = m_scaled_ui_config.new_multiplier.into();
+            let cached_m_multiplier: f64 = ext_global_account.yield_config.last_m_index as f64 / INDEX_SCALE_F64;
+            let latest_timestamp: i64 = m_scaled_ui_config.new_multiplier_effective_timestamp.into();
             let cached_ext_multiplier =
                 ext_global_account.yield_config.last_ext_index as f64 / INDEX_SCALE_F64;
 
             // If no change, return early
             if latest_m_multiplier == cached_m_multiplier {
-                return Ok((cached_ext_multiplier, latest_timestamp));
+                return Ok((cached_m_multiplier, cached_ext_multiplier, latest_timestamp));
             }
 
             // Calculate the new ext multiplier based on the latest m multiplier and timestamp
@@ -217,7 +227,7 @@ cfg_if! {
                 ext_global_account.yield_config.fee_bps
             )?;
 
-            Ok((new_ext_multiplier, latest_timestamp))
+            Ok((latest_m_multiplier, new_ext_multiplier, latest_timestamp))
         }
 
         fn calculate_new_multiplier(

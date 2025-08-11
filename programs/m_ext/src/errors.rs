@@ -26,4 +26,10 @@ pub enum ExtError {
     InvalidInput,
     #[msg("Invalid amount")]
     InvalidAmount,
+    #[msg("Already claimed for user.")]
+    AlreadyClaimed,
+    #[msg("Failed to serialize account data.")]
+    SerializationError,
+    #[msg("Invalid token program provided.")]
+    InvalidTokenProgram,
 }

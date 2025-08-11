@@ -1,7 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
-use earn::state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED};
 use m_ext::cpi::accounts::Unwrap as ExtUnwrap;
 use m_ext::state::{EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
 
@@ -10,7 +8,6 @@ use crate::state::{SwapGlobal, GLOBAL_SEED};
 
 #[derive(Accounts)]
 pub struct Unwrap<'info> {
-    #[account(mut)]
     pub signer: Signer<'info>,
 
     // Required if the swap program is not whitelisted on the extension
@@ -33,13 +30,6 @@ pub struct Unwrap<'info> {
     )]
     /// CHECK: CPI will validate the global account
     pub from_global: AccountInfo<'info>,
-    #[account(
-        constraint = m_global.mint == m_mint.key(),
-        seeds = [EARN_GLOBAL_SEED],
-        seeds::program = earn::ID,
-        bump = m_global.bump,
-    )]
-    pub m_global: Box<Account<'info, EarnGlobal>>,
 
     /*
      * Mints
@@ -47,28 +37,22 @@ pub struct Unwrap<'info> {
     #[account(mut)]
     /// Validated by unwrap on the extension program
     pub from_mint: Box<InterfaceAccount<'info, Mint>>,
-    #[account(
-        address = m_global.mint,
-        mint::token_program = m_token_program
-    )]
+    #[account(mint::token_program = m_token_program)]
     pub m_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /*
      * Token Accounts
      */
     #[account(
-        init_if_needed,
-        payer = signer,
-        associated_token::mint = m_mint,
-        associated_token::authority = signer,
-        associated_token::token_program = m_token_program,
+        mut,
+        token::mint = m_mint,
+        token::token_program = m_token_program,
     )]
     pub m_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
-        associated_token::mint = from_mint,
-        associated_token::authority = signer,
-        associated_token::token_program = from_token_program,
+        token::mint = from_mint,
+        token::token_program = from_token_program,
     )]
     pub from_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
@@ -112,16 +96,14 @@ pub struct Unwrap<'info> {
      */
     /// CHECK: checked against whitelisted extensions
     pub from_ext_program: UncheckedAccount<'info>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
 impl<'info> Unwrap<'info> {
-    fn validate(&self, amount: u64) -> Result<()> {
+    fn validate(&self, ext_principal: u64) -> Result<()> {
         if !self
             .swap_global
-            .whitelisted_extensions
-            .contains(self.from_ext_program.key)
+            .is_extension_whitelisted(self.from_ext_program.key)
         {
             return err!(SwapError::InvalidExtension);
         }
@@ -139,15 +121,15 @@ impl<'info> Unwrap<'info> {
             return err!(SwapError::UnauthorizedUnwrapper);
         }
 
-        if amount == 0 {
+        if ext_principal == 0 {
             return err!(SwapError::InvalidAmount);
         }
 
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(amount))]
-    pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, amount: u64) -> Result<()> {
+    #[access_control(ctx.accounts.validate(ext_principal))]
+    pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, ext_principal: u64) -> Result<()> {
         // Set swap program as authority if none provided
         let unwrap_authority = match &ctx.accounts.unwrap_authority {
             Some(auth) => auth.to_account_info(),
@@ -163,7 +145,6 @@ impl<'info> Unwrap<'info> {
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.from_mint.to_account_info(),
                     global_account: ctx.accounts.from_global.to_account_info(),
-                    m_earn_global_account: ctx.accounts.m_global.to_account_info(),
                     m_vault: ctx.accounts.from_m_vault_auth.to_account_info(),
                     ext_mint_authority: ctx.accounts.from_mint_authority.to_account_info(),
                     to_m_token_account: ctx.accounts.m_token_account.to_account_info(),
@@ -175,7 +156,7 @@ impl<'info> Unwrap<'info> {
                 &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
             )
             .with_remaining_accounts(ctx.remaining_accounts.to_vec()),
-            amount,
+            ext_principal,
         )
     }
 }

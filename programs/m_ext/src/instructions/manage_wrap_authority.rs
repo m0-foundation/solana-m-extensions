@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 
 use crate::{
     errors::ExtError,
-    state::{ExtGlobal, EXT_GLOBAL_SEED},
+    state::{ExtGlobalV2, EXT_GLOBAL_SEED},
 };
 
 #[derive(Accounts)]
@@ -15,11 +15,11 @@ pub struct AddWrapAuthority<'info> {
         seeds = [EXT_GLOBAL_SEED],
         has_one = admin @ ExtError::NotAuthorized,
         bump = global_account.bump,
-        realloc = ExtGlobal::size(global_account.wrap_authorities.len() + 1),
+        realloc = ExtGlobalV2::size(global_account.wrap_authorities.len() + 1),
         realloc::payer = admin,
         realloc::zero = false,
     )]
-    pub global_account: Account<'info, ExtGlobal>,
+    pub global_account: Account<'info, ExtGlobalV2>,
 
     pub system_program: Program<'info, System>,
 }
@@ -64,7 +64,7 @@ pub struct RemoveWrapAuthority<'info> {
         has_one = admin @ ExtError::NotAuthorized,
         bump = global_account.bump,
     )]
-    pub global_account: Account<'info, ExtGlobal>,
+    pub global_account: Account<'info, ExtGlobalV2>,
 
     pub system_program: Program<'info, System>,
 }
@@ -95,7 +95,7 @@ impl RemoveWrapAuthority<'_> {
             .retain(|&x| !x.eq(&wrap_authority));
 
         // Reallocate the account to remove the empty space without erasing the other data
-        let new_size = ExtGlobal::size(ctx.accounts.global_account.wrap_authorities.len());
+        let new_size = ExtGlobalV2::size(ctx.accounts.global_account.wrap_authorities.len());
         ctx.accounts
             .global_account
             .to_account_info()
