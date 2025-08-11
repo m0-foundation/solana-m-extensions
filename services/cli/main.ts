@@ -40,17 +40,23 @@ import {
 } from "./token-extensions";
 import { AnchorProvider, Program, Wallet, BN } from "@coral-xyz/anchor";
 import { ExtSwap } from "../../target/types/ext_swap";
+import { MExt as MigrateExt } from "../../target/types/migrate";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 import { PROGRAM_ID as EARN_PID } from "@m0-foundation/solana-m-sdk";
+import { sha256 } from "@noble/hashes/sha2";
 
 const EXT_SWAP_IDL = require("../../target/idl/ext_swap.json");
 const NO_YIELD_EXT_IDL = require("../../target/idl/no_yield.json");
 const SCALED_UI_EXT_IDL = require("../../target/idl/scaled_ui.json");
+const MIGRATE_EXT_IDL = require("../../target/idl/migrate.json");
 
-const M_MINT: PublicKey =
+const OLD_M_MINT: PublicKey =
   process.env.NETWORK === "devnet"
     ? new PublicKey("mzeroZRGCah3j5xEWp2Nih3GDejSBbH1rbHoxDg8By6")
     : new PublicKey("mzerokyEX9TNDoK4o2YZQBDmMzjokAeN6M2g2S3pLJo");
+
+const M_MINT = new PublicKey("mzerojk9tg56ebsrEAhfkyc9VgKjTW2zDqp6C5mhjzH");
+
 const EXT_SWAP: PublicKey = new PublicKey(
   "MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH"
 );
@@ -333,6 +339,40 @@ async function main() {
       }
     });
 
+  program.command("migrate-ext").action(async () => {
+    const [payer, extension] = keysFromEnv(["PAYER_KEYPAIR", "M0_WM"]);
+    MIGRATE_EXT_IDL.address = extension.publicKey;
+
+    const program = new Program<MigrateExt>(
+      MIGRATE_EXT_IDL,
+      anchorProvider(connection, payer)
+    );
+
+    const admin = process.env.SQUADS_MULTISIG
+      ? new PublicKey(process.env.SQUADS_MULTISIG)
+      : payer.publicKey;
+
+    const tx = await program.methods
+      .migrateM()
+      .accountsPartial({
+        admin,
+        newMMint: M_MINT,
+        oldMMint: OLD_M_MINT,
+      })
+      .transaction();
+
+    if (process.env.SQUADS_MULTISIG) {
+      const b = tx.serialize({ verifySignatures: false });
+      console.log("Transaction:", {
+        b64: b.toString("base64"),
+        b58: bs58.encode(b),
+      });
+    } else {
+      const sig = await connection.sendTransaction(tx, [payer]);
+      console.log(`Migrated extension: ${sig}`);
+    }
+  });
+
   program
     .command("initialize-ext-swap")
     .description("Initialize the Extension Swap Facility")
@@ -422,6 +462,37 @@ async function main() {
       }
     });
 
+  program.command("reset-swap-authority").action(async () => {
+    const [payer] = keysFromEnv(["PAYER_KEYPAIR"]);
+    const admin = process.env.SQUADS_MULTISIG
+      ? new PublicKey(process.env.SQUADS_MULTISIG)
+      : payer.publicKey;
+
+    const tx = new Transaction().add(
+      new TransactionInstruction({
+        programId: EXT_SWAP,
+        keys: [
+          {
+            pubkey: admin,
+            isSigner: true,
+            isWritable: false,
+          },
+          {
+            pubkey: PublicKey.findProgramAddressSync(
+              [Buffer.from("global")],
+              EXT_SWAP
+            )[0],
+            isSigner: false,
+            isWritable: true,
+          },
+        ],
+        data: Buffer.concat([
+          Buffer.from(sha256("global:reset_whitelists").subarray(0, 8)),
+        ]),
+      })
+    );
+  });
+
   program
     .command("whitelist-swap-unwrapper")
     .description("Whitelist an unwrapper on the swap program")
@@ -487,6 +558,46 @@ async function main() {
             .instruction()
         );
       }
+
+      tx.feePayer = admin;
+      tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+      if (process.env.SQUADS_MULTISIG) {
+        const b = tx.serialize({ verifySignatures: false });
+        console.log("Transaction:", {
+          b64: b.toString("base64"),
+          b58: bs58.encode(b),
+        });
+      } else {
+        const sig = await connection.sendTransaction(tx, [payer]);
+        console.log(`Added extensions: ${sig}`);
+      }
+    });
+
+  program
+    .command("remove-whitelisted-extension")
+    .description("Remove whitelisted extensions on the Swap Facility")
+    .argument("<extension>", "Extension to remove")
+    .action(async (extension) => {
+      const [payer] = keysFromEnv(["PAYER_KEYPAIR"]);
+
+      const admin = process.env.SQUADS_MULTISIG
+        ? new PublicKey(process.env.SQUADS_MULTISIG)
+        : payer.publicKey;
+
+      const extSwap = new Program<ExtSwap>(
+        EXT_SWAP_IDL,
+        anchorProvider(connection, payer)
+      );
+
+      const tx = new Transaction().add(
+        await extSwap.methods
+          .removeWhitelistedExtension(new PublicKey(extension))
+          .accounts({
+            admin,
+          })
+          .instruction()
+      );
 
       tx.feePayer = admin;
       tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;

@@ -187,6 +187,7 @@ impl MigrateM<'_> {
         // update the m_mint and m_earn_global_account fields
         let new_global = ExtGlobalV2 {
             admin: old_global.admin,
+            pending_admin: None,
             ext_mint: old_global.ext_mint,
             m_mint: ctx.accounts.new_m_mint.key(),
             m_earn_global_account: ctx.accounts.m_earn_global_account.key(),

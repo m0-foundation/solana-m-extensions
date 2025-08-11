@@ -120,6 +120,9 @@ importers:
       '@m0-foundation/solana-m-sdk':
         specifier: 'catalog:'
         version: 0.2.5(bufferutil@4.0.9)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.8.3)(utf-8-validate@5.0.10)
+      '@noble/hashes':
+        specifier: ^1.8.0
+        version: 1.8.0
       '@solana/buffer-layout':
         specifier: 'catalog:'
         version: 4.0.1
@@ -141,6 +144,9 @@ importers:
       commander:
         specifier: 13.1.0
         version: 13.1.0
+      sha2:
+        specifier: link:@noble/hashes/sha2
+        version: link:@noble/hashes/sha2
       shelljs:
         specifier: ^0.10.0
         version: 0.10.0
@@ -4050,7 +4056,7 @@ snapshots:
     dependencies:
       '@adraffy/ens-normalize': 1.11.0
       '@noble/curves': 1.8.1
-      '@noble/hashes': 1.7.1
+      '@noble/hashes': 1.8.0
       '@scure/bip32': 1.6.2
       '@scure/bip39': 1.5.4
       abitype: 1.0.8(typescript@5.8.3)
