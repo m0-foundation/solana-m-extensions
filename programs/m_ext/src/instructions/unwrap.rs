@@ -144,6 +144,11 @@ impl Unwrap<'_> {
             amount = principal_to_amount_down(principal, multiplier)?;
         }
 
+        // Revert if the user will receive 0 m tokens or send 0 ext tokens
+        if amount == 0 || principal == 0 {
+            return err!(ExtError::InvalidAmount);
+        }
+
         // Burn the amount of ext tokens from the user
         burn_tokens(
             &ctx.accounts.from_ext_token_account,            // from

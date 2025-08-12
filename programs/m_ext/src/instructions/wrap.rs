@@ -151,6 +151,11 @@ impl Wrap<'_> {
         // If multiplier is 1.0, the amount remains the same
         let principal = amount_to_principal_down(amount, multiplier)?;
 
+        // Revert if the user will receive 0 ext tokens
+        if principal == 0 {
+            return err!(ExtError::InvalidAmount);
+        }
+
         // Mint the amount of ext tokens to the user
         mint_tokens(
             &ctx.accounts.to_ext_token_account, // to
