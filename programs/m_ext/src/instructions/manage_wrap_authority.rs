@@ -43,7 +43,7 @@ impl AddWrapAuthority<'_> {
 
     #[access_control(ctx.accounts.validate(new_wrap_authority))]
     pub fn handler(ctx: Context<Self>, new_wrap_authority: Pubkey) -> Result<()> {
-        // Update the wrap authority at the specified index
+        // Add the wrap authority to the list
         ctx.accounts
             .global_account
             .wrap_authorities
