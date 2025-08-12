@@ -102,8 +102,8 @@ impl ClaimFees<'_> {
             &ctx.accounts.m_earner_account,
         )?;
 
-        // Calculate the required collateral, rounding down to be conservative
-        // This amount will always be greater than what is required in the check_solvency function
+        // Calculate the required collateral, rounding up to be conservative
+        // This amount will always be greater than what is required
         // since it allows a rounding error of up to 2e-6
         let required_m = principal_to_amount_up(ctx.accounts.ext_mint.supply, multiplier)?;
 
