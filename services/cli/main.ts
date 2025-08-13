@@ -55,6 +55,22 @@ const OLD_M_MINT: PublicKey =
     ? new PublicKey("mzeroZRGCah3j5xEWp2Nih3GDejSBbH1rbHoxDg8By6")
     : new PublicKey("mzerokyEX9TNDoK4o2YZQBDmMzjokAeN6M2g2S3pLJo");
 
+const EARN = new PublicKey("mz2vDzjbQDUDXBH6FPF5s4odCJ4y8YLE5QWaZ8XdZ9Z");
+
+// Extension mints
+const mints: { [key: string]: string } = {
+  extaykYu5AQcDm3qZAbiDN3yp6skqn6Nssj7veUUGZw:
+    "usdkbee86pkLyRmxfFCdkyySpxRb5ndCxVsK2BkRXwX",
+  extMahs9bUFMYcviKCvnSRaXgs5PcqmMzcnHRtTqE85:
+    "usdkyPPxgV7sfNyKb8eDz66ogPrkRXG3wS2FVb6LLUf",
+  Fb2AsCKmPd4gKhabT6KsremSHMrJ8G2Mopnc6rDQZX9e:
+    "usdkbee86pkLyRmxfFCdkyySpxRb5ndCxVsK2BkRXwX",
+  "3PskKTHgboCbUSQPMcCAZdZNFHbNvSoZ8zEFYANCdob7":
+    "usdkyPPxgV7sfNyKb8eDz66ogPrkRXG3wS2FVb6LLUf",
+  wMXX1K1nca5W4pZr1piETe78gcAVVrEFi9f4g46uXko:
+    "mzeroXDoBpRVhnEXBra27qzAMdxgpWVY3DzQW7xMVJp",
+};
+
 const M_MINT = new PublicKey("mzerojk9tg56ebsrEAhfkyc9VgKjTW2zDqp6C5mhjzH");
 
 const EXT_SWAP: PublicKey = new PublicKey(
@@ -327,51 +343,66 @@ async function main() {
         await connection.getLatestBlockhash()
       ).blockhash;
 
-      if (process.env.SQUADS_MULTISIG) {
-        const b = transaction.serialize({ verifySignatures: false });
-        console.log("Transaction:", {
-          b64: b.toString("base64"),
-          b58: bs58.encode(b),
-        });
-      } else {
-        const sig = await connection.sendTransaction(transaction, [payer]);
-        console.log(`Initialized Extension Swap Facility: ${sig}`);
-      }
+      sendOrSerialize(transaction, connection, payer);
     });
 
-  program.command("migrate-ext").action(async () => {
-    const [payer, extension] = keysFromEnv(["PAYER_KEYPAIR", "M0_WM"]);
-    MIGRATE_EXT_IDL.address = extension.publicKey;
+  program
+    .command("migrate-ext")
+    .option("-e, --extension <name>", "Extension program ID", "M0_WM")
+    .action(async ({ extension }) => {
+      const [payer, ext] = keysFromEnv(["PAYER_KEYPAIR", extension]);
+      MIGRATE_EXT_IDL.address = ext.publicKey;
+      console.log("Migrating extension:", ext.publicKey.toBase58());
 
-    const program = new Program<MigrateExt>(
-      MIGRATE_EXT_IDL,
-      anchorProvider(connection, payer)
-    );
+      const program = new Program<MigrateExt>(
+        MIGRATE_EXT_IDL,
+        anchorProvider(connection, payer)
+      );
 
-    const admin = process.env.SQUADS_MULTISIG
-      ? new PublicKey(process.env.SQUADS_MULTISIG)
-      : payer.publicKey;
+      const admin = process.env.SQUADS_MULTISIG
+        ? new PublicKey(process.env.SQUADS_MULTISIG)
+        : payer.publicKey;
 
-    const tx = await program.methods
-      .migrateM()
-      .accountsPartial({
-        admin,
-        newMMint: M_MINT,
-        oldMMint: OLD_M_MINT,
-      })
-      .transaction();
+      const vault = PublicKey.findProgramAddressSync(
+        [Buffer.from("m_vault")],
+        ext.publicKey
+      )[0];
 
-    if (process.env.SQUADS_MULTISIG) {
-      const b = tx.serialize({ verifySignatures: false });
-      console.log("Transaction:", {
-        b64: b.toString("base64"),
-        b58: bs58.encode(b),
-      });
-    } else {
-      const sig = await connection.sendTransaction(tx, [payer]);
-      console.log(`Migrated extension: ${sig}`);
-    }
-  });
+      const tx = await program.methods
+        .migrateM()
+        .accountsPartial({
+          admin,
+          globalAccount: PublicKey.findProgramAddressSync(
+            [Buffer.from("global")],
+            ext.publicKey
+          )[0],
+          mEarnGlobalAccount: PublicKey.findProgramAddressSync(
+            [Buffer.from("global")],
+            EARN
+          )[0],
+          newMMint: M_MINT,
+          oldMMint: OLD_M_MINT,
+          extMint: mints[ext.publicKey.toBase58()],
+          mVault: vault,
+          newVaultMTokenAccount: getAssociatedTokenAddressSync(
+            M_MINT,
+            vault,
+            true,
+            TOKEN_2022_PROGRAM_ID
+          ),
+          oldVaultMTokenAccount: getAssociatedTokenAddressSync(
+            OLD_M_MINT,
+            vault,
+            true,
+            TOKEN_2022_PROGRAM_ID
+          ),
+          mTokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .transaction();
+
+      await sendOrSerialize(tx, connection, payer);
+    });
 
   program
     .command("initialize-ext-swap")
@@ -397,16 +428,7 @@ async function main() {
       tx.feePayer = admin;
       tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
-      if (process.env.SQUADS_MULTISIG) {
-        const b = tx.serialize({ verifySignatures: false });
-        console.log("Transaction:", {
-          b64: b.toString("base64"),
-          b58: bs58.encode(b),
-        });
-      } else {
-        const sig = await connection.sendTransaction(tx, [payer]);
-        console.log(`Initialized Extension Swap Facility: ${sig}`);
-      }
+      sendOrSerialize(tx, connection, payer);
     });
 
   program
@@ -450,16 +472,7 @@ async function main() {
       tx.feePayer = admin;
       tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
-      if (process.env.SQUADS_MULTISIG) {
-        const b = tx.serialize({ verifySignatures: false });
-        console.log("Transaction:", {
-          b64: b.toString("base64"),
-          b58: bs58.encode(b),
-        });
-      } else {
-        const sig = await connection.sendTransaction(tx, [payer]);
-        console.log(`Added wrap authorties: ${sig}`);
-      }
+      sendOrSerialize(tx, connection, payer);
     });
 
   program.command("reset-swap-authority").action(async () => {
@@ -491,6 +504,11 @@ async function main() {
         ]),
       })
     );
+
+    tx.feePayer = admin;
+    tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+    sendOrSerialize(tx, connection, payer);
   });
 
   program
@@ -499,7 +517,10 @@ async function main() {
     .argument("<authorities>", "Comma-separated list of pubkeys to whitelist")
     .action(async (auths) => {
       const [payer] = keysFromEnv(["PAYER_KEYPAIR"]);
-      const admin = new PublicKey(process.env.SQUADS_MULTISIG!);
+
+      const admin = process.env.SQUADS_MULTISIG
+        ? new PublicKey(process.env.SQUADS_MULTISIG)
+        : payer.publicKey;
 
       const swap = new Program<ExtSwap>(
         EXT_SWAP_IDL,
@@ -522,11 +543,7 @@ async function main() {
       tx.feePayer = admin;
       tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
-      const b = tx.serialize({ verifySignatures: false });
-      console.log("Transaction:", {
-        b64: b.toString("base64"),
-        b58: bs58.encode(b),
-      });
+      sendOrSerialize(tx, connection, payer);
     });
 
   program
@@ -554,6 +571,7 @@ async function main() {
             .accountsPartial({
               admin,
               extProgram: new PublicKey(ext),
+              extMint: mints[ext],
             })
             .instruction()
         );
@@ -562,16 +580,7 @@ async function main() {
       tx.feePayer = admin;
       tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
-      if (process.env.SQUADS_MULTISIG) {
-        const b = tx.serialize({ verifySignatures: false });
-        console.log("Transaction:", {
-          b64: b.toString("base64"),
-          b58: bs58.encode(b),
-        });
-      } else {
-        const sig = await connection.sendTransaction(tx, [payer]);
-        console.log(`Added extensions: ${sig}`);
-      }
+      sendOrSerialize(tx, connection, payer);
     });
 
   program
@@ -602,16 +611,7 @@ async function main() {
       tx.feePayer = admin;
       tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
-      if (process.env.SQUADS_MULTISIG) {
-        const b = tx.serialize({ verifySignatures: false });
-        console.log("Transaction:", {
-          b64: b.toString("base64"),
-          b58: bs58.encode(b),
-        });
-      } else {
-        const sig = await connection.sendTransaction(tx, [payer]);
-        console.log(`Added extensions: ${sig}`);
-      }
+      sendOrSerialize(tx, connection, payer);
     });
 
   program
@@ -654,20 +654,6 @@ async function main() {
         PublicKey.findProgramAddressSync([Buffer.from("global")], EARN_PID)[0],
         M_MINT
       );
-
-      // Extension mints
-      const mints: { [key: string]: string } = {
-        extaykYu5AQcDm3qZAbiDN3yp6skqn6Nssj7veUUGZw:
-          "usdkbee86pkLyRmxfFCdkyySpxRb5ndCxVsK2BkRXwX",
-        extMahs9bUFMYcviKCvnSRaXgs5PcqmMzcnHRtTqE85:
-          "usdkyPPxgV7sfNyKb8eDz66ogPrkRXG3wS2FVb6LLUf",
-        Fb2AsCKmPd4gKhabT6KsremSHMrJ8G2Mopnc6rDQZX9e:
-          "usdkbee86pkLyRmxfFCdkyySpxRb5ndCxVsK2BkRXwX",
-        "3PskKTHgboCbUSQPMcCAZdZNFHbNvSoZ8zEFYANCdob7":
-          "usdkyPPxgV7sfNyKb8eDz66ogPrkRXG3wS2FVb6LLUf",
-        wMXX1K1nca5W4pZr1piETe78gcAVVrEFi9f4g46uXko:
-          "mzeroXDoBpRVhnEXBra27qzAMdxgpWVY3DzQW7xMVJp",
-      };
 
       // Add common addresses for each extension
       for (const ext of [wM, ext1, ext2]) {
@@ -1049,6 +1035,23 @@ async function createToken2022Mint(
   transaction.sign([payer, mint]);
 
   await connection.sendTransaction(transaction);
+}
+
+async function sendOrSerialize(
+  tx: Transaction,
+  connection: Connection,
+  payer: Keypair
+) {
+  if (process.env.SQUADS_MULTISIG) {
+    const b = tx.serialize({ verifySignatures: false });
+    console.log("Transaction:", {
+      b64: b.toString("base64"),
+      b58: bs58.encode(b),
+    });
+  } else {
+    const sig = await connection.sendTransaction(tx, [payer]);
+    console.log(`Txn sent: ${sig}`);
+  }
 }
 
 main().catch((error) => {

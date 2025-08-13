@@ -139,7 +139,12 @@ function buildProgram(
   // not building an extension
   if (swapProgram) {
     console.log("Building swap program...");
-    const res = shell.exec("anchor build -p ext_swap --verifiable", opts);
+    const res = shell.exec(
+      `anchor build -p ext_swap --verifiable ${
+        includeMigrate ? "-- --features migrate" : ""
+      }`,
+      opts
+    );
     if (res.code !== 0) throw new Error(`Swap build failed: ${res.stderr}`);
     return;
   }
@@ -147,11 +152,23 @@ function buildProgram(
   // set program ID to the extension program
   setProgramID(pid);
 
+  // set program ID in referenced v1 IDL
+  for (const file of [
+    "programs/m_ext/idls/m_ext_v1_no_yield.json",
+    "programs/m_ext/idls/m_ext_v1_scaled_ui.json",
+  ]) {
+    const idl = JSON.parse(fs.readFileSync(file, "utf-8"));
+    idl.address = pid;
+    fs.writeFileSync(file, JSON.stringify(idl, null, 2));
+  }
+
   console.log(`Building extension program ${pid}...`);
 
   const result = shell.exec(
     `anchor build -p m_ext --verifiable -- --features ${yieldFeature}${
       includeMigrate ? ",migrate" : ""
+    }${
+      pid === "wMXX1K1nca5W4pZr1piETe78gcAVVrEFi9f4g46uXko" ? ",wm" : ""
     } --no-default-features`,
     opts
   );
@@ -245,7 +262,7 @@ function updateProgram(
       --url ${process.env.RPC_URL} \
       --keypair devnet-keypair.json \
       ${bufferAddress} \
-      ${pid}`,
+      ${swapProgram ? "MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH" : pid}`,
     opts
   );
   if (result.code !== 0) {
