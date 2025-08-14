@@ -434,24 +434,22 @@ async function main() {
   program
     .command("add-wrap-authority")
     .description("Add a wrap authority on the Extension program")
+    .option("-e, --extension <name>", "Extension program ID", "M0_WM")
     .argument(
       "<wrapAuthorities>",
       "Comma-separated list of pubkeys to whitelist"
     )
-    .action(async (wrapAuthorities) => {
-      const [payer, extProgram] = keysFromEnv([
-        "PAYER_KEYPAIR",
-        "EXT_PROGRAM_KEYPAIR",
-      ]);
+    .action(async (wrapAuthorities, { extension }) => {
+      const [payer, ext] = keysFromEnv(["PAYER_KEYPAIR", extension]);
 
       const admin = process.env.SQUADS_MULTISIG
         ? new PublicKey(process.env.SQUADS_MULTISIG)
         : payer.publicKey;
 
       // Insert the program ID into the IDL so we can interact with it
-      NO_YIELD_EXT_IDL.address = extProgram.publicKey.toBase58();
+      NO_YIELD_EXT_IDL.address = ext.publicKey.toBase58();
 
-      const ext = new Program(
+      const program = new Program(
         NO_YIELD_EXT_IDL,
         anchorProvider(connection, payer)
       );
@@ -460,7 +458,7 @@ async function main() {
 
       for (const auth of wrapAuthorities.split(",")) {
         tx.add(
-          await ext.methods
+          await program.methods
             .addWrapAuthority(new PublicKey(auth))
             .accounts({
               admin,
