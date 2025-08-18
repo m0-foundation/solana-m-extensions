@@ -52,28 +52,39 @@ pub fn sync_multiplier<'info>(
                 return Ok(ext_multiplier);
             }
 
-            // Update the multiplier and timestamp in the mint account
-            invoke_signed(
-                &spl_token_2022::extension::scaled_ui_amount::instruction::update_multiplier(
-                    &token_program.key(),
-                    &ext_mint.key(),
-                    &authority.key(),
-                    &[],
-                    ext_multiplier,
-                    timestamp,
-                )?,
-                &[ext_mint.to_account_info(), authority.clone()],
-                authority_seeds,
-            )?;
+            // Check if yield distribution is enabled on the extension
+            // If so, update the multiplier and return
+            // If not, update the last M index to the latest and return the current multiplier
+            if ext_global_account.distribute {
+                // Update the multiplier and timestamp in the mint account
+                invoke_signed(
+                    &spl_token_2022::extension::scaled_ui_amount::instruction::update_multiplier(
+                        &token_program.key(),
+                        &ext_mint.key(),
+                        &authority.key(),
+                        &[],
+                        ext_multiplier,
+                        timestamp,
+                    )?,
+                    &[ext_mint.to_account_info(), authority.clone()],
+                    authority_seeds,
+                )?;
 
-            // Reload the mint account so the new multiplier is reflected
-            ext_mint.reload()?;
+                // Reload the mint account so the new multiplier is reflected
+                ext_mint.reload()?;
 
-            // Update the last m index and last ext index in the global account
-            ext_global_account.yield_config.last_m_index = (m_multiplier * INDEX_SCALE_F64).floor() as u64;
-            ext_global_account.yield_config.last_ext_index = (ext_multiplier * INDEX_SCALE_F64).floor() as u64;
+                // Update the last m index and last ext index in the global account
+                ext_global_account.yield_config.last_m_index = (m_multiplier * INDEX_SCALE_F64).floor() as u64;
+                ext_global_account.yield_config.last_ext_index = (ext_multiplier * INDEX_SCALE_F64).floor() as u64;
 
-            return Ok(ext_multiplier);
+                return Ok(ext_multiplier);
+            } else {
+                // Update the last M index to the latest and return the current multiplier
+                ext_global_account.yield_config.last_m_index = (m_multiplier * INDEX_SCALE_F64).floor() as u64;
+                return Ok(scaled_ui_config.new_multiplier.into());
+            }
+
+
         } else {
             // Ext tokens are 1:1 with M tokens and we don't need to sync this
             return Ok(1.0);

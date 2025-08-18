@@ -14,7 +14,8 @@ pub struct ExtGlobalV2 {
     pub bump: u8,
     pub m_vault_bump: u8,
     pub ext_mint_authority_bump: u8,
-    pub yield_config: YieldConfig,     // variant specific state
+    pub distribute: bool, // flag to enable/disable distribution of yield
+    pub yield_config: YieldConfig, // variant specific state
     pub wrap_authorities: Vec<Pubkey>, // accounts permissioned to wrap/unwrap the ext_mint
 }
 
@@ -29,6 +30,7 @@ impl ExtGlobalV2 {
         1 + // bump
         1 + // m_vault_bump
         1 + // ext_mint_authority_bump
+        1 + // distribute
         YieldConfig::space() + // yield_config
         4 + // length of wrap_authorities vector
         wrap_authorities * 32 // each Pubkey is 32 bytes

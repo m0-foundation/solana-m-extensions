@@ -1,6 +1,7 @@
 pub mod claim_fees;
 pub mod initialize;
 pub mod manage_wrap_authority;
+pub mod set_distribution_status;
 pub mod transfer_admin;
 pub mod unwrap;
 pub mod wrap;
@@ -8,6 +9,7 @@ pub mod wrap;
 pub use claim_fees::*;
 pub use initialize::*;
 pub use manage_wrap_authority::*;
+pub use set_distribution_status::*;
 pub use transfer_admin::*;
 pub use unwrap::*;
 pub use wrap::*;

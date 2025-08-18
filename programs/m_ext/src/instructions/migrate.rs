@@ -194,6 +194,7 @@ impl MigrateM<'_> {
             bump: old_global.bump,
             m_vault_bump: old_global.m_vault_bump,
             ext_mint_authority_bump: old_global.ext_mint_authority_bump,
+            distribute: true,
             yield_config,
             wrap_authorities: old_global.wrap_authorities.clone(),
         };

@@ -137,6 +137,13 @@ pub mod m_ext {
         MigrateM::handler(ctx)
     }
 
+    pub fn set_distribution_status(
+        ctx: Context<SetDistributionStatus>,
+        distribute: bool,
+    ) -> Result<()> {
+        SetDistributionStatus::handler(ctx, distribute)
+    }
+
     // Wrap authority instructions
 
     pub fn wrap(ctx: Context<Wrap>, amount: u64) -> Result<()> {

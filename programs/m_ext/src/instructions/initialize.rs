@@ -213,6 +213,7 @@ impl Initialize<'_> {
             bump: ctx.bumps.global_account,
             m_vault_bump: ctx.bumps.m_vault,
             ext_mint_authority_bump: ctx.bumps.ext_mint_authority,
+            distribute: true,
             yield_config,
             wrap_authorities,
         });

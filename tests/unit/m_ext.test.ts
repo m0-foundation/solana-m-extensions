@@ -351,7 +351,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             });
 
             // Confirm the size of the global account based on the number of wrap authorities
-            const expectedSize = 176 + 1 + wrapAuthorities.length * 32; // 176 bytes base size + 1 for yield config discriminator + 4 bytes for vector length + 32 bytes per wrap authority
+            const expectedSize = 177 + 1 + wrapAuthorities.length * 32; // 177 bytes base size + 1 for yield config discriminator + 4 bytes for vector length + 32 bytes per wrap authority
             const extGlobalSize = await $.provider.connection
               .getAccountInfo(globalAccount)
               .then((info) => info?.data.length || 0);
@@ -494,7 +494,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             });
 
             // Check the size of the global account based on the number of wrap authorities
-            const expectedSize = 176 + 25 + wrapAuthorities.length * 32; // 176 bytes base size + 25 yield config size + 32 bytes per wrap authority
+            const expectedSize = 177 + 25 + wrapAuthorities.length * 32; // 177 bytes base size + 25 yield config size + 32 bytes per wrap authority
             const extGlobalSize = await $.provider.connection
               .getAccountInfo(globalAccount)
               .then((info) => info?.data.length || 0);
