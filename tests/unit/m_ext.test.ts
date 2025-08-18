@@ -16,6 +16,7 @@ import { Comparison, ExtensionTest, Variant } from "./ext_test_harness";
 // Start parameters for M Earn
 const initialSupply = new BN(100_000_000); // 100 tokens with 6 decimals
 const initialIndex = new BN(1_100_000_000_000); // 1.1 with 12 decimals
+const ONE = new BN(1_000_000_000_000); // 1.0 with 12 decimals
 
 const VARIANTS = [
   [Variant.NoYield, TOKEN_2022_PROGRAM_ID],
@@ -489,7 +490,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 yieldVariant: { scaledUi: {} },
                 feeBps,
                 lastMIndex: initialIndex,
-                lastExtIndex: new BN(1e12),
+                lastExtIndex: ONE,
               },
             });
 
@@ -566,7 +567,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // it sets pending_admin to the new admin
           test("Transfer admin - success", async () => {
             // Transfer admin to newAdmin
-            await $.transferAdmin(newAdmin.publicKey);
+            await $.ext.methods
+              .transferAdmin(newAdmin.publicKey)
+              .accounts({
+                admin: $.admin.publicKey,
+              })
+              .signers([$.admin])
+              .rpc();
 
             // Check that pending_admin is set correctly
             await $.expectExtGlobalState({
@@ -4905,7 +4912,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.expectExtGlobalState({
               yieldConfig: {
                 yieldVariant: { crank: {} },
-                index: initialIndex,
+                lastMIndex: initialIndex,
+                lastExtIndex: ONE,
                 timestamp: startTime,
               },
             });
@@ -4921,7 +4929,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.expectExtGlobalState({
               yieldConfig: {
                 yieldVariant: { crank: {} },
-                index: newIndex,
+                lastMIndex: newIndex,
+                lastExtIndex: newIndex.mul(ONE).div(initialIndex),
                 timestamp: $.currentTime(),
               },
             });
@@ -5240,7 +5249,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Check that the last claim index and the last claim timestamp are the initial values
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: startTime,
             });
 
@@ -5249,12 +5258,6 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               earnerOneATA,
               $.useToken2022ForExt
             );
-
-            // Calculate the expected new balance
-            // Note: earn manager fee is 0, so it all goes to the earner
-            const expectedBalance = initialBalance
-              .mul(newIndex)
-              .div(initialIndex);
 
             // Send the instruction
             await $.ext.methods
@@ -5276,6 +5279,11 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .signers([$.earnAuthority])
               .rpc();
 
+            const newExtIndex = await $.getCurrentExtIndex();
+            // Calculate the expected new balance
+            // Note: earn manager fee is 0, so it all goes to the earner
+            const expectedBalance = initialBalance.mul(newExtIndex).div(ONE);
+
             // Check the new balance matches the expected balance
             await $.expectTokenBalance(
               earnerOneATA,
@@ -5287,7 +5295,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Check the earner account is updated
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: newExtIndex,
               lastClaimTimestamp: $.currentTime(),
             });
           });
@@ -5353,7 +5361,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Check that the last claim index and the last claim timestamp are the initial values
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: startTime,
             });
 
@@ -5362,13 +5370,6 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               earnerOneATA,
               $.useToken2022ForExt
             );
-
-            // Calculate the expected yield
-            // Note: earn manager fee is 0, so it all goes to the yield recipient
-            const expectedYield = initialBalance
-              .mul(newIndex)
-              .div(initialIndex)
-              .sub(initialBalance);
 
             // Send the instruction
             await $.ext.methods
@@ -5390,6 +5391,15 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .signers([$.earnAuthority])
               .rpc();
 
+            const newExtIndex = await $.getCurrentExtIndex();
+
+            // Calculate the expected yield
+            // Note: earn manager fee is 0, so it all goes to the yield recipient
+            const expectedYield = initialBalance
+              .mul(newExtIndex)
+              .div(ONE)
+              .sub(initialBalance);
+
             // Check the ata balance didn't change but the yield recipient received the yield
             await $.expectTokenBalance(
               earnerOneATA,
@@ -5408,7 +5418,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Check the earner account is updated
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: newExtIndex,
               lastClaimTimestamp: $.currentTime(),
             });
           });
@@ -5432,7 +5442,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Verify that the earner's last claim index is equal to the current global index
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: await $.getCurrentExtIndex(),
               lastClaimTimestamp: $.currentTime(),
             });
 
@@ -5500,7 +5510,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Confirm the starting earner account state
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: startTime,
             });
 
@@ -5520,10 +5530,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .signers([$.earnAuthority])
               .rpc();
 
+            const newExtIndex = await $.getCurrentExtIndex();
+
             // Calculate expected rewards (balance * (global_index / last_claim_index) - balance)
             const expectedRewards = earnerStartBalance
-              .mul(newIndex)
-              .div(initialIndex)
+              .mul(newExtIndex)
+              .div(ONE)
               .sub(earnerStartBalance);
 
             // Verify the expected token balance changes
@@ -5544,7 +5556,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Verify the earner account was updated with the new claim index and claim timestamp
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: newExtIndex,
               lastClaimTimestamp: $.currentTime(),
             });
           });
@@ -5594,7 +5606,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Confirm the starting earner account state
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: startTime,
             });
 
@@ -5614,10 +5626,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .signers([$.earnAuthority])
               .rpc();
 
+            const newExtIndex = await $.getCurrentExtIndex();
+
             // Calculate expected rewards (balance * (global_index / last_claim_index) - balance)
             const expectedRewards = earnerStartBalance
-              .mul(newIndex)
-              .div(initialIndex)
+              .mul(newExtIndex)
+              .div(ONE)
               .sub(earnerStartBalance);
 
             // Verify the expected token balance changes
@@ -5638,7 +5652,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Verify the earner account was updated with the new claim index and claim timestamp
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: newExtIndex,
               lastClaimTimestamp: $.currentTime(),
             });
           });
@@ -5687,7 +5701,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Confirm the starting earner account state
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: startTime,
             });
 
@@ -5707,10 +5721,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .signers([$.earnAuthority])
               .rpc();
 
+            const newExtIndex = await $.getCurrentExtIndex();
+
             // Calculate expected rewards (balance * (global_index / last_claim_index) - balance)
             const expectedRewards = earnerStartBalance
-              .mul(newIndex)
-              .div(initialIndex)
+              .mul(newExtIndex)
+              .div(ONE)
               .sub(earnerStartBalance);
 
             // Verify the expected token balance changes
@@ -5724,7 +5740,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Verify the earner account was updated with the new claim index and claim timestamp
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: newExtIndex,
               lastClaimTimestamp: $.currentTime(),
             });
           });
@@ -5772,7 +5788,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Confirm the starting earner account state
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: startTime,
             });
 
@@ -5794,10 +5810,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .signers([$.earnAuthority])
               .rpc();
 
-            // Calculate expected rewards (balance * (global_index / last_claim_index) - balance)
+            const newExtIndex = await $.getCurrentExtIndex();
+
+            // Calculate expected rewards (balance * (new_index / last_claim_index) - balance)
             const expectedRewards = snapshotBalance
-              .mul(newIndex)
-              .div(initialIndex)
+              .mul(newExtIndex)
+              .div(ONE)
               .sub(snapshotBalance);
 
             // Verify the expected token balance changes
@@ -5819,7 +5837,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Verify the earner account was updated with the new claim index and claim timestamp
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: newExtIndex,
               lastClaimTimestamp: $.currentTime(),
             });
           });
@@ -5869,7 +5887,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Confirm the starting earner account state
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: startTime,
             });
 
@@ -5897,10 +5915,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .signers([$.earnAuthority])
               .rpc();
 
+            const newExtIndex = await $.getCurrentExtIndex();
+
             // Calculate expected rewards (balance * (global_index / last_claim_index) - balance)
             const expectedRewards = snapshotBalance
-              .mul(newIndex)
-              .div(initialIndex)
+              .mul(newExtIndex)
+              .div(ONE)
               .sub(snapshotBalance);
 
             // Calculate the fee amount (1% of rewards)
@@ -5927,7 +5947,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Verify the earner account was updated with the new claim index and claim timestamp
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: newExtIndex,
               lastClaimTimestamp: $.currentTime(),
             });
           });
@@ -6152,7 +6172,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Verify the earner account was initialized correctly
             await $.expectEarnerState(earnerAccount, {
               earnManager: earnManagerOne.publicKey,
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: $.currentTime(),
               user: earnerTwo.publicKey,
               userTokenAccount: tokenAccount,
@@ -6191,7 +6211,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Verify the earner account was initialized correctly
             await $.expectEarnerState(earnerAccount, {
               earnManager: earnManagerOne.publicKey,
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: $.currentTime(),
               user: earnerTwo.publicKey,
               userTokenAccount: earnerTwoATA,
