@@ -74,7 +74,8 @@ cfg_if! {
         pub struct YieldConfig {
             pub yield_variant: YieldVariant,   // variant of yield config
             pub earn_authority: Pubkey,        // address that can distribute yield
-            pub index: u64,                    // most recent index that yield is being distributed for
+            pub last_m_index: u64,             // most recent m index that has been synced
+            pub last_ext_index: u64,           // most recent ext index that yield can be distributed for
             pub timestamp: u64,                // timestamp of the most recent index update
         }
 
@@ -82,7 +83,8 @@ cfg_if! {
             pub fn space() -> usize {
                 1 + // yield_variant
                 32 + // earn_authority
-                8 + // index
+                8 + // last_m_index
+                8 + // last_ext_index
                 8 // timestamp
             }
         }

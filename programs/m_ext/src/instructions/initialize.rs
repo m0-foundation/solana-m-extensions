@@ -29,7 +29,7 @@ cfg_if! {
             utils::conversion::{sync_multiplier, get_mint_extensions, get_scaled_ui_config},
         };
     } else if #[cfg(feature = "crank")] {
-        use crate::constants::INDEX_SCALE_F64;
+        use crate::constants::{INDEX_SCALE_F64, INDEX_SCALE_U64};
     }
 }
 
@@ -193,7 +193,8 @@ impl Initialize<'_> {
                 yield_config = YieldConfig {
                     yield_variant: YieldVariant::Crank,
                     earn_authority: earn_authority.unwrap_or_default(),
-                    index: m_index,
+                    last_m_index: m_index,
+                    last_ext_index: INDEX_SCALE_U64, // we set the extension index to 1.0 initially
                     timestamp: timestamp as u64,
                 };
             } else {

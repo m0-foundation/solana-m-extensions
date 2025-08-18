@@ -143,7 +143,8 @@ impl MigrateM<'_> {
                 yield_config = YieldConfig {
                     yield_variant: YieldVariant::Crank,
                     earn_authority: old_global.earn_authority,
-                    index: old_global.index,
+                    last_m_index: old_global.index,
+                    last_ext_index: old_global.index, // we set the extension index to the same as the M index since V1 used the same one
                     timestamp: old_global.timestamp,
                 };
             } else if #[cfg(feature = "scaled-ui")] {

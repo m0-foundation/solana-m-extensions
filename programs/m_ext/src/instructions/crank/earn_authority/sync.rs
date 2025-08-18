@@ -31,18 +31,35 @@ impl Sync<'_> {
     /// The multiplier is scaled to a u64 index for storage.
 
     pub fn handler(ctx: Context<Self>) -> Result<()> {
-        // Convert the multiplier to a u64 index
+        // Convert the latest M multiplier to a u64 index
         let scaled_ui_config = get_scaled_ui_config(&ctx.accounts.m_mint)?;
         let current_multiplier: f64 = scaled_ui_config.new_multiplier.into();
         let timestamp: i64 = scaled_ui_config.new_multiplier_effective_timestamp.into();
         let current_index: u64 = (INDEX_SCALE_F64 * current_multiplier).trunc() as u64;
 
-        // Update the local data
-        ctx.accounts.global_account.yield_config.index = current_index;
+        // If yield is being distributed, calculate the new EXT index and update it
+        if ctx.accounts.global_account.distribute {
+            // Calculate the new EXT index based on the last synced EXT index and the change in M index
+            let last_ext_index = ctx.accounts.global_account.yield_config.last_ext_index;
+            let last_m_index = ctx.accounts.global_account.yield_config.last_m_index;
+
+            let new_ext_index = (last_ext_index as u128)
+                .checked_mul(current_index as u128)
+                .ok_or(ExtError::MathOverflow)?
+                .checked_div(last_m_index as u128)
+                .ok_or(ExtError::MathUnderflow)? as u64;
+
+            ctx.accounts.global_account.yield_config.last_ext_index = new_ext_index;
+        }
+
+        // Update the M index and timestamp to the current values on the M mint
+        ctx.accounts.global_account.yield_config.last_m_index = current_index;
         ctx.accounts.global_account.yield_config.timestamp = timestamp as u64;
 
         emit!(SyncIndexUpdate {
-            index: ctx.accounts.global_account.yield_config.index,
+            distribute: ctx.accounts.global_account.distribute,
+            last_m_index: ctx.accounts.global_account.yield_config.last_m_index,
+            last_ext_index: ctx.accounts.global_account.yield_config.last_ext_index,
             ts: ctx.accounts.global_account.yield_config.timestamp,
         });
 
@@ -52,6 +69,8 @@ impl Sync<'_> {
 
 #[event]
 pub struct SyncIndexUpdate {
-    pub index: u64,
+    pub distribute: bool,
+    pub last_m_index: u64,
+    pub last_ext_index: u64,
     pub ts: u64,
 }
