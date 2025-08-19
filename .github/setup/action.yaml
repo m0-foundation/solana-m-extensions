@@ -8,7 +8,7 @@ inputs:
   solana-version:
     description: "Solana version"
     required: false
-    default: "2.1.0"
+    default: "v2.1.0"
   anchor-version:
     description: "Anchor CLI version"
     required: false
@@ -45,6 +45,7 @@ runs:
         mkdir -p ~/.local/share/solana
         sh -c "$(curl -sSfL https://release.anza.xyz/${{ inputs.solana-version }}/install)"
         echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+        solana --version
       shell: bash
 
     - name: Install Anchor CLI
