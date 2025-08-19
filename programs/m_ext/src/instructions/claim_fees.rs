@@ -92,7 +92,7 @@ impl ClaimFees<'_> {
     pub fn handler(ctx: Context<Self>) -> Result<()> {
         // Sync the multiplier before allowing any collateral withdrawals
         let signer_bump = ctx.accounts.global_account.ext_mint_authority_bump;
-        let multiplier: f64 = sync_multiplier(
+        let multiplier: u64 = sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
             &ctx.accounts.m_earn_global_account,
