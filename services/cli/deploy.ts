@@ -253,7 +253,7 @@ function updateProgram(
       `solana program set-buffer-authority \
         --url ${process.env.RPC_URL} \
         --keypair devnet-keypair.json \
-        --new-buffer-authority ${auth} \ 
+        --new-buffer-authority ${auth} \
          ${bufferAddress} `,
       opts
     );
