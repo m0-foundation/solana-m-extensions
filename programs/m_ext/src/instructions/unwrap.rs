@@ -10,7 +10,7 @@ use crate::{
     },
 };
 use earn::{
-    state::{Global as EarnGlobal, EARNER_SEED, GLOBAL_SEED as EARN_GLOBAL_SEED},
+    state::{Global as EarnGlobal, EARNER_SEED},
     ID as EARN_PROGRAM,
 };
 
@@ -33,14 +33,10 @@ pub struct Unwrap<'info> {
         bump = global_account.bump,
         has_one = m_mint @ ExtError::InvalidAccount,
         has_one = ext_mint @ ExtError::InvalidAccount,
+        has_one = m_earn_global_account @ ExtError::InvalidAccount
     )]
     pub global_account: Account<'info, ExtGlobal>,
 
-    #[account(
-        seeds = [EARN_GLOBAL_SEED],
-        seeds::program = EARN_PROGRAM,
-        bump = m_earn_global_account.bump,
-    )]
     pub m_earn_global_account: Account<'info, EarnGlobal>,
 
     /// CHECK: This account is validated by the seed, it stores no data
@@ -142,6 +138,11 @@ impl Unwrap<'_> {
         if principal > ctx.accounts.from_ext_token_account.amount {
             principal = ctx.accounts.from_ext_token_account.amount;
             amount = principal_to_amount_down(principal, multiplier)?;
+        }
+
+        // Revert if the user will receive 0 m tokens or send 0 ext tokens
+        if amount == 0 || principal == 0 {
+            return err!(ExtError::InvalidAmount);
         }
 
         // Burn the amount of ext tokens from the user
