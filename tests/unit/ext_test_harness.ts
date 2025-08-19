@@ -1369,8 +1369,14 @@ export class ExtensionTest<V extends Variant = Variant.ScaledUiAmount> {
       throw new Error("sync is not supported for No Yield variant");
     }
 
+    const mVault = this.getMVault();
+    const vaultMTokenAccount = await this.getATA(this.mMint.publicKey, mVault);
+    const mEarnerAccount = this.getMEarnerAccount(vaultMTokenAccount);
+
     // Send the instruction
-    await this.ext.methods.sync().accounts({}).signers([]).rpc();
+    await this.ext.methods.sync().accountsPartial({
+      mEarnerAccount,
+    }).signers([]).rpc();
 
     return this.getExtGlobalAccount();
   }

@@ -197,6 +197,7 @@ impl Initialize<'_> {
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
             &ctx.accounts.ext_token_program,
+            &ctx.accounts.m_earner_account.to_account_info(),
         )?;
 
         Ok(())

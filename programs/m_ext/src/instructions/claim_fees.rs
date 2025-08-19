@@ -2,7 +2,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use earn::{
-    state::{Global as EarnGlobal, GLOBAL_SEED as EARN_GLOBAL_SEED},
+    state::{Global as EarnGlobal, EARNER_SEED, GLOBAL_SEED as EARN_GLOBAL_SEED},
     ID as EARN_PROGRAM,
 };
 
@@ -74,6 +74,16 @@ pub struct ClaimFees<'info> {
     )]
     pub recipient_ext_token_account: InterfaceAccount<'info, TokenAccount>,
 
+    /// CHECK: We partially validate this account is the correct address
+    /// via the seed, but we delay full validation to the handler
+    /// so we can handle cases where the account has been closed.
+    #[account(
+        seeds = [EARNER_SEED, vault_m_token_account.key().as_ref()],
+        seeds::program = EARN_PROGRAM,
+        bump,
+    )]
+    pub m_earner_account: UncheckedAccount<'info>,
+
     pub m_token_program: Program<'info, Token2022>,
     pub ext_token_program: Program<'info, Token2022>,
 }
@@ -89,6 +99,7 @@ impl ClaimFees<'_> {
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[signer_bump]]],
             &ctx.accounts.ext_token_program,
+            &ctx.accounts.m_earner_account,
         )?;
 
         // Calculate the required collateral, rounding down to be conservative

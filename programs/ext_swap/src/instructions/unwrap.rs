@@ -101,6 +101,9 @@ pub struct Unwrap<'info> {
     )]
     pub from_m_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
+    /// CHECK: This is validated by the CPI to the to_ext_program
+    pub from_m_earner_account: UncheckedAccount<'info>,
+
     /*
      * Token Programs
      */
@@ -169,6 +172,7 @@ impl<'info> Unwrap<'info> {
                     to_m_token_account: ctx.accounts.m_token_account.to_account_info(),
                     vault_m_token_account: ctx.accounts.from_m_vault.to_account_info(),
                     from_ext_token_account: ctx.accounts.from_token_account.to_account_info(),
+                    m_earner_account: ctx.accounts.from_m_earner_account.to_account_info(),
                     m_token_program: ctx.accounts.m_token_program.to_account_info(),
                     ext_token_program: ctx.accounts.from_token_program.to_account_info(),
                 },

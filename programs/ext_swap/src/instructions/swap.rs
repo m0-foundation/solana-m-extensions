@@ -123,6 +123,12 @@ pub struct Swap<'info> {
     /// CHECK: account does not hold data
     pub to_mint_authority: AccountInfo<'info>,
 
+    /// CHECK: This is validated by the CPI to the to_ext_program
+    pub from_m_earner_account: UncheckedAccount<'info>,
+
+    /// CHECK: This is validated by the CPI to the to_ext_program
+    pub to_m_earner_account: UncheckedAccount<'info>,
+
     /*
      * Vaults
      */
@@ -223,6 +229,7 @@ impl<'info> Swap<'info> {
                     to_m_token_account: ctx.accounts.intermediate_m_account.to_account_info(),
                     vault_m_token_account: ctx.accounts.from_m_vault.to_account_info(),
                     from_ext_token_account: ctx.accounts.from_token_account.to_account_info(),
+                    m_earner_account: ctx.accounts.from_m_earner_account.to_account_info(),
                     m_token_program: ctx.accounts.m_token_program.to_account_info(),
                     ext_token_program: ctx.accounts.from_token_program.to_account_info(),
                 },
@@ -257,6 +264,7 @@ impl<'info> Swap<'info> {
                     from_m_token_account: ctx.accounts.intermediate_m_account.to_account_info(),
                     vault_m_token_account: ctx.accounts.to_m_vault.to_account_info(),
                     to_ext_token_account: ctx.accounts.to_token_account.to_account_info(),
+                    m_earner_account: ctx.accounts.to_m_earner_account.to_account_info(),
                     m_token_program: ctx.accounts.m_token_program.to_account_info(),
                     ext_token_program: ctx.accounts.to_token_program.to_account_info(),
                 },
