@@ -10,7 +10,7 @@ use crate::{
     },
 };
 use earn::{
-    state::{Global as EarnGlobal, EARNER_SEED, GLOBAL_SEED as EARN_GLOBAL_SEED},
+    state::{Global as EarnGlobal, EARNER_SEED},
     ID as EARN_PROGRAM,
 };
 
@@ -33,14 +33,10 @@ pub struct Wrap<'info> {
         bump = global_account.bump,
         has_one = m_mint @ ExtError::InvalidAccount,
         has_one = ext_mint @ ExtError::InvalidAccount,
+        has_one = m_earn_global_account @ ExtError::InvalidAccount
     )]
     pub global_account: Account<'info, ExtGlobal>,
 
-    #[account(
-        seeds = [EARN_GLOBAL_SEED],
-        seeds::program = EARN_PROGRAM,
-        bump = m_earn_global_account.bump,
-    )]
     pub m_earn_global_account: Account<'info, EarnGlobal>,
 
     /// CHECK: This account is validated by the seed, it stores no data

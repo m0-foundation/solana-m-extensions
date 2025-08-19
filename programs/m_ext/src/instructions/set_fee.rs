@@ -2,7 +2,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use earn::{
-    state::{Global as EarnGlobal, EARNER_SEED, GLOBAL_SEED as EARN_GLOBAL_SEED},
+    state::{Global as EarnGlobal, EARNER_SEED},
     ID as EARN_PROGRAM,
 };
 
@@ -23,15 +23,11 @@ pub struct SetFee<'info> {
         seeds = [EXT_GLOBAL_SEED],
         has_one = admin @ ExtError::NotAuthorized,
         has_one = ext_mint @ ExtError::InvalidMint,
+        has_one = m_earn_global_account @ ExtError::InvalidAccount,
         bump = global_account.bump,
     )]
     pub global_account: Account<'info, ExtGlobal>,
 
-    #[account(
-        seeds = [EARN_GLOBAL_SEED],
-        seeds::program = EARN_PROGRAM,
-        bump = m_earn_global_account.bump,
-    )]
     pub m_earn_global_account: Account<'info, EarnGlobal>,
 
     // CHECK: This account is validated by the seed, it stores no data
