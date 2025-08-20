@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     token_2022::spl_token_2022::state::AccountState,
-    token_interface::{Mint, TokenInterface, TokenAccount},
+    token_interface::{ID as TOKEN_2022_ID, Mint, TokenAccount},
 };
 use earn::{constants::INDEX_SCALE_F64, utils::conversion::get_scaled_ui_config};
 
@@ -17,7 +17,6 @@ pub struct Sync<'info> {
     )]
     pub earn_authority: Signer<'info>,
 
-    #[account(mint::token_program = m_token_program)]
     pub m_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
@@ -38,11 +37,9 @@ pub struct Sync<'info> {
     #[account(
         associated_token::mint = m_mint,
         associated_token::authority = m_vault,
-        associated_token::token_program = m_token_program,
+        associated_token::token_program = TOKEN_2022_ID,
     )]
     pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
-
-    pub m_token_program: Interface<'info, TokenInterface>,
 }
 
 impl Sync<'_> {
