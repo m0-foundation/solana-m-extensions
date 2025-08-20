@@ -98,7 +98,6 @@ export type ExtGlobal<V extends Variant> = {
   bump?: number;
   mVaultBump?: number;
   extMintAuthorityBump?: number;
-  distribute?: boolean;
   wrapAuthorities?: PublicKey[];
   yieldConfig?: YieldConfig<V>;
 };
@@ -1319,8 +1318,6 @@ export class ExtensionTest<
       expect(state.mVaultBump).toEqual(expected.mVaultBump);
     if (expected.extMintAuthorityBump)
       expect(state.extMintAuthorityBump).toEqual(expected.extMintAuthorityBump);
-    if (expected.distribute)
-      expect(state.distribute).toEqual(expected.distribute);
   }
 
   private expectScaledUiYieldConfig<V extends Variant.ScaledUi>(
