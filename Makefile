@@ -5,16 +5,16 @@ build-programs:
 	@mv target/idl/m_ext.json target/idl/scaled_ui.json
 	@mv target/types/m_ext.ts target/types/scaled_ui.ts
 	anchor build -p m_ext -- --features no-yield --no-default-features
-	@cp target/deploy/m_ext.so target/deploy/no_yield.so
-	@cp target/idl/m_ext.json target/idl/no_yield.json
-	@cp target/types/m_ext.ts target/types/no_yield.ts
+	@mv target/deploy/m_ext.so target/deploy/no_yield.so
+	@mv target/idl/m_ext.json target/idl/no_yield.json
+	@mv target/types/m_ext.ts target/types/no_yield.ts
 	anchor build -p m_ext -- --features crank --no-default-features
-	@cp target/deploy/m_ext.so target/deploy/crank.so
-	@cp target/idl/m_ext.json target/idl/crank.json
-	@cp target/types/m_ext.ts target/types/crank.ts
+	@mv target/deploy/m_ext.so target/deploy/crank.so
+	@mv target/idl/m_ext.json target/idl/crank.json
+	@mv target/types/m_ext.ts target/types/crank.ts
 	anchor build -p m_ext -- --features no-yield,migrate --no-default-features
-	@cp target/idl/m_ext.json target/idl/migrate.json
-	@cp target/types/m_ext.ts target/types/migrate.ts
+	@mv target/idl/m_ext.json target/idl/migrate.json
+	@mv target/types/m_ext.ts target/types/migrate.ts
 
 test-programs:
 	@pnpm jest --preset ts-jest --verbose tests/unit/**.test.ts; exit $$?

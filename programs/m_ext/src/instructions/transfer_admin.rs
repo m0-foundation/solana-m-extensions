@@ -7,7 +7,6 @@ use crate::{
 
 #[derive(Accounts)]
 pub struct TransferAdmin<'info> {
-    #[account(mut)]
     pub admin: Signer<'info>,
 
     #[account(
@@ -44,7 +43,6 @@ impl TransferAdmin<'_> {
 
 #[derive(Accounts)]
 pub struct AcceptAdmin<'info> {
-    #[account(mut)]
     pub pending_admin: Signer<'info>,
 
     #[account(
@@ -74,7 +72,6 @@ impl AcceptAdmin<'_> {
 
 #[derive(Accounts)]
 pub struct RevokeAdminTransfer<'info> {
-    #[account(mut)]
     pub admin: Signer<'info>,
 
     #[account(

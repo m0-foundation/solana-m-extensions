@@ -1,12 +1,12 @@
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, TokenInterface};
+use anchor_spl::token_interface::{ID as TOKEN_2022_ID, Mint, TokenAccount, TokenInterface};
 
 // local dependencies
 use crate::{
     constants::ONE_HUNDRED_PERCENT_U64,
     errors::ExtError,
-    state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED},
+    state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::conversion::sync_multiplier,
 };
 
@@ -25,6 +25,20 @@ pub struct SetFee<'info> {
     pub global_account: Account<'info, ExtGlobalV2>,
 
     pub m_mint: InterfaceAccount<'info, Mint>,
+
+    /// CHECK: This account is validated by the seed, it stores no data
+    #[account(
+        seeds = [M_VAULT_SEED],
+        bump = global_account.m_vault_bump,
+    )]
+    pub m_vault: UncheckedAccount<'info>,
+
+    #[account(
+        associated_token::mint = m_mint,
+        associated_token::authority = m_vault,
+        associated_token::token_program = TOKEN_2022_ID,
+    )]
+    pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         mut,
@@ -67,6 +81,7 @@ impl SetFee<'_> {
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
             &ctx.accounts.m_mint,
+            &ctx.accounts.vault_m_token_account,
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[signer_bump]]],
             &ctx.accounts.ext_token_program,

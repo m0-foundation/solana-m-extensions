@@ -81,7 +81,8 @@ export type YieldConfig<V extends Variant> = V extends Variant.ScaledUi
   ? {
       yieldVariant?: YieldVariant;
       earnAuthority?: PublicKey;
-      index?: BN;
+      lastMIndex?: BN;
+      lastExtIndex?: BN;
       timestamp?: BN;
     }
   : {
@@ -1236,6 +1237,48 @@ export class ExtensionTest<
     return yieldConfig.lastExtIndex!.toNumber() / 1e12;
   }
 
+  public async getCurrentExtIndex(): Promise<BN> {
+    if (this.variant === Variant.NoYield) {
+      return new BN(1e12);
+    } else if (this.variant === Variant.ScaledUi) {
+      const yieldConfig: YieldConfig<Variant.ScaledUi> = (
+        await this.ext.account.extGlobalV2.fetch(this.getExtGlobalAccount())
+      ).yieldConfig;
+      return yieldConfig.lastExtIndex!;
+    } else if (this.variant === Variant.Crank) {
+      const yieldConfig: YieldConfig<Variant.Crank> = (
+        await this.ext.account.extGlobalV2.fetch(this.getExtGlobalAccount())
+      ).yieldConfig;
+      return yieldConfig.lastExtIndex!;
+    } else {
+      throw new Error("Unsupported variant for MExt");
+    }
+  }
+
+  public async getNewExtIndex(newMIndex: BN): Promise<BN> {
+    if (this.variant === Variant.NoYield) {
+      return new BN(1e12);
+    } else if (this.variant === Variant.ScaledUi) {
+      const yieldConfig: YieldConfig<Variant.ScaledUi> = (
+        await this.ext.account.extGlobalV2.fetch(this.getExtGlobalAccount())
+      ).yieldConfig;
+      const newExtIndex =
+        (yieldConfig.lastExtIndex!.toNumber() / 1e12) *
+        (newMIndex.toNumber() / yieldConfig.lastMIndex!.toNumber()) **
+          (1 - yieldConfig.feeBps!.toNumber() / 1e4);
+      return new BN(Math.floor(newExtIndex * 1e12));
+    } else if (this.variant === Variant.Crank) {
+      const yieldConfig: YieldConfig<Variant.Crank> = (
+        await this.ext.account.extGlobalV2.fetch(this.getExtGlobalAccount())
+      ).yieldConfig;
+      return newMIndex
+        .mul(yieldConfig.lastExtIndex!)
+        .div(yieldConfig.lastMIndex!);
+    } else {
+      throw new Error("Unsupported variant for MExt");
+    }
+  }
+
   public async expectExtGlobalState(expected: ExtGlobal<V>) {
     const state = await this.ext.account.extGlobalV2.fetch(
       this.getExtGlobalAccount()
@@ -1309,8 +1352,15 @@ export class ExtensionTest<
     if (expected.earnAuthority) {
       expect(actual.earnAuthority!).toEqual(expected.earnAuthority);
     }
-    if (expected.index) {
-      expect(actual.index!.toString()).toEqual(expected.index.toString());
+    if (expected.lastMIndex) {
+      expect(actual.lastMIndex!.toString()).toEqual(
+        expected.lastMIndex.toString()
+      );
+    }
+    if (expected.lastExtIndex) {
+      expect(actual.lastExtIndex!.toString()).toEqual(
+        expected.lastExtIndex.toString()
+      );
     }
     if (expected.timestamp) {
       expect(actual.timestamp!.toString()).toEqual(

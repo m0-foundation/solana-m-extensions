@@ -16,6 +16,7 @@ import { Comparison, ExtensionTest, Variant } from "./ext_test_harness";
 // Start parameters for M Earn
 const initialSupply = new BN(100_000_000); // 100 tokens with 6 decimals
 const initialIndex = new BN(1_100_000_000_000); // 1.1 with 12 decimals
+const ONE = new BN(1_000_000_000_000); // 1.0 with 12 decimals
 
 const VARIANTS = [
   [Variant.NoYield, TOKEN_2022_PROGRAM_ID],
@@ -489,7 +490,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 yieldVariant: { scaledUi: {} },
                 feeBps,
                 lastMIndex: initialIndex,
-                lastExtIndex: new BN(1e12),
+                lastExtIndex: ONE,
               },
             });
 
@@ -566,7 +567,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // it sets pending_admin to the new admin
           test("Transfer admin - success", async () => {
             // Transfer admin to newAdmin
-            await $.transferAdmin(newAdmin.publicKey);
+            await $.ext.methods
+              .transferAdmin(newAdmin.publicKey)
+              .accounts({
+                admin: $.admin.publicKey,
+              })
+              .signers([$.admin])
+              .rpc();
 
             // Check that pending_admin is set correctly
             await $.expectExtGlobalState({
@@ -885,6 +892,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           //     [X] it reverts with a ConstraintSeeds error
           //   [X] given the recipient token account is not a token account for the m mint
           //     [X] it reverts with a ConstraintTokenMint error
+          //   [X] given the vault m token account is frozen (i.e. extension is not approved as an earner)
+          //     [X] it reverts with a VaultFrozen error
 
           const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
           let wrapAuthorities: PublicKey[];
@@ -1086,6 +1095,30 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 .signers([$.admin])
                 .rpc(),
               "ConstraintTokenMint"
+            );
+          });
+
+          // given the vault m token account is frozen (i.e. extension is not approved as an earner)
+          // it reverts with a VaultFrozen error
+          test("vault m token account is frozen - reverts", async () => {
+            // Remove the vault as an M earner to freeze it
+            await $.removeMEarner($.getMVault());
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .claimFees()
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  recipientExtTokenAccount: await $.getATA(
+                    $.extMint.publicKey,
+                    $.admin.publicKey,
+                    $.useToken2022ForExt
+                  ),
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "VaultFrozen"
             );
           });
 
@@ -4782,6 +4815,142 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             await $.expectExtSolvent();
           });
+
+          // Test cases for when the extension is not earning
+          describe("when extension is not earning (vault M token account is frozen)", () => {
+            // Helper to remove the m_earner_account to simulate non-earning state
+            let vaultMTokenAccount: PublicKey;
+            beforeEach(async () => {
+              vaultMTokenAccount = await $.getATA(
+                $.mMint.publicKey,
+                $.getMVault(),
+                true
+              );
+
+              // Remove the m vault from earning to make it non-earning
+              await $.removeMEarner($.getMVault(), vaultMTokenAccount);
+            });
+
+            test("sync updates last_m_index but not last_ext_index or multipliers", async () => {
+              // Propagate a new index that is greater than the start index
+              const newIndex = new BN(
+                randomInt(startIndex.toNumber() + 1, 2e12 + 1)
+              );
+              await $.propagateIndex(newIndex);
+
+              // Cache the current state before sync
+              const initialExtGlobalState =
+                await $.ext.account.extGlobalV2.fetch($.getExtGlobalAccount());
+              const initialScaledUiConfig = await $.getScaledUiAmountConfig(
+                $.extMint.publicKey
+              );
+
+              // Send the sync instruction
+              await $.ext.methods
+                .sync()
+                .accounts({
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([])
+                .rpc();
+
+              // Check that last_m_index was updated
+              await $.expectExtGlobalState({
+                ...initialExtGlobalState,
+                yieldConfig: {
+                  ...(initialExtGlobalState.yieldConfig as any),
+                  lastMIndex: newIndex,
+                },
+              });
+
+              // Check that the ScaledUiAmountConfig multipliers were NOT updated
+              await $.expectScaledUiAmountConfig(
+                $.extMint.publicKey,
+                initialScaledUiConfig
+              );
+            });
+
+            test("extension yield distribution correct after resuming earning", async () => {
+              // Propagate a new index that is greater than the start index
+              const newIndex = new BN(
+                randomInt(startIndex.toNumber() + 1, 2e12 + 1)
+              );
+              await $.propagateIndex(newIndex);
+
+              // Cache the current state before sync
+              const initialExtGlobalState =
+                await $.ext.account.extGlobalV2.fetch($.getExtGlobalAccount());
+              const initialScaledUiConfig = await $.getScaledUiAmountConfig(
+                $.extMint.publicKey
+              );
+
+              // Send the sync instruction while the extension is not earning
+              await $.ext.methods
+                .sync()
+                .accounts({
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([])
+                .rpc();
+
+              // Expect only last_m_index to be updated
+              await $.expectExtGlobalState({
+                yieldConfig: {
+                  ...(initialExtGlobalState.yieldConfig as any),
+                  lastMIndex: newIndex,
+                },
+              });
+              await $.expectScaledUiAmountConfig(
+                $.extMint.publicKey,
+                initialScaledUiConfig
+              );
+
+              // Warp ahead slightly to change the timestamp of the new index
+              $.warp(new BN(60), true);
+              $.svm.expireBlockhash();
+
+              // Now resume earning by re-adding the m vault as an earner
+              await $.addMEarner($.getMVault(), vaultMTokenAccount);
+
+              // Push a new index to trigger yield distribution
+              const laterIndex = new BN(
+                randomInt(newIndex.toNumber() + 1, 2e12 + 2)
+              );
+              await $.propagateIndex(laterIndex);
+
+              // Sync the extension again now that it's earning
+              await $.ext.methods
+                .sync()
+                .accounts({
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([])
+                .rpc();
+
+              // Expect the last ext_index and multipliers to be updated correctly on sync
+              const expectedNewMultiplier = await $.getNewMultiplier(
+                laterIndex
+              );
+
+              await $.expectScaledUiAmountConfig($.extMint.publicKey, {
+                authority: initialScaledUiConfig.authority,
+                multiplier: expectedNewMultiplier,
+                newMultiplier: expectedNewMultiplier,
+                newMultiplierEffectiveTimestamp: BigInt(
+                  $.currentTime().toString()
+                ),
+              });
+
+              await $.expectExtGlobalState({
+                yieldConfig: {
+                  lastMIndex: laterIndex,
+                  lastExtIndex: new BN(
+                    Math.floor(expectedNewMultiplier * 1e12)
+                  ),
+                },
+              });
+            });
+          });
         });
       });
     }
@@ -4905,7 +5074,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.expectExtGlobalState({
               yieldConfig: {
                 yieldVariant: { crank: {} },
-                index: initialIndex,
+                lastMIndex: initialIndex,
+                lastExtIndex: ONE,
                 timestamp: startTime,
               },
             });
@@ -4921,9 +5091,123 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.expectExtGlobalState({
               yieldConfig: {
                 yieldVariant: { crank: {} },
-                index: newIndex,
+                lastMIndex: newIndex,
+                lastExtIndex: newIndex.mul(ONE).div(initialIndex),
                 timestamp: $.currentTime(),
               },
+            });
+          });
+
+          // Test cases for when the extension is not earning
+          describe("when extension is not earning (vault M token account is frozen)", () => {
+            // Helper to remove the m_earner_account to simulate non-earning state
+            let vaultMTokenAccount: PublicKey;
+            beforeEach(async () => {
+              vaultMTokenAccount = await $.getATA(
+                $.mMint.publicKey,
+                $.getMVault(),
+                true
+              );
+
+              // Remove the m vault from earning to make it non-earning
+              await $.removeMEarner($.getMVault(), vaultMTokenAccount);
+            });
+
+            test("sync updates last_m_index but not last_ext_index", async () => {
+              // Propagate another new index that is greater than the start index
+              const nextIndex = new BN(
+                randomInt(newIndex.toNumber() + 1, 2e12 + 1)
+              );
+              await $.propagateIndex(nextIndex);
+
+              // Cache the current state before sync
+              const initialExtGlobalState =
+                await $.ext.account.extGlobalV2.fetch($.getExtGlobalAccount());
+
+              // Send the sync instruction
+              await $.ext.methods
+                .sync()
+                .accounts({
+                  earnAuthority: $.earnAuthority.publicKey,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.earnAuthority])
+                .rpc();
+
+              // Check that last_m_index was updated
+              await $.expectExtGlobalState({
+                ...initialExtGlobalState,
+                yieldConfig: {
+                  ...(initialExtGlobalState.yieldConfig as any),
+                  lastMIndex: nextIndex,
+                  timestamp: $.currentTime(),
+                },
+              });
+            });
+
+            test("extension yield distribution correct after resuming earning", async () => {
+              // Propagate a new index that is greater than the start index
+              const nextIndex = new BN(
+                randomInt(newIndex.toNumber() + 1, 2e12 + 1)
+              );
+              await $.propagateIndex(nextIndex);
+
+              // Cache the current state before sync
+              const initialExtGlobalState =
+                await $.ext.account.extGlobalV2.fetch($.getExtGlobalAccount());
+
+              // Send the sync instruction while the extension is not earning
+              await $.ext.methods
+                .sync()
+                .accounts({
+                  earnAuthority: $.earnAuthority.publicKey,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.earnAuthority])
+                .rpc();
+
+              // Expect only last_m_index and timestamp to be updated
+              await $.expectExtGlobalState({
+                yieldConfig: {
+                  ...(initialExtGlobalState.yieldConfig as any),
+                  lastMIndex: nextIndex,
+                  timestamp: $.currentTime(),
+                },
+              });
+
+              // Warp ahead slightly to change the timestamp of the new index
+              $.warp(new BN(60), true);
+              $.svm.expireBlockhash();
+
+              // Now resume earning by re-adding the m vault as an earner
+              await $.addMEarner($.getMVault(), vaultMTokenAccount);
+
+              // Push a new index to trigger yield distribution
+              const laterIndex = new BN(
+                randomInt(nextIndex.toNumber() + 1, 2e12 + 2)
+              );
+              await $.propagateIndex(laterIndex);
+
+              // Sync the extension again now that it's earning
+              await $.ext.methods
+                .sync()
+                .accounts({
+                  earnAuthority: $.earnAuthority.publicKey,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.earnAuthority])
+                .rpc();
+
+              // Expect the last ext_index to be updated correctly on sync
+              const expectedExtIndex = laterIndex.mul(ONE).div(nextIndex);
+
+              await $.expectExtGlobalState({
+                yieldConfig: {
+                  lastMIndex: laterIndex,
+                  lastExtIndex: expectedExtIndex,
+                  timestamp: $.currentTime(),
+                },
+              });
             });
           });
         });
@@ -5240,7 +5524,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Check that the last claim index and the last claim timestamp are the initial values
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: startTime,
             });
 
@@ -5249,12 +5533,6 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               earnerOneATA,
               $.useToken2022ForExt
             );
-
-            // Calculate the expected new balance
-            // Note: earn manager fee is 0, so it all goes to the earner
-            const expectedBalance = initialBalance
-              .mul(newIndex)
-              .div(initialIndex);
 
             // Send the instruction
             await $.ext.methods
@@ -5276,6 +5554,11 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .signers([$.earnAuthority])
               .rpc();
 
+            const newExtIndex = await $.getCurrentExtIndex();
+            // Calculate the expected new balance
+            // Note: earn manager fee is 0, so it all goes to the earner
+            const expectedBalance = initialBalance.mul(newExtIndex).div(ONE);
+
             // Check the new balance matches the expected balance
             await $.expectTokenBalance(
               earnerOneATA,
@@ -5287,7 +5570,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Check the earner account is updated
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: newExtIndex,
               lastClaimTimestamp: $.currentTime(),
             });
           });
@@ -5353,7 +5636,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Check that the last claim index and the last claim timestamp are the initial values
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: startTime,
             });
 
@@ -5362,13 +5645,6 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               earnerOneATA,
               $.useToken2022ForExt
             );
-
-            // Calculate the expected yield
-            // Note: earn manager fee is 0, so it all goes to the yield recipient
-            const expectedYield = initialBalance
-              .mul(newIndex)
-              .div(initialIndex)
-              .sub(initialBalance);
 
             // Send the instruction
             await $.ext.methods
@@ -5390,6 +5666,15 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .signers([$.earnAuthority])
               .rpc();
 
+            const newExtIndex = await $.getCurrentExtIndex();
+
+            // Calculate the expected yield
+            // Note: earn manager fee is 0, so it all goes to the yield recipient
+            const expectedYield = initialBalance
+              .mul(newExtIndex)
+              .div(ONE)
+              .sub(initialBalance);
+
             // Check the ata balance didn't change but the yield recipient received the yield
             await $.expectTokenBalance(
               earnerOneATA,
@@ -5408,7 +5693,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Check the earner account is updated
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: newExtIndex,
               lastClaimTimestamp: $.currentTime(),
             });
           });
@@ -5432,7 +5717,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Verify that the earner's last claim index is equal to the current global index
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: await $.getCurrentExtIndex(),
               lastClaimTimestamp: $.currentTime(),
             });
 
@@ -5500,7 +5785,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Confirm the starting earner account state
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: startTime,
             });
 
@@ -5520,10 +5805,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .signers([$.earnAuthority])
               .rpc();
 
+            const newExtIndex = await $.getCurrentExtIndex();
+
             // Calculate expected rewards (balance * (global_index / last_claim_index) - balance)
             const expectedRewards = earnerStartBalance
-              .mul(newIndex)
-              .div(initialIndex)
+              .mul(newExtIndex)
+              .div(ONE)
               .sub(earnerStartBalance);
 
             // Verify the expected token balance changes
@@ -5544,7 +5831,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Verify the earner account was updated with the new claim index and claim timestamp
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: newExtIndex,
               lastClaimTimestamp: $.currentTime(),
             });
           });
@@ -5594,7 +5881,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Confirm the starting earner account state
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: startTime,
             });
 
@@ -5614,10 +5901,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .signers([$.earnAuthority])
               .rpc();
 
+            const newExtIndex = await $.getCurrentExtIndex();
+
             // Calculate expected rewards (balance * (global_index / last_claim_index) - balance)
             const expectedRewards = earnerStartBalance
-              .mul(newIndex)
-              .div(initialIndex)
+              .mul(newExtIndex)
+              .div(ONE)
               .sub(earnerStartBalance);
 
             // Verify the expected token balance changes
@@ -5638,7 +5927,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Verify the earner account was updated with the new claim index and claim timestamp
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: newExtIndex,
               lastClaimTimestamp: $.currentTime(),
             });
           });
@@ -5687,7 +5976,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Confirm the starting earner account state
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: startTime,
             });
 
@@ -5707,10 +5996,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .signers([$.earnAuthority])
               .rpc();
 
+            const newExtIndex = await $.getCurrentExtIndex();
+
             // Calculate expected rewards (balance * (global_index / last_claim_index) - balance)
             const expectedRewards = earnerStartBalance
-              .mul(newIndex)
-              .div(initialIndex)
+              .mul(newExtIndex)
+              .div(ONE)
               .sub(earnerStartBalance);
 
             // Verify the expected token balance changes
@@ -5724,7 +6015,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Verify the earner account was updated with the new claim index and claim timestamp
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: newExtIndex,
               lastClaimTimestamp: $.currentTime(),
             });
           });
@@ -5772,7 +6063,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Confirm the starting earner account state
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: startTime,
             });
 
@@ -5794,10 +6085,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .signers([$.earnAuthority])
               .rpc();
 
-            // Calculate expected rewards (balance * (global_index / last_claim_index) - balance)
+            const newExtIndex = await $.getCurrentExtIndex();
+
+            // Calculate expected rewards (balance * (new_index / last_claim_index) - balance)
             const expectedRewards = snapshotBalance
-              .mul(newIndex)
-              .div(initialIndex)
+              .mul(newExtIndex)
+              .div(ONE)
               .sub(snapshotBalance);
 
             // Verify the expected token balance changes
@@ -5819,7 +6112,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Verify the earner account was updated with the new claim index and claim timestamp
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: newExtIndex,
               lastClaimTimestamp: $.currentTime(),
             });
           });
@@ -5869,7 +6162,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Confirm the starting earner account state
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: startTime,
             });
 
@@ -5897,10 +6190,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .signers([$.earnAuthority])
               .rpc();
 
+            const newExtIndex = await $.getCurrentExtIndex();
+
             // Calculate expected rewards (balance * (global_index / last_claim_index) - balance)
             const expectedRewards = snapshotBalance
-              .mul(newIndex)
-              .div(initialIndex)
+              .mul(newExtIndex)
+              .div(ONE)
               .sub(snapshotBalance);
 
             // Calculate the fee amount (1% of rewards)
@@ -5927,7 +6222,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Verify the earner account was updated with the new claim index and claim timestamp
             await $.expectEarnerState(earnerAccount, {
-              lastClaimIndex: newIndex,
+              lastClaimIndex: newExtIndex,
               lastClaimTimestamp: $.currentTime(),
             });
           });
@@ -6152,7 +6447,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Verify the earner account was initialized correctly
             await $.expectEarnerState(earnerAccount, {
               earnManager: earnManagerOne.publicKey,
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: $.currentTime(),
               user: earnerTwo.publicKey,
               userTokenAccount: tokenAccount,
@@ -6191,7 +6486,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Verify the earner account was initialized correctly
             await $.expectEarnerState(earnerAccount, {
               earnManager: earnManagerOne.publicKey,
-              lastClaimIndex: initialIndex,
+              lastClaimIndex: ONE,
               lastClaimTimestamp: $.currentTime(),
               user: earnerTwo.publicKey,
               userTokenAccount: earnerTwoATA,
