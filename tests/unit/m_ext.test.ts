@@ -892,8 +892,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           //     [X] it reverts with a ConstraintSeeds error
           //   [X] given the recipient token account is not a token account for the m mint
           //     [X] it reverts with a ConstraintTokenMint error
-          //   [ ] given the vault m token account is frozen (i.e. extension is not approved as an earner)
-          //     [ ] it reverts with a VaultFrozen error
+          //   [X] given the vault m token account is frozen (i.e. extension is not approved as an earner)
+          //     [X] it reverts with a VaultFrozen error
 
           const initialWrappedAmount = new BN(10_000_000); // 10 with 6 decimals
           let wrapAuthorities: PublicKey[];
