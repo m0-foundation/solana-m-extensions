@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, TokenInterface};
+use anchor_spl::token_interface::{Mint, TokenInterface, TokenAccount};
 use cfg_if::cfg_if;
 use spl_token_2022::extension::{BaseStateWithExtensions, StateWithExtensions};
 
@@ -12,6 +12,7 @@ use crate::{
 cfg_if! {
     if #[cfg(feature = "scaled-ui")] {
         use anchor_lang::solana_program::program::invoke_signed;
+        use anchor_spl::token_2022::spl_token_2022::state::AccountState;
         use spl_token_2022::extension::scaled_ui_amount::{PodF64, ScaledUiAmountConfig, UnixTimestamp};
         use crate::constants::ONE_HUNDRED_PERCENT_F64;
     }
@@ -22,6 +23,7 @@ pub fn sync_multiplier<'info>(
     ext_mint: &mut InterfaceAccount<'info, Mint>,
     ext_global_account: &mut Account<'info, ExtGlobalV2>,
     m_mint: &InterfaceAccount<'info, Mint>,
+    vault_m_token_account: &InterfaceAccount<'info, TokenAccount>,
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
     token_program: &Interface<'info, TokenInterface>,
@@ -52,10 +54,10 @@ pub fn sync_multiplier<'info>(
                 return Ok(ext_multiplier);
             }
 
-            // Check if yield distribution is enabled on the extension
+            // Check if the vault m token account is approved as an M earner (i.e. not frozen)
             // If so, update the multiplier and return
             // If not, update the last M index to the latest and return the current multiplier
-            if ext_global_account.distribute {
+            if vault_m_token_account.state == AccountState::Initialized {
                 // Update the multiplier and timestamp in the mint account
                 invoke_signed(
                     &spl_token_2022::extension::scaled_ui_amount::instruction::update_multiplier(

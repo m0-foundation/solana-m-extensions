@@ -214,7 +214,6 @@ impl Initialize<'_> {
             bump: ctx.bumps.global_account,
             m_vault_bump: ctx.bumps.m_vault,
             ext_mint_authority_bump: ctx.bumps.ext_mint_authority,
-            distribute: true,
             yield_config,
             wrap_authorities,
         });
@@ -228,6 +227,7 @@ impl Initialize<'_> {
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
             &ctx.accounts.m_mint,
+            &ctx.accounts.vault_m_token_account,
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[ctx.bumps.ext_mint_authority]]],
             &ctx.accounts.ext_token_program,

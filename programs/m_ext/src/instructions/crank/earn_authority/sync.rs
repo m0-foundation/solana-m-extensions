@@ -1,10 +1,13 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::Mint;
+use anchor_spl::{
+    token_2022::spl_token_2022::state::AccountState,
+    token_interface::{Mint, TokenInterface, TokenAccount},
+};
 use earn::{constants::INDEX_SCALE_F64, utils::conversion::get_scaled_ui_config};
 
 use crate::{
     errors::ExtError,
-    state::{ExtGlobalV2, EXT_GLOBAL_SEED},
+    state::{ExtGlobalV2, EXT_GLOBAL_SEED, M_VAULT_SEED},
 };
 
 #[derive(Accounts)]
@@ -14,6 +17,7 @@ pub struct Sync<'info> {
     )]
     pub earn_authority: Signer<'info>,
 
+    #[account(mint::token_program = m_token_program)]
     pub m_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
@@ -23,6 +27,22 @@ pub struct Sync<'info> {
         has_one = m_mint @ ExtError::InvalidAccount,
     )]
     pub global_account: Account<'info, ExtGlobalV2>,
+
+    /// CHECK: This account is validated by the seed, it stores no data
+    #[account(
+        seeds = [M_VAULT_SEED],
+        bump = global_account.m_vault_bump,
+    )]
+    pub m_vault: UncheckedAccount<'info>,
+
+    #[account(
+        associated_token::mint = m_mint,
+        associated_token::authority = m_vault,
+        associated_token::token_program = m_token_program,
+    )]
+    pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    pub m_token_program: Interface<'info, TokenInterface>,
 }
 
 impl Sync<'_> {
@@ -37,8 +57,8 @@ impl Sync<'_> {
         let timestamp: i64 = scaled_ui_config.new_multiplier_effective_timestamp.into();
         let current_index: u64 = (INDEX_SCALE_F64 * current_multiplier).trunc() as u64;
 
-        // If yield is being distributed, calculate the new EXT index and update it
-        if ctx.accounts.global_account.distribute {
+        // If the vault M token account is approved as an earner, calculate the new EXT index and update it
+        if ctx.accounts.vault_m_token_account.state == AccountState::Initialized {
             // Calculate the new EXT index based on the last synced EXT index and the change in M index
             let last_ext_index = ctx.accounts.global_account.yield_config.last_ext_index;
             let last_m_index = ctx.accounts.global_account.yield_config.last_m_index;
@@ -57,9 +77,8 @@ impl Sync<'_> {
         ctx.accounts.global_account.yield_config.timestamp = timestamp as u64;
 
         emit!(SyncIndexUpdate {
-            distribute: ctx.accounts.global_account.distribute,
-            last_m_index: ctx.accounts.global_account.yield_config.last_m_index,
-            last_ext_index: ctx.accounts.global_account.yield_config.last_ext_index,
+            m_index: ctx.accounts.global_account.yield_config.last_m_index,
+            ext_index: ctx.accounts.global_account.yield_config.last_ext_index,
             ts: ctx.accounts.global_account.yield_config.timestamp,
         });
 
@@ -69,8 +88,7 @@ impl Sync<'_> {
 
 #[event]
 pub struct SyncIndexUpdate {
-    pub distribute: bool,
-    pub last_m_index: u64,
-    pub last_ext_index: u64,
+    pub m_index: u64,
+    pub ext_index: u64,
     pub ts: u64,
 }
