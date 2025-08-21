@@ -25,11 +25,15 @@ cfg_if! {
         use anchor_spl::token_2022_extensions::spl_pod::optional_keys::OptionalNonZeroPubkey;
         use spl_token_2022::extension::ExtensionType;
         use crate::{
-            constants::{INDEX_SCALE_F64, INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
-            utils::conversion::{sync_multiplier, get_mint_extensions, get_scaled_ui_config},
+            constants::{INDEX_SCALE_U64, ONE_HUNDRED_PERCENT_U64},
+            utils::conversion::{sync_index, get_mint_extensions, get_scaled_ui_config, multiplier_to_index},
         };
     } else if #[cfg(feature = "crank")] {
-        use crate::constants::{INDEX_SCALE_F64, INDEX_SCALE_U64};
+        use earn::utils::conversion::get_scaled_ui_config;
+        use crate::{
+            constants::INDEX_SCALE_U64,
+            utils::conversion::multiplier_to_index,
+        };
     }
 }
 
@@ -174,21 +178,18 @@ impl Initialize<'_> {
         let yield_config: YieldConfig;
         cfg_if! {
             if #[cfg(feature = "scaled-ui")] {
-                let m_scaled_ui_config =
-                    earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
-                let m_multiplier: f64 = m_scaled_ui_config.new_multiplier.into();
+                let m_scaled_ui_config = get_scaled_ui_config(&ctx.accounts.m_mint)?;
+                let m_index: u64 = multiplier_to_index(m_scaled_ui_config.new_multiplier.into())?;
                 yield_config = YieldConfig {
                     yield_variant: YieldVariant::ScaledUi,
                     fee_bps: fee_bps.unwrap_or(0),
-                    last_m_index: (m_multiplier * INDEX_SCALE_F64) as u64,
+                    last_m_index: m_index,
                     last_ext_index: INDEX_SCALE_U64, // we set the extension index to 1.0 initially
                 };
             } else if #[cfg(feature = "crank")] {
-               let m_scaled_ui_config =
-                    earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
-                let m_multiplier: f64 = m_scaled_ui_config.new_multiplier.into();
+               let m_scaled_ui_config = get_scaled_ui_config(&ctx.accounts.m_mint)?;
                 let timestamp: i64 = m_scaled_ui_config.new_multiplier_effective_timestamp.into();
-                let m_index: u64 = (INDEX_SCALE_F64 * m_multiplier).trunc() as u64;
+                let m_index: u64 = multiplier_to_index(m_scaled_ui_config.new_multiplier.into())?;
 
                 yield_config = YieldConfig {
                     yield_variant: YieldVariant::Crank,
@@ -223,7 +224,7 @@ impl Initialize<'_> {
         // when the last_m_index equals the index on the m_earn_global_account
         // and having last_ext_index set to 1e12
         #[cfg(feature = "scaled-ui")]
-        sync_multiplier(
+        sync_index(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
             &ctx.accounts.m_mint,
