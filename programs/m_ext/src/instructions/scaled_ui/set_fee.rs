@@ -1,13 +1,13 @@
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{ID as TOKEN_2022_ID, Mint, TokenAccount, TokenInterface};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface, ID as TOKEN_2022_ID};
 
 // local dependencies
 use crate::{
     constants::ONE_HUNDRED_PERCENT_U64,
     errors::ExtError,
     state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
-    utils::conversion::sync_multiplier,
+    utils::conversion::sync_index,
 };
 
 #[derive(Accounts)]
@@ -77,7 +77,7 @@ impl SetFee<'_> {
         // if it doesn't match the index on m_earn_global_account
         // It also checks that the vault is solvent after the update
         let signer_bump = ctx.accounts.global_account.ext_mint_authority_bump;
-        sync_multiplier(
+        sync_index(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
             &ctx.accounts.m_mint,

@@ -10,7 +10,10 @@ use crate::{
         EarnManager, Earner, ExtGlobalV2, EARNER_SEED, EARN_MANAGER_SEED, EXT_GLOBAL_SEED,
         MINT_AUTHORITY_SEED, M_VAULT_SEED,
     },
-    utils::{conversion::principal_to_amount_down, token::mint_tokens},
+    utils::{
+        conversion::{multiplier_to_index, principal_to_amount_down},
+        token::mint_tokens,
+    },
 };
 
 #[derive(Accounts)]
@@ -126,10 +129,9 @@ impl ClaimFor<'_> {
 
         // Calculate the amount of M tokens in the vault from the principal
         let m_config = earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
-        let ext_collateral = principal_to_amount_down(
-            ctx.accounts.vault_m_token_account.amount,
-            m_config.new_multiplier.into(),
-        )?;
+        let m_index = multiplier_to_index(m_config.new_multiplier.into())?;
+        let ext_collateral =
+            principal_to_amount_down(ctx.accounts.vault_m_token_account.amount, m_index)?;
 
         if ext_supply + rewards > ext_collateral {
             return err!(ExtError::InsufficientCollateral);
