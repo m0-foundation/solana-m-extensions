@@ -1,6 +1,9 @@
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount, TokenInterface};
+use anchor_spl::{
+    token_2022::spl_token_2022::state::AccountState,
+    token_interface::{Mint, Token2022, TokenAccount, TokenInterface},
+};
 
 // local dependencies
 use crate::{
@@ -73,12 +76,18 @@ pub struct ClaimFees<'info> {
 
 impl ClaimFees<'_> {
     pub fn handler(ctx: Context<Self>) -> Result<()> {
+        // Do not allow claiming fees if the vault M token account is not approved as an earner (i.e. frozen)
+        if ctx.accounts.vault_m_token_account.state != AccountState::Initialized {
+            return err!(ExtError::VaultFrozen);
+        }
+
         // Sync the multiplier before allowing any collateral withdrawals
         let signer_bump = ctx.accounts.global_account.ext_mint_authority_bump;
         let ext_multiplier: f64 = sync_multiplier(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
             &ctx.accounts.m_mint,
+            &ctx.accounts.vault_m_token_account,
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[signer_bump]]],
             &ctx.accounts.ext_token_program,

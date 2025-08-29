@@ -98,7 +98,7 @@ impl ClaimFor<'_> {
         // Validate that the earner account has not already claimed this cycle
         // Earner index should never be > global index, but we check to be safe against an error with index propagation
         if ctx.accounts.earner_account.last_claim_index
-            >= ctx.accounts.global_account.yield_config.index
+            >= ctx.accounts.global_account.yield_config.last_ext_index
         {
             return err!(ExtError::AlreadyClaimed);
         }
@@ -106,7 +106,13 @@ impl ClaimFor<'_> {
         // Calculate the amount of tokens to send to the user
         // Cast to u128 for multiplication to avoid overflows
         let mut rewards: u64 = (snapshot_balance as u128)
-            .checked_mul(ctx.accounts.global_account.yield_config.index.into())
+            .checked_mul(
+                ctx.accounts
+                    .global_account
+                    .yield_config
+                    .last_ext_index
+                    .into(),
+            )
             .unwrap()
             .checked_div(ctx.accounts.earner_account.last_claim_index.into())
             .unwrap()
@@ -131,7 +137,7 @@ impl ClaimFor<'_> {
 
         // Set the earner's last claim index to the global index and update the last claim timestamp
         ctx.accounts.earner_account.last_claim_index =
-            ctx.accounts.global_account.yield_config.index;
+            ctx.accounts.global_account.yield_config.last_ext_index;
         ctx.accounts.earner_account.last_claim_timestamp =
             ctx.accounts.global_account.yield_config.timestamp;
 

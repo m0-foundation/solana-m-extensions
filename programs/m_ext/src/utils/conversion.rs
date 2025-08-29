@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, TokenInterface};
+use anchor_spl::token_interface::{Mint, TokenInterface, TokenAccount};
 use cfg_if::cfg_if;
 use spl_token_2022::extension::{BaseStateWithExtensions, StateWithExtensions};
 
@@ -12,6 +12,7 @@ use crate::{
 cfg_if! {
     if #[cfg(feature = "scaled-ui")] {
         use anchor_lang::solana_program::program::invoke_signed;
+        use anchor_spl::token_2022::spl_token_2022::state::AccountState;
         use spl_token_2022::extension::scaled_ui_amount::{PodF64, ScaledUiAmountConfig, UnixTimestamp};
         use crate::constants::ONE_HUNDRED_PERCENT_F64;
     }
@@ -22,6 +23,7 @@ pub fn sync_multiplier<'info>(
     ext_mint: &mut InterfaceAccount<'info, Mint>,
     ext_global_account: &mut Account<'info, ExtGlobalV2>,
     m_mint: &InterfaceAccount<'info, Mint>,
+    vault_m_token_account: &InterfaceAccount<'info, TokenAccount>,
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
     token_program: &Interface<'info, TokenInterface>,
@@ -52,28 +54,39 @@ pub fn sync_multiplier<'info>(
                 return Ok(ext_multiplier);
             }
 
-            // Update the multiplier and timestamp in the mint account
-            invoke_signed(
-                &spl_token_2022::extension::scaled_ui_amount::instruction::update_multiplier(
-                    &token_program.key(),
-                    &ext_mint.key(),
-                    &authority.key(),
-                    &[],
-                    ext_multiplier,
-                    timestamp,
-                )?,
-                &[ext_mint.to_account_info(), authority.clone()],
-                authority_seeds,
-            )?;
+            // Check if the vault m token account is approved as an M earner (i.e. not frozen)
+            // If so, update the multiplier and return
+            // If not, update the last M index to the latest and return the current multiplier
+            if vault_m_token_account.state == AccountState::Initialized {
+                // Update the multiplier and timestamp in the mint account
+                invoke_signed(
+                    &spl_token_2022::extension::scaled_ui_amount::instruction::update_multiplier(
+                        &token_program.key(),
+                        &ext_mint.key(),
+                        &authority.key(),
+                        &[],
+                        ext_multiplier,
+                        timestamp,
+                    )?,
+                    &[ext_mint.to_account_info(), authority.clone()],
+                    authority_seeds,
+                )?;
 
-            // Reload the mint account so the new multiplier is reflected
-            ext_mint.reload()?;
+                // Reload the mint account so the new multiplier is reflected
+                ext_mint.reload()?;
 
-            // Update the last m index and last ext index in the global account
-            ext_global_account.yield_config.last_m_index = (m_multiplier * INDEX_SCALE_F64).floor() as u64;
-            ext_global_account.yield_config.last_ext_index = (ext_multiplier * INDEX_SCALE_F64).floor() as u64;
+                // Update the last m index and last ext index in the global account
+                ext_global_account.yield_config.last_m_index = (m_multiplier * INDEX_SCALE_F64).floor() as u64;
+                ext_global_account.yield_config.last_ext_index = (ext_multiplier * INDEX_SCALE_F64).floor() as u64;
 
-            return Ok(ext_multiplier);
+                return Ok(ext_multiplier);
+            } else {
+                // Update the last M index to the latest and return the current multiplier
+                ext_global_account.yield_config.last_m_index = (m_multiplier * INDEX_SCALE_F64).floor() as u64;
+                return Ok(scaled_ui_config.new_multiplier.into());
+            }
+
+
         } else {
             // Ext tokens are 1:1 with M tokens and we don't need to sync this
             return Ok(1.0);

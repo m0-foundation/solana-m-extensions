@@ -53,7 +53,7 @@ impl AddEarner<'_> {
         ctx.accounts.earner_account.set_inner(Earner {
             earn_manager: ctx.accounts.signer.key(),
             recipient_token_account: None,
-            last_claim_index: ctx.accounts.global_account.yield_config.index,
+            last_claim_index: ctx.accounts.global_account.yield_config.last_ext_index,
             last_claim_timestamp: ctx.accounts.global_account.yield_config.timestamp,
             bump: ctx.bumps.earner_account,
             user,
