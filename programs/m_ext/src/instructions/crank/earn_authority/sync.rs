@@ -1,13 +1,14 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     token_2022::spl_token_2022::state::AccountState,
-    token_interface::{ID as TOKEN_2022_ID, Mint, TokenAccount},
+    token_interface::{Mint, TokenAccount, ID as TOKEN_2022_ID},
 };
-use earn::{constants::INDEX_SCALE_F64, utils::conversion::get_scaled_ui_config};
+use earn::utils::conversion::get_scaled_ui_config;
 
 use crate::{
     errors::ExtError,
     state::{ExtGlobalV2, EXT_GLOBAL_SEED, M_VAULT_SEED},
+    utils::conversion::multiplier_to_index,
 };
 
 #[derive(Accounts)]
@@ -52,7 +53,7 @@ impl Sync<'_> {
         let scaled_ui_config = get_scaled_ui_config(&ctx.accounts.m_mint)?;
         let current_multiplier: f64 = scaled_ui_config.new_multiplier.into();
         let timestamp: i64 = scaled_ui_config.new_multiplier_effective_timestamp.into();
-        let current_index: u64 = (INDEX_SCALE_F64 * current_multiplier).trunc() as u64;
+        let current_index: u64 = multiplier_to_index(current_multiplier)?;
 
         // If the vault M token account is approved as an earner, calculate the new EXT index and update it
         if ctx.accounts.vault_m_token_account.state == AccountState::Initialized {

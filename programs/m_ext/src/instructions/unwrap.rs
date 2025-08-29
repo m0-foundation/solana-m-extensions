@@ -5,7 +5,9 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{amount_to_principal_down, principal_to_amount_down, sync_multiplier},
+        conversion::{
+            amount_to_principal_down, multiplier_to_index, principal_to_amount_down, sync_index,
+        },
         token::{burn_tokens, transfer_tokens_from_program},
     },
 };
@@ -103,9 +105,9 @@ impl Unwrap<'_> {
             &[ctx.accounts.global_account.ext_mint_authority_bump],
         ]];
 
-        // If necessary, sync the multiplier between M and Ext tokens
+        // If necessary, sync the index between M and Ext tokens
         // Return the current value to use for conversions
-        let ext_multiplier: f64 = sync_multiplier(
+        let ext_index: u64 = sync_index(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
             &ctx.accounts.m_mint,
@@ -118,14 +120,12 @@ impl Unwrap<'_> {
         // Get the current multiplier for the m_mint
         let m_scaled_ui_config =
             earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
-        let m_multiplier: f64 = m_scaled_ui_config.new_multiplier.into();
+        let m_index: u64 = multiplier_to_index(m_scaled_ui_config.new_multiplier.into())?;
 
         // Calculate the principal amount of m tokens
         // from the principal amount of ext tokens to unwrap
-        let m_principal: u64 = amount_to_principal_down(
-            principal_to_amount_down(ext_principal, ext_multiplier)?,
-            m_multiplier,
-        )?;
+        let m_principal: u64 =
+            amount_to_principal_down(principal_to_amount_down(ext_principal, ext_index)?, m_index)?;
 
         // Burn the amount of ext tokens from the user
         burn_tokens(
