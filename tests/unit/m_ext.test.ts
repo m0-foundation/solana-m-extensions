@@ -1,5 +1,10 @@
 import { BN } from "@coral-xyz/anchor";
-import { PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import {
+  PublicKey,
+  Keypair,
+  LAMPORTS_PER_SOL,
+  Connection,
+} from "@solana/web3.js";
 import {
   TOKEN_2022_PROGRAM_ID,
   getMint,
@@ -68,7 +73,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
         test("m_mint not owned by token2022 - reverts", async () => {
           // Create a mint owned by a different program
           const wrongMint = new Keypair();
-          await $.createMint(wrongMint, $.nonAdmin.publicKey, false);
+          await $.createMint(
+            wrongMint,
+            $.nonAdmin.publicKey,
+            $.nonAdmin.publicKey,
+            false
+          );
 
           // Create/get the m vault ATA for the wrong mint to avoid account not initialized error
           const vaultMTokenAccount = await $.getATA(
@@ -105,6 +115,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           await $.createMint(
             wrongMint,
             $.nonAdmin.publicKey,
+            $.nonAdmin.publicKey,
             !$.useToken2022ForExt
           );
 
@@ -135,6 +146,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           const badMint = new Keypair();
           await $.createMint(
             badMint,
+            $.nonAdmin.publicKey,
             $.nonAdmin.publicKey,
             $.useToken2022ForExt,
             9
@@ -224,9 +236,9 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           await $.createMint(
             wrongMint,
             $.nonAdmin.publicKey,
+            null,
             $.useToken2022ForExt,
-            6,
-            false
+            6
           );
 
           // Attempt to send the transaction
@@ -384,6 +396,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.createMint(
               wrongMint,
               $.getExtMintAuthority(),
+              $.nonAdmin.publicKey,
               $.useToken2022ForExt,
               6
             ); // valid otherwise
@@ -409,7 +422,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("ext_mint has the scaled ui amount extension, but the authority is not the mint authority PDA - reverts", async () => {
             // Create a mint with the scaled ui amount extension
             const wrongMint = new Keypair();
-            await $.createScaledUiMint(wrongMint, $.nonAdmin.publicKey, 6);
+            await $.createScaledUiMint(
+              wrongMint,
+              $.nonAdmin.publicKey,
+              $.nonAdmin.publicKey,
+              6
+            );
 
             // Attempt to send the transaction
             await $.expectAnchorError(
@@ -1011,6 +1029,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.createMint(
               wrongMint,
               $.nonAdmin.publicKey,
+              $.nonAdmin.publicKey,
               $.useToken2022ForExt,
               6
             );
@@ -1498,6 +1517,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.createMint(
               wrongMint,
               $.nonAdmin.publicKey,
+              $.nonAdmin.publicKey,
               $.useToken2022ForExt,
               6
             );
@@ -1729,8 +1749,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // it reverts with a ConstraintTokenMint error
           test("fee_token_account is for the wrong mint - reverts", async () => {
             // Create an ATA for the wrong mint
-            const earnManagerMATA = await $.getATA(
-              $.mMint.publicKey,
+            const wrongMint = Keypair.generate();
+            await $.createMint(wrongMint, $.admin.publicKey, $.admin.publicKey);
+            const wrongATA = await $.getATA(
+              wrongMint.publicKey,
               earnManagerOne.publicKey
             );
 
@@ -1741,11 +1763,43 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 .addEarnManager(earnManagerOne.publicKey, new BN(100))
                 .accountsPartial({
                   admin: $.admin.publicKey,
-                  feeTokenAccount: earnManagerMATA,
+                  feeTokenAccount: wrongATA,
                 })
                 .signers([$.admin])
                 .rpc(),
               "ConstraintTokenMint"
+            );
+          });
+
+          // given the admin does sign the transcation
+          // given the fee token account is frozen
+          // it reverts with an InvalidAccount error
+          test("fee_token_account is frozen - reverts", async () => {
+            const earnManagerATA = await $.getATA(
+              $.extMint.publicKey,
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
+            );
+
+            // Freeze the account
+            await $.freezeTokenAccount(
+              earnManagerATA,
+              $.extMint.publicKey,
+              $.admin,
+              $.useToken2022ForExt
+            );
+
+            // Attempt to send the transaction
+            await $.expectAnchorError(
+              $.ext.methods
+                .addEarnManager(earnManagerOne.publicKey, new BN(100))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  feeTokenAccount: earnManagerATA,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "InvalidAccount"
             );
           });
 
@@ -2051,7 +2105,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // it reverts with an InvalidAccount error
           test("M mint account does not match global account - reverts", async () => {
             const wrongMint = Keypair.generate();
-            await $.createMint(wrongMint, $.wrapAuthority.publicKey, true, 6);
+            await $.createMint(
+              wrongMint,
+              $.wrapAuthority.publicKey,
+              $.admin.publicKey,
+              true,
+              6
+            );
 
             fromMTokenAccount = await $.getATA(
               wrongMint.publicKey,
@@ -2089,6 +2149,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.createMint(
               wrongMint,
               $.wrapAuthority.publicKey,
+              $.admin.publicKey,
               $.useToken2022ForExt,
               6
             );
@@ -3498,7 +3559,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // it reverts with an InvalidAccount error
           test("M mint account does not match global account - reverts", async () => {
             const wrongMint = Keypair.generate();
-            await $.createMint(wrongMint, $.wrapAuthority.publicKey, true, 6);
+            await $.createMint(
+              wrongMint,
+              $.wrapAuthority.publicKey,
+              $.admin.publicKey,
+              true,
+              6
+            );
 
             // Update the M token accounts
             toMTokenAccount = await $.getATA(
@@ -3537,6 +3604,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.createMint(
               wrongMint,
               $.wrapAuthority.publicKey,
+              $.admin.publicKey,
               $.useToken2022ForExt,
               6
             );
@@ -4681,6 +4749,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.createMint(
               newMint,
               $.nonAdmin.publicKey,
+              $.admin.publicKey,
               $.useToken2022ForExt,
               6
             );
@@ -6078,6 +6147,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.createMint(
               wrongMint,
               $.nonAdmin.publicKey,
+              $.admin.publicKey,
               $.useToken2022ForExt
             );
 
@@ -6630,6 +6700,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.createMint(
               wrongMint,
               $.nonAdmin.publicKey,
+              $.admin.publicKey,
               $.useToken2022ForExt
             );
 
@@ -6655,6 +6726,45 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 .signers([earnManagerOne])
                 .rpc(),
               "ConstraintTokenMint"
+            );
+          });
+
+          // given the earn manager accounts matches the signer
+          // given the provided merkle proof for the signer is valid
+          // given the fee basis points is less than or equal to 100_00
+          // given the fee_token_account is frozen
+          // it reverts with an InvalidAccount error
+          test("fee_token_account is frozen - reverts", async () => {
+            // Get the ATA for earn manager one
+            const earnManagerOneATA = await $.getATA(
+              $.extMint.publicKey,
+              earnManagerOne.publicKey,
+              $.useToken2022ForExt
+            );
+
+            // Freeze the token account
+            await $.freezeTokenAccount(
+              earnManagerOneATA,
+              $.extMint.publicKey,
+              $.admin,
+              $.useToken2022ForExt
+            );
+
+            // Attempt to configure earn manager with frozen fee token account
+            await $.expectAnchorError(
+              $.ext.methods
+                .configureEarnManager(new BN(100))
+                .accountsPartial({
+                  signer: earnManagerOne.publicKey,
+                  globalAccount: $.getExtGlobalAccount(),
+                  earnManagerAccount: $.getEarnManagerAccount(
+                    earnManagerOne.publicKey
+                  ),
+                  feeTokenAccount: earnManagerOneATA,
+                })
+                .signers([earnManagerOne])
+                .rpc(),
+              "InvalidAccount"
             );
           });
 
