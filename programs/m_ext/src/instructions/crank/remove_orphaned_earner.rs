@@ -11,12 +11,6 @@ pub struct RemoveOrphanedEarner<'info> {
     pub signer: Signer<'info>,
 
     #[account(
-        seeds = [EXT_GLOBAL_SEED],
-        bump = global_account.bump,
-    )]
-    pub global_account: Account<'info, ExtGlobalV2>,
-
-    #[account(
         mut,
         close = signer,
         seeds = [EARNER_SEED, earner_account.user_token_account.as_ref()],
