@@ -1,8 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::{
-    token_2022::spl_token_2022::state::AccountState,
-    token_interface::TokenAccount
-};
+use anchor_spl::{token_2022::spl_token_2022::state::AccountState, token_interface::TokenAccount};
 
 use crate::{
     constants::{ANCHOR_DISCRIMINATOR_SIZE, ONE_HUNDRED_PERCENT_U64},

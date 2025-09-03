@@ -3,7 +3,7 @@ use anchor_spl::token_interface::TokenAccount;
 
 use crate::{
     errors::ExtError,
-    state::{Earner, EarnManager, ExtGlobalV2, EARN_MANAGER_SEED, EARNER_SEED, EXT_GLOBAL_SEED},
+    state::{EarnManager, Earner, ExtGlobalV2, EARNER_SEED, EARN_MANAGER_SEED, EXT_GLOBAL_SEED},
 };
 
 #[derive(Accounts)]

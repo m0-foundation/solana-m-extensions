@@ -1,9 +1,6 @@
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::{
-    token_2022::spl_token_2022::state::AccountState,
-    token_interface::TokenAccount
-};
+use anchor_spl::{token_2022::spl_token_2022::state::AccountState, token_interface::TokenAccount};
 
 // local dependencies
 use crate::{
