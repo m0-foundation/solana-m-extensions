@@ -3,7 +3,7 @@ use anchor_spl::token_interface::TokenAccount;
 
 use crate::{
     errors::ExtError,
-    state::{Earner, ExtGlobalV2, EARNER_SEED, EXT_GLOBAL_SEED},
+    state::{Earner, EarnManager, ExtGlobalV2, EARN_MANAGER_SEED, EARNER_SEED, EXT_GLOBAL_SEED},
 };
 
 #[derive(Accounts)]
@@ -28,6 +28,13 @@ pub struct SetRecipient<'info> {
         bump = earner_account.bump,
     )]
     pub earner_account: Account<'info, Earner>,
+
+    #[account(
+        constraint = signer.key() == earner_account.user || earn_manager_account.is_active @ ExtError::NotActive,
+        seeds = [EARN_MANAGER_SEED, &earner_account.earn_manager.as_ref()],
+        bump = earn_manager_account.bump
+    )]
+    pub earn_manager_account: Account<'info, EarnManager>,
 
     #[account(token::mint = global_account.ext_mint)]
     pub recipient_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
