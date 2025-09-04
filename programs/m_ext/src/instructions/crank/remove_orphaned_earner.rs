@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 
 use crate::{
     errors::ExtError,
-    state::{EarnManager, Earner, ExtGlobalV2, EARNER_SEED, EARN_MANAGER_SEED, EXT_GLOBAL_SEED},
+    state::{EarnManager, Earner, EARNER_SEED, EARN_MANAGER_SEED},
 };
 
 #[derive(Accounts)]
