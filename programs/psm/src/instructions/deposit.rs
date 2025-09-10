@@ -1,6 +1,5 @@
 use anchor_lang::{accounts::interface_account::InterfaceAccount, prelude::*};
 use anchor_spl::{
-    associated_token::AssociatedToken,
     token_2022::Token2022,
     token_interface::{
         mint_to_checked, transfer_checked, Mint, MintToChecked, TokenAccount, TokenInterface,
@@ -17,10 +16,7 @@ use crate::{
 
 #[derive(Accounts)]
 pub struct Deposit<'info> {
-    #[account(
-        mut,
-        address = actor.owner,
-    )]
+    #[account(address = actor.owner)]
     pub signer: Signer<'info>,
 
     #[account(
@@ -64,8 +60,7 @@ pub struct Deposit<'info> {
     pub actor_token_account: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
-        init_if_needed,
-        payer = signer,
+        mut,
         associated_token::mint = lp_receipt_mint,
         associated_token::authority = signer,
         associated_token::token_program = lp_receipt_token_program,
@@ -83,10 +78,6 @@ pub struct Deposit<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 
     pub lp_receipt_token_program: Program<'info, Token2022>,
-
-    pub associated_token_program: Program<'info, AssociatedToken>,
-
-    pub system_program: Program<'info, System>,
 }
 
 impl Deposit<'_> {
