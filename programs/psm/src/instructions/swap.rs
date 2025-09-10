@@ -1,7 +1,6 @@
 use anchor_lang::{accounts::interface_account::InterfaceAccount, prelude::*};
-use anchor_spl::{
-    token::Token,
-    token_interface::{transfer_checked, Mint, TokenAccount, TransferChecked},
+use anchor_spl::token_interface::{
+    transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked,
 };
 
 use crate::{
@@ -68,9 +67,9 @@ pub struct Swap<'info> {
     )]
     pub vault_b: InterfaceAccount<'info, TokenAccount>,
 
-    pub from_token_program: Program<'info, Token>,
+    pub from_token_program: Interface<'info, TokenInterface>,
 
-    pub to_token_program: Program<'info, Token>,
+    pub to_token_program: Interface<'info, TokenInterface>,
 }
 
 impl Swap<'_> {

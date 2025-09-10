@@ -1,8 +1,10 @@
 use anchor_lang::{accounts::interface_account::InterfaceAccount, prelude::*};
 use anchor_spl::{
-    token::Token,
-    token_2022::{BurnChecked, Token2022},
-    token_interface::{burn_checked, transfer_checked, Mint, TokenAccount, TransferChecked},
+    token_2022::Token2022,
+    token_interface::{
+        burn_checked, transfer_checked, BurnChecked, Mint, TokenAccount, TokenInterface,
+        TransferChecked,
+    },
 };
 
 use crate::{
@@ -19,7 +21,7 @@ pub struct Withdraw<'info> {
 
     #[account(
         mut,
-        seeds = [POOL_ACTOR, pool.key().as_ref()],
+        seeds = [POOL_ACTOR, actor.owner.as_ref()],
         bump = actor.bump,
     )]
     pub actor: Account<'info, ApprovedPoolActor>,
@@ -72,7 +74,7 @@ pub struct Withdraw<'info> {
     )]
     pub vault: InterfaceAccount<'info, TokenAccount>,
 
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 
     pub lp_receipt_token_program: Program<'info, Token2022>,
 }

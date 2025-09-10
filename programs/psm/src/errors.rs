@@ -10,4 +10,10 @@ pub enum PSMError {
     Frozen,
     #[msg("Mint does not belong to pool")]
     InvalidMint,
+    #[msg("Unauthorized")]
+    Unauthorized,
+    #[msg("No excess fees or yield in pool")]
+    NoExcess,
+    #[msg("The mint has an unsupported extension")]
+    UnsupportedMint,
 }

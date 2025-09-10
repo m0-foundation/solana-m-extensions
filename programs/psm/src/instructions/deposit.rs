@@ -1,9 +1,11 @@
 use anchor_lang::{accounts::interface_account::InterfaceAccount, prelude::*};
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::Token,
-    token_2022::{MintToChecked, Token2022},
-    token_interface::{mint_to_checked, transfer_checked, Mint, TokenAccount, TransferChecked},
+    token_2022::Token2022,
+    token_interface::{
+        mint_to_checked, transfer_checked, Mint, MintToChecked, TokenAccount, TokenInterface,
+        TransferChecked,
+    },
 };
 
 use crate::{
@@ -23,7 +25,7 @@ pub struct Deposit<'info> {
 
     #[account(
         mut,
-        seeds = [POOL_ACTOR, pool.key().as_ref()],
+        seeds = [POOL_ACTOR, actor.owner.as_ref()],
         bump = actor.bump,
     )]
     pub actor: Account<'info, ApprovedPoolActor>,
@@ -78,7 +80,7 @@ pub struct Deposit<'info> {
     )]
     pub vault: InterfaceAccount<'info, TokenAccount>,
 
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 
     pub lp_receipt_token_program: Program<'info, Token2022>,
 

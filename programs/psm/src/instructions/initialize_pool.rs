@@ -1,12 +1,15 @@
 use anchor_lang::{accounts::interface_account::InterfaceAccount, prelude::*};
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::Token,
     token_2022::Token2022,
-    token_interface::{Mint, TokenAccount},
+    token_interface::{Mint, TokenAccount, TokenInterface},
 };
 
-use crate::state::{Global, Pool, GLOBAL_SEED, LP_MINT_SEED, POOL_CONFIG_SEED};
+use crate::{
+    errors::PSMError,
+    state::{Global, Pool, GLOBAL_SEED, LP_MINT_SEED, POOL_CONFIG_SEED},
+    utils::has_scaled_extension,
+};
 
 #[derive(Accounts)]
 pub struct InitializePool<'info> {
@@ -62,9 +65,9 @@ pub struct InitializePool<'info> {
     )]
     pub vault_b: InterfaceAccount<'info, TokenAccount>,
 
-    pub token_program_a: Program<'info, Token>,
+    pub token_program_a: Interface<'info, TokenInterface>,
 
-    pub token_program_b: Program<'info, Token>,
+    pub token_program_b: Interface<'info, TokenInterface>,
 
     pub lp_receipt_token_program: Program<'info, Token2022>,
 
@@ -79,7 +82,7 @@ impl InitializePool<'_> {
             return Err(ProgramError::InvalidArgument.into());
         }
 
-        // mint pubkeys should be sorted to prevent duplicate pools
+        // Mint pubkeys should be sorted to prevent duplicate pools
         if self.swap_mint_a.key().to_string() > self.swap_mint_b.key().to_string() {
             msg!("unsorted mint pubkeys");
             return Err(ProgramError::InvalidArgument.into());
@@ -88,6 +91,11 @@ impl InitializePool<'_> {
         if self.swap_mint_a.decimals != self.swap_mint_b.decimals {
             msg!("mints must have the same decimals");
             return Err(ProgramError::InvalidArgument.into());
+        }
+
+        // Scaling principal amounts unsupported
+        if has_scaled_extension(&self.swap_mint_a)? || has_scaled_extension(&self.swap_mint_b)? {
+            return err!(PSMError::UnsupportedMint);
         }
 
         Ok(())

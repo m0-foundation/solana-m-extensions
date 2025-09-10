@@ -5,6 +5,7 @@ use anchor_lang::prelude::*;
 pub mod errors;
 pub mod instructions;
 pub mod state;
+pub mod utils;
 
 use instructions::*;
 
@@ -14,6 +15,9 @@ declare_id!("C3LwTx2xTzXooN3rNbbuTkA2KJD3Un34SHcmm1E3rmKz");
 pub mod psm {
     use super::*;
 
+    /*
+     * Admin functions
+     */
     pub fn initialize_global(ctx: Context<InitializeGlobal>) -> Result<()> {
         InitializeGlobal::handler(ctx)
     }
@@ -22,6 +26,13 @@ pub mod psm {
         InitializePool::handler(ctx, trade_fee_bps)
     }
 
+    pub fn withdraw_excess(ctx: Context<WithdrawExcess>) -> Result<()> {
+        WithdrawExcess::handler(ctx)
+    }
+
+    /*
+     * User functions
+     */
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         Deposit::handler(ctx, amount)
     }
