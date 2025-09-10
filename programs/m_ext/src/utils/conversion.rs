@@ -78,9 +78,9 @@ pub fn sync_index<'info>(
 
                 return Ok(ext_index);
             } else {
-                // Update the last M index to the latest and return the current ext index
+                // Update the last M index to the latest and return the last ext index since it is not being updated
                 ext_global_account.yield_config.last_m_index = m_index;
-                return Ok(ext_index);
+                return Ok(ext_global_account.yield_config.last_ext_index);
             }
         } else {
             // Ext tokens are 1:1 with M tokens and we don't need to sync this
