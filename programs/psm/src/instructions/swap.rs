@@ -123,6 +123,8 @@ impl Swap<'_> {
             &[ctx.accounts.pool.bump],
         ]];
 
+        let out_amount = calculate_out_amount(amount, ctx.accounts.pool.trade_fee_bps);
+
         // Transfer output tokens to swapper
         let cpi_context = CpiContext::new_with_signer(
             ctx.accounts.to_token_program.to_account_info(),
@@ -134,17 +136,64 @@ impl Swap<'_> {
             },
             &seeds,
         );
-        transfer_checked(cpi_context, amount, ctx.accounts.from_mint.decimals)?;
+        transfer_checked(cpi_context, out_amount, ctx.accounts.from_mint.decimals)?;
 
         // Track balances
         if ctx.accounts.from_mint.key() == ctx.accounts.pool.swap_mint_a {
             ctx.accounts.pool.balance_a += amount;
-            ctx.accounts.pool.balance_b -= amount;
+            ctx.accounts.pool.balance_b -= out_amount;
         } else {
-            ctx.accounts.pool.balance_a -= amount;
+            ctx.accounts.pool.balance_a -= out_amount;
             ctx.accounts.pool.balance_b += amount;
         }
 
         Ok(())
+    }
+}
+
+fn calculate_out_amount(amount: u64, fee_bps: u16) -> u64 {
+    if fee_bps == 0 {
+        return amount;
+    }
+
+    let fee = amount
+        .checked_mul(fee_bps as u64)
+        .unwrap()
+        .checked_div(10_000)
+        .unwrap();
+
+    amount.checked_sub(fee).unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_fee_zero_bps() {
+        assert_eq!(calculate_out_amount(1000, 0), 1000);
+        assert_eq!(calculate_out_amount(0, 0), 0);
+    }
+
+    #[test]
+    fn test_calculate_fee_normal_cases() {
+        // 1% fee (100 bps)
+        assert_eq!(calculate_out_amount(10000, 100), 9900);
+        assert_eq!(calculate_out_amount(1000, 100), 990);
+
+        // 0.5% fee (50 bps)
+        assert_eq!(calculate_out_amount(10000, 50), 9950);
+
+        // 0.1% fee (10 bps)
+        assert_eq!(calculate_out_amount(10000, 10), 9990);
+    }
+
+    #[test]
+    fn test_calculate_fee_rounding() {
+        // 0.3% fee (30 bps) on 1000 = 3 (rounded down)
+        assert_eq!(calculate_out_amount(1000, 30), 997);
+
+        // 0.3% fee (30 bps) on 10 = 0.03 (rounds to 0)
+        assert_eq!(calculate_out_amount(10, 30), 10); // Fee is effectively 0
     }
 }
