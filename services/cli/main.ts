@@ -24,6 +24,7 @@ import {
   getTokenMetadata,
   LENGTH_SIZE,
   TOKEN_2022_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
   TYPE_SIZE,
 } from "@solana/spl-token";
 import {
@@ -60,13 +61,7 @@ const NO_YIELD_EXT_IDL = require("../../target/idl/no_yield.json");
 const SCALED_UI_EXT_IDL = require("../../target/idl/scaled_ui.json");
 const MIGRATE_EXT_IDL = require("../../target/idl/migrate.json");
 
-const OLD_M_MINT: PublicKey =
-  process.env.NETWORK === "devnet"
-    ? new PublicKey("mzeroZRGCah3j5xEWp2Nih3GDejSBbH1rbHoxDg8By6")
-    : new PublicKey("mzerokyEX9TNDoK4o2YZQBDmMzjokAeN6M2g2S3pLJo");
-
 const M_MINT = new PublicKey("mzerojk9tg56ebsrEAhfkyc9VgKjTW2zDqp6C5mhjzH");
-
 const EXT_SWAP: PublicKey = new PublicKey(
   "MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH"
 );
@@ -173,14 +168,14 @@ async function main() {
           umi.use(signerIdentity(createSignerFromKeypair(umi, owner)));
           umi.use(mplTokenMetadata());
 
-          const { signature } = await createFungible(umi, {
+          await createFungible(umi, {
             name,
             symbol,
             decimals: 6,
             mint: createSignerFromKeypair(umi, _mint),
             uri,
             sellerFeeBasisPoints: percentAmount(0),
-            creators: null,
+            creators: [],
           }).sendAndConfirm(umi);
 
           console.log(`Created token mint at ${mint.publicKey.toBase58()}`);
@@ -282,7 +277,12 @@ async function main() {
     .description("Initialize the extension program")
     .option("-v, --variant <string>", "Program variant", "no-yield")
     .option("-f, --fee [number]", "Fee in bps", "0")
-    .action(async ({ variant, fee }) => {
+    .option(
+      '-t, --token-program <"spl"|"token2022">',
+      "Token program",
+      "token2022"
+    )
+    .action(async ({ variant, fee, tokenProgram }) => {
       const [payer, extMint, program] = keysFromEnv([
         "PAYER_KEYPAIR",
         "EXT_MINT_KEYPAIR",
@@ -326,6 +326,10 @@ async function main() {
               admin: admin,
               mMint: M_MINT,
               extMint: extMint.publicKey,
+              extTokenProgram:
+                tokenProgram === "spl"
+                  ? TOKEN_PROGRAM_ID
+                  : TOKEN_2022_PROGRAM_ID,
             })
             .transaction();
 
@@ -347,6 +351,10 @@ async function main() {
               admin: admin,
               mMint: M_MINT,
               extMint: extMint.publicKey,
+              extTokenProgram:
+                tokenProgram === "spl"
+                  ? TOKEN_PROGRAM_ID
+                  : TOKEN_2022_PROGRAM_ID,
             })
             .transaction();
 
