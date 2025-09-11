@@ -44,6 +44,16 @@ import { MExt as MigrateExt } from "../../target/types/migrate";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 import { PROGRAM_ID as EARN_PID } from "@m0-foundation/solana-m-sdk";
 import { sha256 } from "@noble/hashes/sha2";
+import {
+  createFungible,
+  mplTokenMetadata,
+} from "@metaplex-foundation/mpl-token-metadata";
+import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
+import {
+  percentAmount,
+  createSignerFromKeypair,
+  signerIdentity,
+} from "@metaplex-foundation/umi";
 
 const EXT_SWAP_IDL = require("../../target/idl/ext_swap.json");
 const NO_YIELD_EXT_IDL = require("../../target/idl/no_yield.json");
@@ -110,11 +120,7 @@ async function main() {
     )
     .option("-n, --name <string>", "Token Name", process.env.EXT_NAME)
     .option("-s, --symbol <string>", "Token Symbol", process.env.EXT_SYMBOL)
-    .option(
-      "-i, --icon-uri [string]",
-      "Token Icon URI",
-      process.env.EXT_ICON_URI
-    )
+    .option("-u, --uri [string]", "Token URI", process.env.EXT_URI)
     .option(
       "--init-scaled-ui",
       "Enable scaled UI amounts",
@@ -130,14 +136,20 @@ async function main() {
       "Enable transfer hook",
       process.env.INIT_TRANSFER_HOOK
     )
+    .option(
+      "--legacy-program",
+      "Do not use Token2022 program",
+      process.env.INIT_TRANSFER_HOOK
+    )
     .action(
       async ({
         name,
         symbol,
-        iconUri,
+        uri,
         initScaledUi,
         initConfidential,
         initTransferHook,
+        legacyProgram,
       }) => {
         const [payer, mint, ext] = keysFromEnv([
           "PAYER_KEYPAIR",
@@ -152,6 +164,29 @@ async function main() {
         const authority = process.env.SQUADS_MULTISIG
           ? new PublicKey(process.env.SQUADS_MULTISIG)
           : payer.publicKey;
+
+        if (legacyProgram) {
+          const umi = createUmi(process.env.RPC_URL!);
+          const owner = umi.eddsa.createKeypairFromSecretKey(payer.secretKey);
+          const _mint = umi.eddsa.createKeypairFromSecretKey(mint.secretKey);
+
+          umi.use(signerIdentity(createSignerFromKeypair(umi, owner)));
+          umi.use(mplTokenMetadata());
+
+          const { signature } = await createFungible(umi, {
+            name,
+            symbol,
+            decimals: 6,
+            mint: createSignerFromKeypair(umi, _mint),
+            uri,
+            sellerFeeBasisPoints: percentAmount(0),
+            creators: null,
+          }).sendAndConfirm(umi);
+
+          console.log(`Created token mint at ${mint.publicKey.toBase58()}`);
+
+          return;
+        }
 
         // Get the mint authority by deriving the PDA from the extension program
         let mintAuthority = PublicKey.findProgramAddressSync(
@@ -181,7 +216,7 @@ async function main() {
           authority, // freeze authority
           name,
           symbol,
-          iconUri,
+          uri,
           extensions
         );
 
@@ -357,7 +392,6 @@ async function main() {
       .accountsPartial({
         admin,
         newMMint: M_MINT,
-        oldMMint: OLD_M_MINT,
       })
       .transaction();
 
@@ -906,7 +940,7 @@ async function createToken2022Mint(
   freezeAuthority: PublicKey | null,
   tokenName: string,
   tokenSymbol: string,
-  tokenUri: string,
+  uri: string,
   extensions: ExtensionType[],
   evmTokenAddress: string | null = null
 ) {
@@ -915,7 +949,7 @@ async function createToken2022Mint(
     mint: mint.publicKey,
     name: tokenName,
     symbol: tokenSymbol,
-    uri: tokenUri,
+    uri,
     additionalMetadata: evmTokenAddress ? [["evm", evmTokenAddress]] : [],
   };
 

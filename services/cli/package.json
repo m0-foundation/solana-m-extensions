@@ -3,6 +3,9 @@
   "dependencies": {
     "@coral-xyz/anchor": "catalog:",
     "@m0-foundation/solana-m-sdk": "catalog:",
+    "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
+    "@metaplex-foundation/umi": "^1.4.1",
+    "@metaplex-foundation/umi-bundle-defaults": "^1.4.1",
     "@noble/hashes": "^1.8.0",
     "@solana/buffer-layout": "catalog:",
     "@solana/buffer-layout-utils": "catalog:",
