@@ -35,6 +35,7 @@ import {
   ExtensionType,
   getExtensionData,
   createApproveCheckedInstruction,
+  createFreezeAccountInstruction,
 } from "@solana/spl-token";
 import {
   ZERO_WORD,
@@ -81,7 +82,8 @@ export type YieldConfig<V extends Variant> = V extends Variant.ScaledUi
   ? {
       yieldVariant?: YieldVariant;
       earnAuthority?: PublicKey;
-      index?: BN;
+      lastMIndex?: BN;
+      lastExtIndex?: BN;
       timestamp?: BN;
     }
   : {
@@ -447,12 +449,31 @@ class ExtensionTestBase {
     await this.provider.sendAndConfirm!(tx, [owner]);
   }
 
+  public async freezeTokenAccount(
+    tokenAccount: PublicKey,
+    mint: PublicKey,
+    freezeAuthority: Keypair,
+    use2022: boolean = true
+  ) {
+    const freezeIx = createFreezeAccountInstruction(
+      tokenAccount,
+      mint,
+      freezeAuthority.publicKey,
+      [],
+      use2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
+    );
+
+    let tx = new Transaction().add(freezeIx);
+
+    await this.provider.sendAndConfirm!(tx, [freezeAuthority]);
+  }
+
   public async createMint(
     mint: Keypair,
     mintAuthority: PublicKey,
+    freezeAuthority: PublicKey | null,
     use2022: boolean = true,
-    decimals = 6,
-    freezeAuthority: boolean = true
+    decimals = 6
   ) {
     // Create and initialize mint account
 
@@ -473,7 +494,7 @@ class ExtensionTestBase {
       mint.publicKey,
       decimals, // decimals
       mintAuthority, // mint authority
-      freezeAuthority ? mintAuthority : null, // freeze authority
+      freezeAuthority, // freeze authority
       tokenProgram
     );
 
@@ -520,6 +541,7 @@ class ExtensionTestBase {
   public async createScaledUiMint(
     mint: Keypair,
     mintAuthority: PublicKey,
+    freezeAuthority: PublicKey | null,
     decimals = 6
   ) {
     // Create and initialize mint account
@@ -549,7 +571,7 @@ class ExtensionTestBase {
       mint.publicKey,
       decimals, // decimals
       mintAuthority, // mint authority
-      mintAuthority, // freeze authority
+      freezeAuthority, // freeze authority
       tokenProgram
     );
 
@@ -1142,17 +1164,26 @@ export class ExtensionTest<
         await this.createMint(
           this.extMint,
           this.getExtMintAuthority(),
-          this.extTokenProgram === TOKEN_2022_PROGRAM_ID
+          this.admin.publicKey,
+          this.extTokenProgram === TOKEN_2022_PROGRAM_ID,
+          6
         );
         break;
       case Variant.ScaledUi:
-        await this.createScaledUiMint(this.extMint, this.getExtMintAuthority());
+        await this.createScaledUiMint(
+          this.extMint,
+          this.getExtMintAuthority(),
+          this.admin.publicKey,
+          6
+        );
         break;
       case Variant.Crank:
         await this.createMint(
           this.extMint,
           this.getExtMintAuthority(),
-          this.extTokenProgram === TOKEN_2022_PROGRAM_ID
+          this.admin.publicKey,
+          this.extTokenProgram === TOKEN_2022_PROGRAM_ID,
+          6
         );
         break;
       default:
@@ -1236,6 +1267,48 @@ export class ExtensionTest<
     return yieldConfig.lastExtIndex!.toNumber() / 1e12;
   }
 
+  public async getCurrentExtIndex(): Promise<BN> {
+    if (this.variant === Variant.NoYield) {
+      return new BN(1e12);
+    } else if (this.variant === Variant.ScaledUi) {
+      const yieldConfig: YieldConfig<Variant.ScaledUi> = (
+        await this.ext.account.extGlobalV2.fetch(this.getExtGlobalAccount())
+      ).yieldConfig;
+      return yieldConfig.lastExtIndex!;
+    } else if (this.variant === Variant.Crank) {
+      const yieldConfig: YieldConfig<Variant.Crank> = (
+        await this.ext.account.extGlobalV2.fetch(this.getExtGlobalAccount())
+      ).yieldConfig;
+      return yieldConfig.lastExtIndex!;
+    } else {
+      throw new Error("Unsupported variant for MExt");
+    }
+  }
+
+  public async getNewExtIndex(newMIndex: BN): Promise<BN> {
+    if (this.variant === Variant.NoYield) {
+      return new BN(1e12);
+    } else if (this.variant === Variant.ScaledUi) {
+      const yieldConfig: YieldConfig<Variant.ScaledUi> = (
+        await this.ext.account.extGlobalV2.fetch(this.getExtGlobalAccount())
+      ).yieldConfig;
+      const newExtIndex =
+        (yieldConfig.lastExtIndex!.toNumber() / 1e12) *
+        (newMIndex.toNumber() / yieldConfig.lastMIndex!.toNumber()) **
+          (1 - yieldConfig.feeBps!.toNumber() / 1e4);
+      return new BN(Math.floor(newExtIndex * 1e12));
+    } else if (this.variant === Variant.Crank) {
+      const yieldConfig: YieldConfig<Variant.Crank> = (
+        await this.ext.account.extGlobalV2.fetch(this.getExtGlobalAccount())
+      ).yieldConfig;
+      return newMIndex
+        .mul(yieldConfig.lastExtIndex!)
+        .div(yieldConfig.lastMIndex!);
+    } else {
+      throw new Error("Unsupported variant for MExt");
+    }
+  }
+
   public async expectExtGlobalState(expected: ExtGlobal<V>) {
     const state = await this.ext.account.extGlobalV2.fetch(
       this.getExtGlobalAccount()
@@ -1309,8 +1382,15 @@ export class ExtensionTest<
     if (expected.earnAuthority) {
       expect(actual.earnAuthority!).toEqual(expected.earnAuthority);
     }
-    if (expected.index) {
-      expect(actual.index!.toString()).toEqual(expected.index.toString());
+    if (expected.lastMIndex) {
+      expect(actual.lastMIndex!.toString()).toEqual(
+        expected.lastMIndex.toString()
+      );
+    }
+    if (expected.lastExtIndex) {
+      expect(actual.lastExtIndex!.toString()).toEqual(
+        expected.lastExtIndex.toString()
+      );
     }
     if (expected.timestamp) {
       expect(actual.timestamp!.toString()).toEqual(
@@ -2045,15 +2125,21 @@ export class ExtensionSwapTest extends ExtensionTestBase {
     await this.createMint(
       this.extensionMints.mintA,
       mintAuthA,
+      mintAuthA,
       true // use TOKEN_2022_PROGRAM_ID
     );
 
     // ext_b: scaled-ui variant - use ScaledUi mint
-    await this.createScaledUiMint(this.extensionMints.mintB, mintAuthB);
+    await this.createScaledUiMint(
+      this.extensionMints.mintB,
+      mintAuthB,
+      mintAuthB
+    );
 
     // ext_c: no-yield variant with extra accounts - use regular TOKEN_2022 mint
     await this.createMint(
       this.extensionMints.mintC,
+      mintAuthC,
       mintAuthC,
       true // use TOKEN_2022_PROGRAM_ID
     );

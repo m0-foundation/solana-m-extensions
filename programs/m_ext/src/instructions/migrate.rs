@@ -70,11 +70,6 @@ pub struct MigrateM<'info> {
     )]
     pub new_m_mint: InterfaceAccount<'info, Mint>,
 
-    #[account(
-        address = global_account.m_mint,
-    )]
-    pub old_m_mint: InterfaceAccount<'info, Mint>,
-
     pub ext_mint: InterfaceAccount<'info, Mint>,
 
     /// CHECK: This account is just a signer and is checked by the seeds
@@ -93,13 +88,6 @@ pub struct MigrateM<'info> {
     )]
     pub new_vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    #[account(
-        associated_token::mint = old_m_mint,
-        associated_token::authority = m_vault,
-        associated_token::token_program = m_token_program,
-    )]
-    pub old_vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
-
     pub m_token_program: Program<'info, Token2022>,
 
     pub system_program: Program<'info, System>,
@@ -114,17 +102,28 @@ impl MigrateM<'_> {
             return err!(ExtError::InvalidMint);
         }
 
-        // Confirm that the new vault M token account has atleast as much M (adjusted for the multiplier) as the old vault M token account
-        let new_scaled_ui_config = get_scaled_ui_config(&self.new_m_mint)?;
+        // Confirm that the new vault M token account has enough M to cover the outstanding supply of the extension
+        let m_scaled_ui_config = get_scaled_ui_config(&self.new_m_mint)?;
         let new_vault_m_amount = principal_to_amount_down(
             self.new_vault_m_token_account.amount,
-            new_scaled_ui_config.new_multiplier.into(),
+            m_scaled_ui_config.new_multiplier.into(),
         )?;
 
-        // Note: the v1 M token did not have a rebasing extension so we can use the amount directly
-        let old_vault_m_amount = self.old_vault_m_token_account.amount;
+        // Get the supply of the extension, accounting for a scaled-ui conversion if necessary
+        let ext_supply_amount;
+        cfg_if! {
+            if #[cfg(feature = "scaled-ui")] {
+                let ext_scaled_ui_config = get_scaled_ui_config(&self.ext_mint)?;
+                ext_supply_amount = principal_to_amount_down(
+                    self.ext_mint.supply,
+                    ext_scaled_ui_config.new_multiplier.into(),
+                )?;
+            } else {
+                ext_supply_amount = self.ext_mint.supply;
+            }
+        };
 
-        if new_vault_m_amount < old_vault_m_amount {
+        if new_vault_m_amount < ext_supply_amount {
             return err!(ExtError::InsufficientCollateral);
         }
 
@@ -143,7 +142,8 @@ impl MigrateM<'_> {
                 yield_config = YieldConfig {
                     yield_variant: YieldVariant::Crank,
                     earn_authority: old_global.earn_authority,
-                    index: old_global.index,
+                    last_m_index: old_global.index,
+                    last_ext_index: old_global.index, // we set the extension index to the same as the M index since V1 used the same one
                     timestamp: old_global.timestamp,
                 };
             } else if #[cfg(feature = "scaled-ui")] {

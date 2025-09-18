@@ -10,7 +10,10 @@ use crate::{
         EarnManager, Earner, ExtGlobalV2, EARNER_SEED, EARN_MANAGER_SEED, EXT_GLOBAL_SEED,
         MINT_AUTHORITY_SEED, M_VAULT_SEED,
     },
-    utils::{conversion::principal_to_amount_down, token::mint_tokens},
+    utils::{
+        conversion::{multiplier_to_index, principal_to_amount_down},
+        token::mint_tokens,
+    },
 };
 
 #[derive(Accounts)]
@@ -98,7 +101,7 @@ impl ClaimFor<'_> {
         // Validate that the earner account has not already claimed this cycle
         // Earner index should never be > global index, but we check to be safe against an error with index propagation
         if ctx.accounts.earner_account.last_claim_index
-            >= ctx.accounts.global_account.yield_config.index
+            >= ctx.accounts.global_account.yield_config.last_ext_index
         {
             return err!(ExtError::AlreadyClaimed);
         }
@@ -106,7 +109,13 @@ impl ClaimFor<'_> {
         // Calculate the amount of tokens to send to the user
         // Cast to u128 for multiplication to avoid overflows
         let mut rewards: u64 = (snapshot_balance as u128)
-            .checked_mul(ctx.accounts.global_account.yield_config.index.into())
+            .checked_mul(
+                ctx.accounts
+                    .global_account
+                    .yield_config
+                    .last_ext_index
+                    .into(),
+            )
             .unwrap()
             .checked_div(ctx.accounts.earner_account.last_claim_index.into())
             .unwrap()
@@ -120,10 +129,9 @@ impl ClaimFor<'_> {
 
         // Calculate the amount of M tokens in the vault from the principal
         let m_config = earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
-        let ext_collateral = principal_to_amount_down(
-            ctx.accounts.vault_m_token_account.amount,
-            m_config.new_multiplier.into(),
-        )?;
+        let m_index = multiplier_to_index(m_config.new_multiplier.into())?;
+        let ext_collateral =
+            principal_to_amount_down(ctx.accounts.vault_m_token_account.amount, m_index)?;
 
         if ext_supply + rewards > ext_collateral {
             return err!(ExtError::InsufficientCollateral);
@@ -131,7 +139,7 @@ impl ClaimFor<'_> {
 
         // Set the earner's last claim index to the global index and update the last claim timestamp
         ctx.accounts.earner_account.last_claim_index =
-            ctx.accounts.global_account.yield_config.index;
+            ctx.accounts.global_account.yield_config.last_ext_index;
         ctx.accounts.earner_account.last_claim_timestamp =
             ctx.accounts.global_account.yield_config.timestamp;
 

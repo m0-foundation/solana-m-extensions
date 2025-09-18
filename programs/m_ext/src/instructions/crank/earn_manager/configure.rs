@@ -1,6 +1,6 @@
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::TokenAccount;
+use anchor_spl::{token_2022::spl_token_2022::state::AccountState, token_interface::TokenAccount};
 
 // local dependencies
 use crate::{
@@ -27,7 +27,10 @@ pub struct ConfigureEarnManager<'info> {
     )]
     pub earn_manager_account: Account<'info, EarnManager>,
 
-    #[account(token::mint = global_account.ext_mint)]
+    #[account(
+        token::mint = global_account.ext_mint,
+        constraint = fee_token_account.state != AccountState::Frozen @ ExtError::InvalidAccount
+    )]
     pub fee_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
 }
 

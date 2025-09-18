@@ -2,19 +2,13 @@ use anchor_lang::prelude::*;
 
 use crate::{
     errors::ExtError,
-    state::{EarnManager, Earner, ExtGlobalV2, EARNER_SEED, EARN_MANAGER_SEED, EXT_GLOBAL_SEED},
+    state::{EarnManager, Earner, EARNER_SEED, EARN_MANAGER_SEED},
 };
 
 #[derive(Accounts)]
 pub struct RemoveOrphanedEarner<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
-
-    #[account(
-        seeds = [EXT_GLOBAL_SEED],
-        bump = global_account.bump,
-    )]
-    pub global_account: Account<'info, ExtGlobalV2>,
 
     #[account(
         mut,
