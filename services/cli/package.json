@@ -3,6 +3,7 @@
   "dependencies": {
     "@coral-xyz/anchor": "catalog:",
     "@m0-foundation/solana-m-sdk": "catalog:",
+    "@noble/hashes": "^1.8.0",
     "@solana/buffer-layout": "catalog:",
     "@solana/buffer-layout-utils": "catalog:",
     "@solana/spl-token": "catalog:",
@@ -10,6 +11,7 @@
     "@solana/web3.js": "catalog:",
     "bn.js": "catalog:",
     "commander": "13.1.0",
+    "sha2": "link:@noble/hashes/sha2",
     "shelljs": "^0.10.0"
   },
   "devDependencies": {

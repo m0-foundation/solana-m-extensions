@@ -1,46 +1,59 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use cfg_if::cfg_if;
-use earn::state::Global as EarnGlobal;
 use spl_token_2022::extension::{BaseStateWithExtensions, StateWithExtensions};
 
-use crate::{constants::INDEX_SCALE_U64, errors::ExtError, state::ExtGlobal};
+use crate::{
+    constants::{INDEX_SCALE_F64, INDEX_SCALE_U64},
+    errors::ExtError,
+    state::ExtGlobalV2,
+};
 
 cfg_if! {
     if #[cfg(feature = "scaled-ui")] {
         use anchor_lang::solana_program::program::invoke_signed;
+        use anchor_spl::token_2022::spl_token_2022::state::AccountState;
         use spl_token_2022::extension::scaled_ui_amount::ScaledUiAmountConfig;
-        use crate::constants::{INDEX_SCALE_F64, ONE_HUNDRED_PERCENT_F64};
+        use crate::constants::ONE_HUNDRED_PERCENT_F64;
     }
 }
 
 #[allow(unused_variables)]
-pub fn sync_multiplier<'info>(
+pub fn sync_index<'info>(
     ext_mint: &mut InterfaceAccount<'info, Mint>,
-    ext_global_account: &mut Account<'info, ExtGlobal>,
-    m_earn_global_account: &Account<'info, EarnGlobal>,
+    ext_global_account: &mut Account<'info, ExtGlobalV2>,
+    m_mint: &InterfaceAccount<'info, Mint>,
+    vault_m_token_account: &InterfaceAccount<'info, TokenAccount>,
     authority: &AccountInfo<'info>,
     authority_seeds: &[&[&[u8]]],
-    token_program: &Program<'info, Token2022>,
-    m_earner_account: &AccountInfo<'info>,
+    token_program: &Interface<'info, TokenInterface>,
 ) -> Result<u64> {
     cfg_if! {
         if #[cfg(feature = "scaled-ui")] {
-            // Get the current index and timestamp from the m_earn_global_account and cached values
-            let (index, timestamp): (u64, u64) =
-                get_latest_index_and_timestamp(ext_global_account, m_earn_global_account)?;
+            // Require the token program to be the token2022 program
+            // We checked this on the Initialize instruction
+            // but since we're CPIing into the provided program here,
+            // and this could be used by any instruction
+            // (which may not have checked ext_mint's token program),
+            // we check again as a safety measure
+            if token_program.key() != spl_token_2022::ID {
+                return err!(ExtError::InvalidTokenProgram);
+            }
+
+            // Get the current M index, newly calculated Ext index, and timestamp from the M mint
+            let (m_index, ext_index, timestamp): (u64, u64, u64) =
+                get_latest_index_and_timestamp(ext_global_account, m_mint)?;
 
             // Compare against the current ext index, if the same, return early
-            if index == ext_global_account.yield_config.last_ext_index {
+            if ext_index == ext_global_account.yield_config.last_ext_index {
                 return Ok(ext_global_account.yield_config.last_ext_index);
             }
 
-            // Check if the extension is earning, i.e. that it has an active earner account.
-            // If it is earning, update the M index and the multiplier.
-            // If not, only update the M index. The reason is so that yield accrual can
-            // start again from a future point without issuing retroactive yield.
-            if !m_earner_account.data_is_empty() {
-                let multiplier: f64 = index as f64 / INDEX_SCALE_F64;
+            // Check if the vault m token account is approved as an M earner (i.e. not frozen)
+            // If so, update the multiplier and return
+            // If not, update the last M index to the latest and return the current multiplier
+            if vault_m_token_account.state == AccountState::Initialized {
+                let ext_multiplier: f64 = index_to_multiplier(ext_index)?;
 
                 // Update the multiplier and timestamp in the mint account
                 invoke_signed(
@@ -49,7 +62,7 @@ pub fn sync_multiplier<'info>(
                         &ext_mint.key(),
                         &authority.key(),
                         &[],
-                        multiplier,
+                        ext_multiplier,
                         timestamp as i64,
                     )?,
                     &[ext_mint.to_account_info(), authority.clone()],
@@ -60,16 +73,13 @@ pub fn sync_multiplier<'info>(
                 ext_mint.reload()?;
 
                 // Update the last m index and last ext index in the global account
-                ext_global_account.yield_config.last_m_index = m_earn_global_account.index;
-                ext_global_account.yield_config.last_ext_index = index;
+                ext_global_account.yield_config.last_m_index = m_index;
+                ext_global_account.yield_config.last_ext_index = ext_index;
 
-                // Return the latest ext index
-                return Ok(index);
+                return Ok(ext_index);
             } else {
-                // If not earning, just update the last m index
-                ext_global_account.yield_config.last_m_index = m_earn_global_account.index;
-
-                // Return the current ext multiplier
+                // Update the last M index to the latest and return the last ext index since it is not being updated
+                ext_global_account.yield_config.last_m_index = m_index;
                 return Ok(ext_global_account.yield_config.last_ext_index);
             }
         } else {
@@ -160,6 +170,23 @@ pub fn principal_to_amount_up(principal: u64, index: u64) -> Result<u64> {
     Ok(amount)
 }
 
+pub fn multiplier_to_index(multiplier: f64) -> Result<u64> {
+    let index: f64 = (INDEX_SCALE_F64 * multiplier).trunc();
+
+    if index < 0.0 {
+        err!(ExtError::MathUnderflow)
+    } else if index > u64::MAX as f64 {
+        err!(ExtError::MathOverflow)
+    } else {
+        // Convert the f64 index to u64
+        Ok(index as u64)
+    }
+}
+
+pub fn index_to_multiplier(index: u64) -> Result<f64> {
+    Ok(index as f64 / INDEX_SCALE_F64)
+}
+
 pub fn get_mint_extensions<'info>(
     mint: &InterfaceAccount<'info, Mint>,
 ) -> Result<Vec<spl_token_2022::extension::ExtensionType>> {
@@ -191,17 +218,22 @@ cfg_if! {
 
 
         fn get_latest_index_and_timestamp<'info>(
-            ext_global_account: &Account<'info, ExtGlobal>,
-            m_earn_global_account: &Account<'info, EarnGlobal>,
-        ) -> Result<(u64, u64)> {
-            let latest_m_index = m_earn_global_account.index;
+            ext_global_account: &Account<'info, ExtGlobalV2>,
+            m_mint: &InterfaceAccount<'info, Mint>,
+        ) -> Result<(u64, u64, u64)> {
+            let m_scaled_ui_config = get_scaled_ui_config(m_mint)?;
+
+            let latest_m_index = multiplier_to_index(
+                m_scaled_ui_config.new_multiplier.into(),
+            )?;
             let cached_m_index = ext_global_account.yield_config.last_m_index;
-            let latest_timestamp = m_earn_global_account.timestamp;
+            let timestamp: i64 = m_scaled_ui_config.new_multiplier_effective_timestamp.into();
+            let latest_timestamp = timestamp as u64;
             let cached_ext_index = ext_global_account.yield_config.last_ext_index;
 
             // If no change, return early
             if latest_m_index == cached_m_index {
-                return Ok((cached_ext_index, latest_timestamp));
+                return Ok((cached_m_index, cached_ext_index, latest_timestamp));
             }
 
             // Calculate the new ext index based on the latest m index and timestamp
@@ -212,7 +244,7 @@ cfg_if! {
                 ext_global_account.yield_config.fee_bps
             )?;
 
-            Ok((new_ext_index, latest_timestamp))
+            Ok((latest_m_index, new_ext_index, latest_timestamp))
         }
 
         fn calculate_new_index(
@@ -315,13 +347,6 @@ mod tests {
                 let result = calculate_new_index(1333333333333u64, 4000000000000u64, 7000000000000u64, 0).unwrap();
                 assert_eq!(result, expected);
             }
-
-            // // Helper function to trim the value to 12 decimal places after subtracting expected rounding error
-            // // This is needed to deal with imprecision in floating point arithmetic
-            // fn trim(value: f64) -> f64 {
-            //     // Truncate the value to 12 decimal places
-            //     (value * INDEX_SCALE_F64).ceil() / INDEX_SCALE_F64
-            // }
 
             #[test]
             fn test_calculate_new_index_with_fee() {

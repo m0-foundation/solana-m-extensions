@@ -1,6 +1,6 @@
 [package]
 name = "m_ext"
-version = "0.1.0"
+version = "0.2.0"
 description = "M extension program with various yield distribution options chosen at compile time"
 edition = "2021"
 
@@ -19,6 +19,11 @@ idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 # yield features
 scaled-ui = []
 no-yield = []
+crank = []
+
+# Migration feature flag
+migrate = []
+wm = ["crank", "migrate"]
 
 [dependencies]
 anchor-lang.workspace = true

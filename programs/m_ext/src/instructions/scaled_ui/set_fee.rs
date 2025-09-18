@@ -1,17 +1,13 @@
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
-use earn::{
-    state::{Global as EarnGlobal, EARNER_SEED},
-    ID as EARN_PROGRAM,
-};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface, ID as TOKEN_2022_ID};
 
 // local dependencies
 use crate::{
     constants::ONE_HUNDRED_PERCENT_U64,
     errors::ExtError,
-    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
-    utils::conversion::sync_multiplier,
+    state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
+    utils::conversion::sync_index,
 };
 
 #[derive(Accounts)]
@@ -22,15 +18,15 @@ pub struct SetFee<'info> {
         mut,
         seeds = [EXT_GLOBAL_SEED],
         has_one = admin @ ExtError::NotAuthorized,
+        has_one = m_mint @ ExtError::InvalidMint,
         has_one = ext_mint @ ExtError::InvalidMint,
-        has_one = m_earn_global_account @ ExtError::InvalidAccount,
         bump = global_account.bump,
     )]
-    pub global_account: Account<'info, ExtGlobal>,
+    pub global_account: Account<'info, ExtGlobalV2>,
 
-    pub m_earn_global_account: Account<'info, EarnGlobal>,
+    pub m_mint: InterfaceAccount<'info, Mint>,
 
-    // CHECK: This account is validated by the seed, it stores no data
+    /// CHECK: This account is validated by the seed, it stores no data
     #[account(
         seeds = [M_VAULT_SEED],
         bump = global_account.m_vault_bump,
@@ -38,21 +34,11 @@ pub struct SetFee<'info> {
     pub m_vault: UncheckedAccount<'info>,
 
     #[account(
-        associated_token::mint = global_account.m_mint,
+        associated_token::mint = m_mint,
         associated_token::authority = m_vault,
-        associated_token::token_program = m_token_program,
+        associated_token::token_program = TOKEN_2022_ID,
     )]
     pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
-
-    /// CHECK: We partially validate this account is the correct address
-    /// via the seed, but we delay full validation to the handler
-    /// so we can handle cases where the account has been closed.
-    #[account(
-        seeds = [EARNER_SEED, vault_m_token_account.key().as_ref()],
-        seeds::program = EARN_PROGRAM,
-        bump
-    )]
-    pub m_earner_account: UncheckedAccount<'info>,
 
     #[account(
         mut,
@@ -67,9 +53,7 @@ pub struct SetFee<'info> {
     )]
     pub ext_mint_authority: AccountInfo<'info>,
 
-    pub m_token_program: Program<'info, Token2022>,
-
-    pub ext_token_program: Program<'info, Token2022>,
+    pub ext_token_program: Interface<'info, TokenInterface>,
 }
 
 impl SetFee<'_> {
@@ -93,14 +77,14 @@ impl SetFee<'_> {
         // if it doesn't match the index on m_earn_global_account
         // It also checks that the vault is solvent after the update
         let signer_bump = ctx.accounts.global_account.ext_mint_authority_bump;
-        sync_multiplier(
+        sync_index(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
-            &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.m_mint,
+            &ctx.accounts.vault_m_token_account,
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[signer_bump]]],
             &ctx.accounts.ext_token_program,
-            &ctx.accounts.m_earner_account,
         )?;
 
         // Set the new fee

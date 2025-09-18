@@ -1,20 +1,23 @@
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
-use earn::{
-    state::{Global as EarnGlobal, EARNER_SEED},
-    ID as EARN_PROGRAM,
+use anchor_spl::{
+    token_2022::spl_token_2022::state::AccountState,
+    token_interface::{Mint, Token2022, TokenAccount, TokenInterface},
 };
 
 // local dependencies
 use crate::{
     errors::ExtError,
-    state::{ExtGlobal, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
+    state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{amount_to_principal_down, principal_to_amount_up, sync_multiplier},
+        conversion::{
+            amount_to_principal_down, multiplier_to_index, principal_to_amount_down,
+            principal_to_amount_up, sync_index,
+        },
         token::mint_tokens,
     },
 };
+use earn::utils::conversion::get_scaled_ui_config;
 
 #[derive(Accounts)]
 pub struct ClaimFees<'info> {
@@ -26,12 +29,9 @@ pub struct ClaimFees<'info> {
         has_one = admin @ ExtError::NotAuthorized,
         has_one = m_mint @ ExtError::InvalidMint,
         has_one = ext_mint @ ExtError::InvalidMint,
-        has_one = m_earn_global_account @ ExtError::InvalidAccount,
         bump = global_account.bump,
     )]
-    pub global_account: Account<'info, ExtGlobal>,
-
-    pub m_earn_global_account: Account<'info, EarnGlobal>,
+    pub global_account: Account<'info, ExtGlobalV2>,
 
     #[account(mint::token_program = m_token_program)]
     pub m_mint: InterfaceAccount<'info, Mint>,
@@ -70,47 +70,47 @@ pub struct ClaimFees<'info> {
     )]
     pub recipient_ext_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    /// CHECK: We partially validate this account is the correct address
-    /// via the seed, but we delay full validation to the handler
-    /// so we can handle cases where the account has been closed.
-    #[account(
-        seeds = [EARNER_SEED, vault_m_token_account.key().as_ref()],
-        seeds::program = EARN_PROGRAM,
-        bump,
-    )]
-    pub m_earner_account: UncheckedAccount<'info>,
-
     pub m_token_program: Program<'info, Token2022>,
-    pub ext_token_program: Program<'info, Token2022>,
+    pub ext_token_program: Interface<'info, TokenInterface>,
 }
 
 impl ClaimFees<'_> {
     pub fn handler(ctx: Context<Self>) -> Result<()> {
-        // Sync the multiplier before allowing any collateral withdrawals
+        // Do not allow claiming fees if the vault M token account is not approved as an earner (i.e. frozen)
+        if ctx.accounts.vault_m_token_account.state != AccountState::Initialized {
+            return err!(ExtError::VaultFrozen);
+        }
+
+        // Sync the index before allowing any collateral withdrawals
         let signer_bump = ctx.accounts.global_account.ext_mint_authority_bump;
-        let multiplier: u64 = sync_multiplier(
+        let ext_index: u64 = sync_index(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
-            &ctx.accounts.m_earn_global_account,
+            &ctx.accounts.m_mint,
+            &ctx.accounts.vault_m_token_account,
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[signer_bump]]],
             &ctx.accounts.ext_token_program,
-            &ctx.accounts.m_earner_account,
         )?;
 
-        // Calculate the required collateral, rounding up to be conservative
-        // This amount will always be greater than what is required
+        // Calculate the required collateral, rounding down to be conservative
+        // This amount will always be greater than what is required in the check_solvency function
         // since it allows a rounding error of up to 2e-6
-        let required_m = principal_to_amount_up(ctx.accounts.ext_mint.supply, multiplier)?;
+        let required_m = principal_to_amount_up(ctx.accounts.ext_mint.supply, ext_index)?;
+
+        // Get the scaled UI config for the M mint to convert principal in the vault to M units
+        let m_config = get_scaled_ui_config(&ctx.accounts.m_mint)?;
+        let m_index = multiplier_to_index(m_config.new_multiplier.into())?;
 
         // Excess M is the amount of M in the vault above the amount needed to fully collateralize the extension
-        let vault_m = ctx.accounts.vault_m_token_account.amount;
+        // We round down to be conservative with the current balance
+        let vault_m = principal_to_amount_down(ctx.accounts.vault_m_token_account.amount, m_index)?;
 
         let excess = vault_m
             .checked_sub(required_m)
             .ok_or(ExtError::InsufficientCollateral)?; // This shouldn't underflow, but we check for safety
 
-        let excess_principal = amount_to_principal_down(excess, multiplier)?;
+        let excess_principal = amount_to_principal_down(excess, ext_index)?;
 
         // Only transfer a positive amount of excess
         if excess_principal > 0 {

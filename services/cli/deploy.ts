@@ -72,10 +72,12 @@ const opts: shell.ExecOptions & { async: false } = {
     .option("-s, --swapProgram", "Update swap program", false)
     .option("-a, --squadsAuth", "If Squads multisig is the auth", false)
     .option("-b, --skipBuild", "Skip build and deploy", false)
+    .option("-m, --migrate", "Include migrate feature", false)
     .action(
       ({
         type,
         extension,
+        migrate,
         computePrice,
         swapProgram,
         squadsAuth,
@@ -84,7 +86,7 @@ const opts: shell.ExecOptions & { async: false } = {
         const [pid] = keysFromEnv([extension]);
         const pubkey = pid.publicKey.toBase58();
 
-        if (!skipBuild) buildProgram(pubkey, type, swapProgram);
+        if (!skipBuild) buildProgram(pubkey, type, migrate, swapProgram);
         updateProgram(pubkey, parseInt(computePrice), squadsAuth, swapProgram);
       }
     );
@@ -124,7 +126,12 @@ const opts: shell.ExecOptions & { async: false } = {
   await program.parseAsync(process.argv);
 })();
 
-function buildProgram(pid: string, yieldFeature: string, swapProgram = false) {
+function buildProgram(
+  pid: string,
+  yieldFeature: string,
+  includeMigrate = false,
+  swapProgram = false
+) {
   // remove old binary
   shell.rm("-f", "target/verifiable/m_ext.so");
   shell.rm("-f", "target/verifiable/ext_swap.so");
@@ -143,7 +150,9 @@ function buildProgram(pid: string, yieldFeature: string, swapProgram = false) {
   console.log(`Building extension program ${pid}...`);
 
   const result = shell.exec(
-    `anchor build -p m_ext --verifiable -- --features ${yieldFeature} --no-default-features`,
+    `anchor build -p m_ext --verifiable -- --features ${yieldFeature}${
+      includeMigrate ? ",migrate" : ""
+    } --no-default-features`,
     opts
   );
   if (result.code !== 0) {
