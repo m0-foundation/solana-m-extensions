@@ -32,4 +32,6 @@ pub enum ExtError {
     SerializationError,
     #[msg("Invalid token program provided.")]
     InvalidTokenProgram,
+    #[msg("Vault token account frozen.")]
+    VaultFrozen,
 }

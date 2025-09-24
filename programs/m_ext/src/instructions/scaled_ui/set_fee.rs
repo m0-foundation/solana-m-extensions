@@ -1,13 +1,13 @@
 // external dependencies
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, TokenInterface};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface, ID as TOKEN_2022_ID};
 
 // local dependencies
 use crate::{
     constants::ONE_HUNDRED_PERCENT_U64,
     errors::ExtError,
-    state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED},
-    utils::conversion::sync_multiplier,
+    state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
+    utils::conversion::sync_index,
 };
 
 #[derive(Accounts)]
@@ -25,6 +25,20 @@ pub struct SetFee<'info> {
     pub global_account: Account<'info, ExtGlobalV2>,
 
     pub m_mint: InterfaceAccount<'info, Mint>,
+
+    /// CHECK: This account is validated by the seed, it stores no data
+    #[account(
+        seeds = [M_VAULT_SEED],
+        bump = global_account.m_vault_bump,
+    )]
+    pub m_vault: UncheckedAccount<'info>,
+
+    #[account(
+        associated_token::mint = m_mint,
+        associated_token::authority = m_vault,
+        associated_token::token_program = TOKEN_2022_ID,
+    )]
+    pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         mut,
@@ -63,10 +77,11 @@ impl SetFee<'_> {
         // if it doesn't match the index on m_earn_global_account
         // It also checks that the vault is solvent after the update
         let signer_bump = ctx.accounts.global_account.ext_mint_authority_bump;
-        sync_multiplier(
+        sync_index(
             &mut ctx.accounts.ext_mint,
             &mut ctx.accounts.global_account,
             &ctx.accounts.m_mint,
+            &ctx.accounts.vault_m_token_account,
             &ctx.accounts.ext_mint_authority,
             &[&[MINT_AUTHORITY_SEED, &[signer_bump]]],
             &ctx.accounts.ext_token_program,
