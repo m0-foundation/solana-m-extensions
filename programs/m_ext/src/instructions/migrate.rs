@@ -147,7 +147,7 @@ impl MigrateM<'_> {
     pub fn handler(ctx: Context<Self>) -> Result<()> {
         // deserialize the old global account
         let old_global = {
-            let data = &mut ctx.accounts.global_account.try_borrow_mut_data()?;
+            let data = &ctx.accounts.global_account.try_borrow_mut_data()?;
             let mut data_slice: &[u8] = &data;
             ExtGlobalV1::try_deserialize(&mut data_slice)?
         };
