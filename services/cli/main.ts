@@ -369,33 +369,10 @@ async function main() {
 
       const tx = await program.methods
         .migrateM()
-        .accountsPartial({
+        .accounts({
           admin,
-          globalAccount: PublicKey.findProgramAddressSync(
-            [Buffer.from("global")],
-            ext.publicKey
-          )[0],
-          mEarnGlobalAccount: PublicKey.findProgramAddressSync(
-            [Buffer.from("global")],
-            EARN
-          )[0],
           newMMint: M_MINT,
           extMint: mints[ext.publicKey.toBase58()],
-          mVault: vault,
-          newVaultMTokenAccount: getAssociatedTokenAddressSync(
-            M_MINT,
-            vault,
-            true,
-            TOKEN_2022_PROGRAM_ID
-          ),
-          oldVaultMTokenAccount: getAssociatedTokenAddressSync(
-            OLD_M_MINT,
-            vault,
-            true,
-            TOKEN_2022_PROGRAM_ID
-          ),
-          mTokenProgram: TOKEN_2022_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .transaction();
 
