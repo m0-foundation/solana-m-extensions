@@ -115,26 +115,10 @@ async function main() {
     .option("-n, --name <string>", "Token Name", process.env.EXT_NAME)
     .option("-s, --symbol <string>", "Token Symbol", process.env.EXT_SYMBOL)
     .option("-u, --uri [string]", "Token URI", process.env.EXT_URI)
-    .option(
-      "--init-scaled-ui",
-      "Enable scaled UI amounts",
-      process.env.INIT_SCALED_UI
-    )
-    .option(
-      "--init-confidential",
-      "Enable confidential transfers",
-      process.env.INIT_CONFIDENTIAL
-    )
-    .option(
-      "--init-transfer-hook",
-      "Enable transfer hook",
-      process.env.INIT_TRANSFER_HOOK
-    )
-    .option(
-      "--legacy-program",
-      "Do not use Token2022 program",
-      process.env.INIT_TRANSFER_HOOK
-    )
+    .option("--init-scaled-ui", "Enable scaled UI amounts", false)
+    .option("--init-confidential", "Enable confidential transfers", false)
+    .option("--init-transfer-hook", "Enable transfer hook", false)
+    .option("--legacy-program", "Do not use Token2022 program", false)
     .action(
       async ({
         name,
@@ -174,11 +158,9 @@ async function main() {
             mint: createSignerFromKeypair(umi, _mint),
             uri,
             sellerFeeBasisPoints: percentAmount(0),
-            creators: [],
           }).sendAndConfirm(umi);
 
           console.log(`Created token mint at ${mint.publicKey.toBase58()}`);
-
           return;
         }
 
