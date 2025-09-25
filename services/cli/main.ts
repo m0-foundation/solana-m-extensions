@@ -43,7 +43,6 @@ import { AnchorProvider, Program, Wallet, BN } from "@coral-xyz/anchor";
 import { ExtSwap } from "../../target/types/ext_swap";
 import { MExt as MigrateExt } from "../../target/types/migrate";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
-import { PROGRAM_ID as EARN_PID } from "@m0-foundation/solana-m-sdk";
 import { sha256 } from "@noble/hashes/sha2";
 import {
   createFungible,
@@ -299,7 +298,7 @@ async function main() {
         EXT_SWAP
       )[0];
       const portalTokenAuth = PublicKey.findProgramAddressSync(
-        [Buffer.from("TOKEN_AUTHORITY_SEED")],
+        [Buffer.from("token_authority")],
         new PublicKey("mzp1q2j5Hr1QuLC3KFBCAUz5aUckT6qyuZKZ3WJnMmY")
       )[0];
 
@@ -693,8 +692,14 @@ async function main() {
       // Swap program addresses
       addressesForTable.push(
         PublicKey.findProgramAddressSync([Buffer.from("global")], EXT_SWAP)[0],
-        PublicKey.findProgramAddressSync([Buffer.from("global")], EARN_PID)[0],
-        M_MINT
+        PublicKey.findProgramAddressSync(
+          [Buffer.from("global")],
+          new PublicKey("mz2vDzjbQDUDXBH6FPF5s4odCJ4y8YLE5QWaZ8XdZ9Z")
+        )[0],
+        M_MINT,
+        new PublicKey("mz2vDzjbQDUDXBH6FPF5s4odCJ4y8YLE5QWaZ8XdZ9Z"), // earn
+        new PublicKey("63MBrEFq6pV6RLDuC3aQTcRhZuysgFcrfDS1dsFXxv2o"), // transiever pda
+        new PublicKey("execXUrAsMnqMmTHj5m7N1YQgsDz3cwGLYCYyuDRciV") // executor
       );
 
       // Extension mints
@@ -741,6 +746,22 @@ async function main() {
           )[0],
           vaultAta
         );
+      }
+
+      // get rate limit PDAs
+      for (const chainID of process.env.NETWORK === "devnet" ? [1, 51] : []) {
+        const inbox = PublicKey.findProgramAddressSync(
+          [
+            Buffer.from("inbox_rate_limit"),
+            new BN(chainID).toArrayLike(Buffer, "le", 2),
+          ],
+          new PublicKey("mzp1q2j5Hr1QuLC3KFBCAUz5aUckT6qyuZKZ3WJnMmY")
+        )[0];
+        const peer = PublicKey.findProgramAddressSync(
+          [Buffer.from("peer"), new BN(chainID).toArrayLike(Buffer, "le", 2)],
+          new PublicKey("mzp1q2j5Hr1QuLC3KFBCAUz5aUckT6qyuZKZ3WJnMmY")
+        )[0];
+        addressesForTable.push(inbox, peer);
       }
 
       // Fetch current state of LUT
