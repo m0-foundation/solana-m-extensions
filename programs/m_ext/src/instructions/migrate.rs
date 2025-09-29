@@ -47,14 +47,13 @@ pub struct MigrateM<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
 
+    /// CHECK: This account is validated in the instruction
     #[account(
         mut,
         seeds = [EXT_GLOBAL_SEED],
-        bump = global_account.bump,
-        has_one = admin @ ExtError::NotAuthorized,
-        has_one = ext_mint @ ExtError::InvalidAccount,
+        bump,
     )]
-    pub global_account: Account<'info, ExtGlobalV1>,
+    pub global_account: AccountInfo<'info>,
 
     #[account(
         seeds = [EARN_GLOBAL_SEED],
@@ -75,7 +74,7 @@ pub struct MigrateM<'info> {
     /// CHECK: This account is just a signer and is checked by the seeds
     #[account(
         seeds = [M_VAULT_SEED],
-        bump = global_account.m_vault_bump,
+        bump,
     )]
     pub m_vault: UncheckedAccount<'info>,
 
@@ -95,6 +94,20 @@ pub struct MigrateM<'info> {
 
 impl MigrateM<'_> {
     fn validate(&self) -> Result<()> {
+        // deserialize the old global account and validate
+        let old_global = {
+            let data = &mut self.global_account.try_borrow_mut_data()?;
+            let mut data_slice: &[u8] = &data;
+            ExtGlobalV1::try_deserialize(&mut data_slice)?
+        };
+
+        if old_global.ext_mint != self.ext_mint.key() {
+            return err!(ExtError::InvalidMint);
+        }
+        if old_global.admin != self.admin.key() {
+            return err!(ExtError::NotAuthorized);
+        }
+
         // Confirm that the new M mint has the ScaledUiAmount extension enabled
         let extensions = get_mint_extensions(&self.new_m_mint)?;
 
@@ -132,7 +145,12 @@ impl MigrateM<'_> {
 
     #[access_control(ctx.accounts.validate())]
     pub fn handler(ctx: Context<Self>) -> Result<()> {
-        let old_global = ctx.accounts.global_account.clone();
+        // deserialize the old global account
+        let old_global = {
+            let data = &ctx.accounts.global_account.try_borrow_mut_data()?;
+            let mut data_slice: &[u8] = &data;
+            ExtGlobalV1::try_deserialize(&mut data_slice)?
+        };
 
         // Create the new yield config based on the feature configuration and currently stored values
         let yield_config: YieldConfig;
@@ -199,11 +217,12 @@ impl MigrateM<'_> {
         };
 
         // Write the new global account data
-        let account_info = ctx.accounts.global_account.to_account_info();
-        let data = &mut account_info.try_borrow_mut_data()?;
-        let mut slice: &mut [u8] = &mut *data;
+        let data = &mut ctx.accounts.global_account.try_borrow_mut_data()?;
+        let slice: &mut [u8] = &mut *data;
 
-        new_global.serialize(&mut slice)?;
+        slice[..8].copy_from_slice(&ExtGlobalV2::DISCRIMINATOR);
+        let mut remaining_slice = &mut slice[8..];
+        new_global.serialize(&mut remaining_slice)?;
 
         Ok(())
     }

@@ -51,17 +51,25 @@ const opts: shell.ExecOptions & { async: false } = {
     });
 
   program
-    .command("init-idl")
+    .command("set-idl")
     .option("-t, --type <type>", "Yield type", "scaled-ui")
     .option("-e, --extension <name>", "Extension program ID", "USDKY")
-    .action(({ type, extension }) => {
+    .option("-i, --init", "Extension program ID", false)
+    .option("-s, --swapProgram", "Update swap program", false)
+    .action(({ type, extension, init, swapProgram }) => {
       const [pid] = keysFromEnv([extension]);
       const pubkey = pid.publicKey.toBase58();
 
       console.log(`Building and initializing IDL for extension ${pubkey}`);
 
-      buildProgram(pubkey, type);
-      initIDL(pubkey);
+      buildProgram(pubkey, type, false, swapProgram);
+
+      if (swapProgram) {
+        postSwapIDL();
+        return;
+      }
+
+      postIDL(pubkey, init);
     });
 
   program
@@ -139,7 +147,12 @@ function buildProgram(
   // not building an extension
   if (swapProgram) {
     console.log("Building swap program...");
-    const res = shell.exec("anchor build -p ext_swap --verifiable", opts);
+    const res = shell.exec(
+      `anchor build -p ext_swap --verifiable ${
+        includeMigrate ? "-- --features migrate" : ""
+      }`,
+      opts
+    );
     if (res.code !== 0) throw new Error(`Swap build failed: ${res.stderr}`);
     return;
   }
@@ -147,11 +160,23 @@ function buildProgram(
   // set program ID to the extension program
   setProgramID(pid);
 
+  // set program ID in referenced v1 IDL
+  for (const file of [
+    "programs/m_ext/idls/m_ext_v1_no_yield.json",
+    "programs/m_ext/idls/m_ext_v1_scaled_ui.json",
+  ]) {
+    const idl = JSON.parse(fs.readFileSync(file, "utf-8"));
+    idl.address = pid;
+    fs.writeFileSync(file, JSON.stringify(idl, null, 2));
+  }
+
   console.log(`Building extension program ${pid}...`);
 
   const result = shell.exec(
     `anchor build -p m_ext --verifiable -- --features ${yieldFeature}${
       includeMigrate ? ",migrate" : ""
+    }${
+      pid === "wMXX1K1nca5W4pZr1piETe78gcAVVrEFi9f4g46uXko" ? ",wm" : ""
     } --no-default-features`,
     opts
   );
@@ -228,7 +253,7 @@ function updateProgram(
       `solana program set-buffer-authority \
         --url ${process.env.RPC_URL} \
         --keypair devnet-keypair.json \
-        --new-buffer-authority ${auth} \ 
+        --new-buffer-authority ${auth} \
          ${bufferAddress} `,
       opts
     );
@@ -245,7 +270,7 @@ function updateProgram(
       --url ${process.env.RPC_URL} \
       --keypair devnet-keypair.json \
       ${bufferAddress} \
-      ${pid}`,
+      ${swapProgram ? "MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH" : pid}`,
     opts
   );
   if (result.code !== 0) {
@@ -258,13 +283,24 @@ function updateProgram(
   shell.exec("rm buffer.json");
 }
 
-function initIDL(pid: string) {
+function postIDL(pid: string, init = false) {
   shell.exec(
-    `anchor idl init \
+    `anchor idl ${init ? "init" : "upgrade"} \
       -f target/idl/m_ext.json \
       --provider.cluster ${process.env.RPC_URL} \
       --provider.wallet devnet-keypair.json \
       ${pid}`,
+    opts
+  );
+}
+
+function postSwapIDL() {
+  shell.exec(
+    `anchor idl upgrade \
+      -f target/idl/ext_swap.json \
+      --provider.cluster ${process.env.RPC_URL} \
+      --provider.wallet devnet-keypair.json \
+      MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH`,
     opts
   );
 }
