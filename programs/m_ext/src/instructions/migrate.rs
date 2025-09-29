@@ -47,6 +47,7 @@ pub struct MigrateM<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
 
+    /// CHECK: This account is validated in the instruction
     #[account(
         mut,
         seeds = [EXT_GLOBAL_SEED],

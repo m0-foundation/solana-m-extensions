@@ -60,13 +60,6 @@ const NO_YIELD_EXT_IDL = require("../../target/idl/no_yield.json");
 const SCALED_UI_EXT_IDL = require("../../target/idl/scaled_ui.json");
 const MIGRATE_EXT_IDL = require("../../target/idl/migrate.json");
 
-const OLD_M_MINT: PublicKey =
-  process.env.NETWORK === "devnet"
-    ? new PublicKey("mzeroZRGCah3j5xEWp2Nih3GDejSBbH1rbHoxDg8By6")
-    : new PublicKey("mzerokyEX9TNDoK4o2YZQBDmMzjokAeN6M2g2S3pLJo");
-
-const EARN = new PublicKey("mz2vDzjbQDUDXBH6FPF5s4odCJ4y8YLE5QWaZ8XdZ9Z");
-
 // Extension mints
 const mints: { [key: string]: string } = {
   extaykYu5AQcDm3qZAbiDN3yp6skqn6Nssj7veUUGZw:
