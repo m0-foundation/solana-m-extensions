@@ -24,6 +24,7 @@ import {
   getTokenMetadata,
   LENGTH_SIZE,
   TOKEN_2022_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
   TYPE_SIZE,
 } from "@solana/spl-token";
 import {
@@ -43,6 +44,16 @@ import { ExtSwap } from "../../target/types/ext_swap";
 import { MExt as MigrateExt } from "../../target/types/migrate";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 import { sha256 } from "@noble/hashes/sha2";
+import {
+  createFungible,
+  mplTokenMetadata,
+} from "@metaplex-foundation/mpl-token-metadata";
+import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
+import {
+  percentAmount,
+  createSignerFromKeypair,
+  signerIdentity,
+} from "@metaplex-foundation/umi";
 
 const EXT_SWAP_IDL = require("../../target/idl/ext_swap.json");
 const NO_YIELD_EXT_IDL = require("../../target/idl/no_yield.json");
@@ -71,7 +82,6 @@ const mints: { [key: string]: string } = {
 };
 
 const M_MINT = new PublicKey("mzerojk9tg56ebsrEAhfkyc9VgKjTW2zDqp6C5mhjzH");
-
 const EXT_SWAP: PublicKey = new PublicKey(
   "MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH"
 );
@@ -125,34 +135,20 @@ async function main() {
     )
     .option("-n, --name <string>", "Token Name", process.env.EXT_NAME)
     .option("-s, --symbol <string>", "Token Symbol", process.env.EXT_SYMBOL)
-    .option(
-      "-i, --icon-uri [string]",
-      "Token Icon URI",
-      process.env.EXT_ICON_URI
-    )
-    .option(
-      "--init-scaled-ui",
-      "Enable scaled UI amounts",
-      process.env.INIT_SCALED_UI
-    )
-    .option(
-      "--init-confidential",
-      "Enable confidential transfers",
-      process.env.INIT_CONFIDENTIAL
-    )
-    .option(
-      "--init-transfer-hook",
-      "Enable transfer hook",
-      process.env.INIT_TRANSFER_HOOK
-    )
+    .option("-u, --uri [string]", "Token URI", process.env.EXT_URI)
+    .option("--init-scaled-ui", "Enable scaled UI amounts", false)
+    .option("--init-confidential", "Enable confidential transfers", false)
+    .option("--init-transfer-hook", "Enable transfer hook", false)
+    .option("--legacy-program", "Do not use Token2022 program", false)
     .action(
       async ({
         name,
         symbol,
-        iconUri,
+        uri,
         initScaledUi,
         initConfidential,
         initTransferHook,
+        legacyProgram,
       }) => {
         const [payer, mint, ext] = keysFromEnv([
           "PAYER_KEYPAIR",
@@ -167,6 +163,27 @@ async function main() {
         const authority = process.env.SQUADS_MULTISIG
           ? new PublicKey(process.env.SQUADS_MULTISIG)
           : payer.publicKey;
+
+        if (legacyProgram) {
+          const umi = createUmi(process.env.RPC_URL!);
+          const owner = umi.eddsa.createKeypairFromSecretKey(payer.secretKey);
+          const _mint = umi.eddsa.createKeypairFromSecretKey(mint.secretKey);
+
+          umi.use(signerIdentity(createSignerFromKeypair(umi, owner)));
+          umi.use(mplTokenMetadata());
+
+          await createFungible(umi, {
+            name,
+            symbol,
+            decimals: 6,
+            mint: createSignerFromKeypair(umi, _mint),
+            uri,
+            sellerFeeBasisPoints: percentAmount(0),
+          }).sendAndConfirm(umi);
+
+          console.log(`Created token mint at ${mint.publicKey.toBase58()}`);
+          return;
+        }
 
         // Get the mint authority by deriving the PDA from the extension program
         let mintAuthority = PublicKey.findProgramAddressSync(
@@ -196,7 +213,7 @@ async function main() {
           authority, // freeze authority
           name,
           symbol,
-          iconUri,
+          uri,
           extensions
         );
 
@@ -262,7 +279,12 @@ async function main() {
     .description("Initialize the extension program")
     .option("-v, --variant <string>", "Program variant", "no-yield")
     .option("-f, --fee [number]", "Fee in bps", "0")
-    .action(async ({ variant, fee }) => {
+    .option(
+      '-t, --token-program <"spl"|"token2022">',
+      "Token program",
+      "token2022"
+    )
+    .action(async ({ variant, fee, tokenProgram }) => {
       const [payer, extMint, program] = keysFromEnv([
         "PAYER_KEYPAIR",
         "EXT_MINT_KEYPAIR",
@@ -306,6 +328,10 @@ async function main() {
               admin: admin,
               mMint: M_MINT,
               extMint: extMint.publicKey,
+              extTokenProgram:
+                tokenProgram === "spl"
+                  ? TOKEN_PROGRAM_ID
+                  : TOKEN_2022_PROGRAM_ID,
             })
             .transaction();
 
@@ -327,6 +353,10 @@ async function main() {
               admin: admin,
               mMint: M_MINT,
               extMint: extMint.publicKey,
+              extTokenProgram:
+                tokenProgram === "spl"
+                  ? TOKEN_PROGRAM_ID
+                  : TOKEN_2022_PROGRAM_ID,
             })
             .transaction();
 
@@ -887,7 +917,7 @@ async function createToken2022Mint(
   freezeAuthority: PublicKey | null,
   tokenName: string,
   tokenSymbol: string,
-  tokenUri: string,
+  uri: string,
   extensions: ExtensionType[],
   evmTokenAddress: string | null = null
 ) {
@@ -896,7 +926,7 @@ async function createToken2022Mint(
     mint: mint.publicKey,
     name: tokenName,
     symbol: tokenSymbol,
-    uri: tokenUri,
+    uri,
     additionalMetadata: evmTokenAddress ? [["evm", evmTokenAddress]] : [],
   };
 
