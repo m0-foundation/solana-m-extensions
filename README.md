@@ -8,7 +8,6 @@ The list of implemented extensions are:
 
 - NoYield - all yield goes to an admin, no yield is distributed to extension holders
 - ScaledUi - yield is distributed to all extension holders using the Token2022 Scaled-UI "rebasing" functionality.
-- Crank - yield is distributed to whitelisted earners accounts using a crank
 
 Additional extension features will be developed as needed. You are welcome to implement custom features to suit the specific requirements of your extension. All extensions and their implementations must be approved by governance before they can begin earning.
 
