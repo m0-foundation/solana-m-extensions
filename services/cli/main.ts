@@ -157,6 +157,12 @@ async function main() {
           ? new PublicKey(process.env.SQUADS_MULTISIG)
           : payer.publicKey;
 
+        // Get the mint authority by deriving the PDA from the extension program
+        let mintAuthority = PublicKey.findProgramAddressSync(
+          [Buffer.from("mint_authority")],
+          ext.publicKey
+        )[0];
+
         if (legacyProgram) {
           const umi = createUmi(process.env.RPC_URL!);
           const owner = umi.eddsa.createKeypairFromSecretKey(payer.secretKey);
@@ -174,15 +180,41 @@ async function main() {
             sellerFeeBasisPoints: percentAmount(0),
           }).sendAndConfirm(umi);
 
+          // Transfer mint authority to extension program pda
+          const setAuthorities = new Transaction().add(
+            createSetAuthorityInstruction(
+              mint.publicKey,
+              payer.publicKey,
+              AuthorityType.MintTokens,
+              mintAuthority,
+              undefined,
+              TOKEN_PROGRAM_ID
+            )
+          );
+
+          if (process.env.SQUADS_MULTISIG) {
+            setAuthorities.add(
+              createSetAuthorityInstruction(
+                mint.publicKey,
+                payer.publicKey,
+                AuthorityType.FreezeAccount,
+                authority,
+                undefined,
+                TOKEN_PROGRAM_ID
+              )
+            );
+          }
+
+          setAuthorities.feePayer = payer.publicKey;
+          const blockhash = await connection.getLatestBlockhash();
+          setAuthorities.recentBlockhash = blockhash.blockhash;
+          await connection.sendTransaction(setAuthorities, [payer], {
+            preflightCommitment: "processed",
+          });
+
           console.log(`Created token mint at ${mint.publicKey.toBase58()}`);
           return;
         }
-
-        // Get the mint authority by deriving the PDA from the extension program
-        let mintAuthority = PublicKey.findProgramAddressSync(
-          [Buffer.from("mint_authority")],
-          ext.publicKey
-        )[0];
 
         // Create the list of extensions
         let extensions: ExtensionType[] = [ExtensionType.MetadataPointer];
