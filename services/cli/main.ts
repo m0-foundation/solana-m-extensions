@@ -42,6 +42,7 @@ import {
 import { AnchorProvider, Program, Wallet, BN } from "@coral-xyz/anchor";
 import { ExtSwap } from "../../target/types/ext_swap";
 import { MExt as MigrateExt } from "../../target/types/migrate";
+import { MExt as CrankExt } from "../../target/types/crank";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 import { sha256 } from "@noble/hashes/sha2";
 import {
@@ -58,6 +59,7 @@ import {
 const EXT_SWAP_IDL = require("../../target/idl/ext_swap.json");
 const NO_YIELD_EXT_IDL = require("../../target/idl/no_yield.json");
 const SCALED_UI_EXT_IDL = require("../../target/idl/scaled_ui.json");
+const CRANK_EXT_IDL = require("../../target/idl/crank.json");
 const MIGRATE_EXT_IDL = require("../../target/idl/migrate.json");
 
 // Extension mints
@@ -424,7 +426,7 @@ async function main() {
 
       const tx = await program.methods
         .migrateM()
-        .accounts({
+        .accountsPartial({
           admin,
           newMMint: M_MINT,
           extMint: mints[ext.publicKey.toBase58()],
@@ -928,6 +930,65 @@ async function main() {
         b64: b.toString("base64"),
         b58: bs58.encode(b),
       });
+    });
+
+  program
+    .command("set-yield-recipient")
+    .option("-e, --extension <name>", "Extension name", "M0_WM")
+    .argument("<user-token-account>", "User token account")
+    .argument("<recipient-token-account>", "Yield recipient token account")
+    .action(async (userTokenAccount, recipientTokenAccount, { extension }) => {
+      const [payer, extKey] = keysFromEnv(["PAYER_KEYPAIR", extension]);
+
+      const earnManager = process.env.SQUADS_MULTISIG
+        ? new PublicKey(process.env.SQUADS_MULTISIG)
+        : payer.publicKey;
+
+      const userTA = new PublicKey(userTokenAccount);
+      const recipientTA = new PublicKey(recipientTokenAccount);
+
+      let idl = CRANK_EXT_IDL;
+      // Insert the program ID into the IDL so we can interact with it
+      idl.address = extKey.publicKey.toBase58();
+
+      const ext = new Program<CrankExt>(idl, anchorProvider(connection, payer));
+      const earnerAccount = PublicKey.findProgramAddressSync(
+        [Buffer.from("earner"), userTA.toBuffer()],
+        extKey.publicKey
+      )[0];
+      const earnManagerAccount = PublicKey.findProgramAddressSync(
+        [Buffer.from("earn_manager"), earnManager.toBuffer()],
+        extKey.publicKey
+      )[0];
+
+      const ix = await ext.methods
+        .setRecipient()
+        .accountsPartial({
+          signer: earnManager,
+          earnerAccount: earnerAccount,
+          earnManagerAccount: earnManagerAccount,
+          recipientTokenAccount: recipientTA,
+        })
+        .instruction();
+
+      if (process.env.SQUADS_MULTISIG) {
+        const tx = new Transaction().add(ix);
+        tx.feePayer = earnManager;
+        tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+        const b = tx.serialize({ verifySignatures: false });
+        console.log("Transaction:", {
+          b64: b.toString("base64"),
+          b58: bs58.encode(b),
+        });
+      } else {
+        const tx = new Transaction().add(ix);
+        tx.feePayer = payer.publicKey;
+        tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+        const sig = await connection.sendTransaction(tx, [payer]);
+        console.log(`Txn sent: ${sig}`);
+      }
     });
 
   await program.parseAsync(process.argv);
