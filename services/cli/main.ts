@@ -47,13 +47,16 @@ import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 import { sha256 } from "@noble/hashes/sha2";
 import {
   createFungible,
+  fetchMetadataFromSeeds,
   mplTokenMetadata,
+  updateV1,
 } from "@metaplex-foundation/mpl-token-metadata";
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
 import {
   percentAmount,
   createSignerFromKeypair,
   signerIdentity,
+  publicKey,
 } from "@metaplex-foundation/umi";
 
 const EXT_SWAP_IDL = require("../../target/idl/ext_swap.json");
@@ -135,6 +138,7 @@ async function main() {
     .option("--init-confidential", "Enable confidential transfers", false)
     .option("--init-transfer-hook", "Enable transfer hook", false)
     .option("--legacy-program", "Do not use Token2022 program", false)
+    .option("-f --freeze-authority <pubkey>", "Token freeze authority")
     .action(
       async ({
         name,
@@ -144,6 +148,7 @@ async function main() {
         initConfidential,
         initTransferHook,
         legacyProgram,
+        freezeAuthority,
       }) => {
         const [payer, mint, ext] = keysFromEnv([
           "PAYER_KEYPAIR",
@@ -194,13 +199,15 @@ async function main() {
             )
           );
 
-          if (process.env.SQUADS_MULTISIG) {
+          const freezeAuth = freezeAuthority ?? process.env.SQUADS_MULTISIG;
+
+          if (freezeAuth) {
             setAuthorities.add(
               createSetAuthorityInstruction(
                 mint.publicKey,
                 payer.publicKey,
                 AuthorityType.FreezeAccount,
-                authority,
+                new PublicKey(freezeAuth),
                 undefined,
                 TOKEN_PROGRAM_ID
               )
@@ -812,9 +819,31 @@ async function main() {
     .option("-s, --symbol <string>", "Token Symbol")
     .option("-u, --uri <string>", "Token metadata URI")
     .option("-f, --field <key:value>", "Metadata field")
-    .action(async ({ name, symbol, uri, field }) => {
-      const [mint] = keysFromEnv(["EXT_MINT_KEYPAIR"]);
-      const auth = new PublicKey(process.env.SQUADS_MULTISIG!);
+    .option("--legacy-program", "Do not use Token2022 program", false)
+    .action(async ({ name, symbol, uri, field, legacyProgram }) => {
+      const [mint, payer] = keysFromEnv(["EXT_MINT_KEYPAIR", "PAYER_KEYPAIR"]);
+
+      if (legacyProgram) {
+        if (!uri) {
+          throw new Error("URI is required when updating legacy token");
+        }
+
+        const umi = createUmi(process.env.RPC_URL!);
+        const owner = umi.eddsa.createKeypairFromSecretKey(payer.secretKey);
+        umi.use(signerIdentity(createSignerFromKeypair(umi, owner)));
+
+        const metaplexMint = publicKey(mint.publicKey.toBase58());
+        const initialMetadata = await fetchMetadataFromSeeds(umi, {
+          mint: metaplexMint,
+        });
+
+        await updateV1(umi, {
+          mint: metaplexMint,
+          data: { ...initialMetadata, uri },
+        }).sendAndConfirm(umi);
+
+        return;
+      }
 
       const metadata = await getTokenMetadata(
         connection,
@@ -830,6 +859,7 @@ async function main() {
 
       const currentSize = pack(metadata).length;
       const instructions: TransactionInstruction[] = [];
+      const auth = new PublicKey(process.env.SQUADS_MULTISIG!);
 
       if (name) {
         console.log(`Updating token name to: ${name}`);

@@ -24,21 +24,9 @@ catalogs:
     '@solana/web3.js':
       specifier: 1.98.2
       version: 1.98.2
-    '@types/bn.js':
-      specifier: 5.2.0
-      version: 5.2.0
     bn.js:
       specifier: 5.2.2
       version: 5.2.2
-    fastestsmallesttextencoderdecoder:
-      specifier: 1.0.22
-      version: 1.0.22
-    prettier:
-      specifier: 2.6.2
-      version: 2.6.2
-    typescript:
-      specifier: 5.8.3
-      version: 5.8.3
 
 importers:
 
