@@ -44,6 +44,11 @@ const _: () = {
             "Invalid feature configuration: 'migrate' and 'crank' cannot be enabled without 'wm'"
         );
     }
+
+    // JMI can only be used with no-yield (not scaled-ui or crank)
+    if cfg!(feature = "jmi") && (cfg!(feature = "scaled-ui") || cfg!(feature = "crank")) {
+        panic!("JMI feature can only be enabled with no-yield variant");
+    }
 };
 
 #[program]
@@ -108,6 +113,27 @@ pub mod m_ext {
 
     pub fn revoke_admin_transfer(ctx: Context<RevokeAdminTransfer>) -> Result<()> {
         RevokeAdminTransfer::handler(ctx)
+    }
+
+    // JMI-specific instructions
+    #[cfg(feature = "jmi")]
+    pub fn set_asset_cap(ctx: Context<SetAssetCap>, cap: u64) -> Result<()> {
+        SetAssetCap::handler(ctx, cap)
+    }
+
+    #[cfg(feature = "jmi")]
+    pub fn pause(ctx: Context<Pause>) -> Result<()> {
+        Pause::handler(ctx)
+    }
+
+    #[cfg(feature = "jmi")]
+    pub fn unpause(ctx: Context<Unpause>) -> Result<()> {
+        Unpause::handler(ctx)
+    }
+
+    #[cfg(feature = "jmi")]
+    pub fn replace_asset_with_m(ctx: Context<ReplaceAssetWithM>, m_amount: u64) -> Result<()> {
+        ReplaceAssetWithM::handler(ctx, m_amount)
     }
 
     #[cfg(feature = "crank")]

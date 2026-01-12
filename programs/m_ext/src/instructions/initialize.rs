@@ -114,7 +114,11 @@ impl Initialize<'_> {
     // The wrap authorities are validated and stored in the global account.
     // The fee_bps is used by the scaled-ui variant. It is validated to be within the allowed range.
     // The earn_authority is only required for the crank variant.
-    fn validate(&self, _fee_bps: Option<u64>, _earn_authority: Option<Pubkey>) -> Result<()> {
+    fn validate(
+        &self,
+        _fee_bps: Option<u64>,
+        _earn_authority: Option<Pubkey>,
+    ) -> Result<()> {
         // Validate the ext_mint_authority PDA is the mint authority for the ext mint
         let ext_mint_authority = self.ext_mint_authority.key();
         if self.ext_mint.mint_authority.unwrap_or_default() != ext_mint_authority {
@@ -198,7 +202,15 @@ impl Initialize<'_> {
                     last_ext_index: INDEX_SCALE_U64, // we set the extension index to 1.0 initially
                     timestamp: timestamp as u64,
                 };
+            } else if #[cfg(feature = "jmi")] {
+                // JMI extends no-yield with additional fields
+                yield_config = YieldConfig {
+                    yield_variant: YieldVariant::NoYield,
+                    total_assets: 0,
+                    is_paused: false,
+                };
             } else {
+                // Base no-yield without JMI
                 yield_config = YieldConfig {
                     yield_variant: YieldVariant::NoYield,
                 };

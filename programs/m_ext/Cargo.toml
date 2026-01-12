@@ -25,6 +25,9 @@ crank = []
 migrate = []
 wm = ["crank", "migrate"]
 
+# JMI modifier (works WITH no-yield only)
+jmi = []
+
 [dependencies]
 anchor-lang.workspace = true
 anchor-spl.workspace = true

@@ -1,0 +1,155 @@
+use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{Mint, Token2022, TokenAccount, TokenInterface};
+
+use crate::{
+    errors::ExtError,
+    state::{AssetConfig, ExtGlobalV2, ASSET_CONFIG_SEED, EXT_GLOBAL_SEED, M_VAULT_SEED},
+    utils::{
+        conversion::convert_from_6_decimals,
+        token::{transfer_tokens, transfer_tokens_from_program_interface},
+    },
+};
+
+#[derive(Accounts)]
+pub struct ReplaceAssetWithM<'info> {
+    pub token_authority: Signer<'info>,
+
+    /// Will be set if a whitelisted authority is signing for a user
+    pub replace_authority: Option<Signer<'info>>,
+
+    #[account(mint::token_program = m_token_program)]
+    pub m_mint: InterfaceAccount<'info, Mint>,
+
+    #[account(mint::token_program = asset_token_program)]
+    pub asset_mint: InterfaceAccount<'info, Mint>,
+
+    #[account(
+        mut,
+        seeds = [EXT_GLOBAL_SEED],
+        bump = global_account.bump,
+        has_one = m_mint @ ExtError::InvalidAccount,
+    )]
+    pub global_account: Account<'info, ExtGlobalV2>,
+
+    #[account(
+        mut,
+        seeds = [ASSET_CONFIG_SEED, global_account.key().as_ref(), asset_mint.key().as_ref()],
+        bump = asset_config.bump,
+    )]
+    pub asset_config: Account<'info, AssetConfig>,
+
+    /// CHECK: Validated by seed
+    #[account(
+        seeds = [M_VAULT_SEED],
+        bump = global_account.m_vault_bump,
+    )]
+    pub m_vault: AccountInfo<'info>,
+
+    #[account(
+        mut,
+        token::mint = m_mint,
+        token::token_program = m_token_program,
+    )]
+    pub from_m_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        associated_token::mint = m_mint,
+        associated_token::authority = m_vault,
+        associated_token::token_program = m_token_program,
+    )]
+    pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        associated_token::mint = asset_mint,
+        associated_token::authority = m_vault,
+        associated_token::token_program = asset_token_program,
+    )]
+    pub vault_asset_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        token::mint = asset_mint,
+        token::token_program = asset_token_program,
+    )]
+    pub to_asset_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    pub m_token_program: Program<'info, Token2022>,
+    pub asset_token_program: Interface<'info, TokenInterface>,
+}
+
+impl ReplaceAssetWithM<'_> {
+    pub fn validate(&self, m_amount: u64) -> Result<()> {
+        let auth = match &self.replace_authority {
+            Some(auth) => auth.key,
+            None => self.token_authority.key,
+        };
+
+        // Ensure the caller is authorized (same as wrap/unwrap)
+        if !self.global_account.wrap_authorities.contains(auth) {
+            return err!(ExtError::NotAuthorized);
+        }
+
+        if m_amount == 0 {
+            return err!(ExtError::InvalidAmount);
+        }
+
+        // Validate the contract is not paused
+        if self.global_account.yield_config.is_paused {
+            return err!(ExtError::Paused);
+        }
+
+        Ok(())
+    }
+
+    #[access_control(ctx.accounts.validate(m_amount))]
+    pub fn handler(ctx: Context<Self>, m_amount: u64) -> Result<()> {
+        // Convert M amount (6 decimals) to asset amount (asset decimals)
+        let asset_amount = convert_from_6_decimals(m_amount, ctx.accounts.asset_config.decimals)?;
+
+        // Validate sufficient asset backing
+        if asset_amount > ctx.accounts.asset_config.balance {
+            return err!(ExtError::InsufficientAssetBacking);
+        }
+
+        // Transfer M from caller to vault
+        transfer_tokens(
+            &ctx.accounts.from_m_token_account,
+            &ctx.accounts.vault_m_token_account,
+            m_amount,
+            &ctx.accounts.m_mint,
+            &ctx.accounts.token_authority.to_account_info(),
+            &ctx.accounts.m_token_program,
+        )?;
+
+        // Transfer asset from vault to recipient
+        transfer_tokens_from_program_interface(
+            &ctx.accounts.vault_asset_token_account,
+            &ctx.accounts.to_asset_token_account,
+            asset_amount,
+            &ctx.accounts.asset_mint,
+            &ctx.accounts.m_vault,
+            &[&[M_VAULT_SEED, &[ctx.accounts.global_account.m_vault_bump]]],
+            &ctx.accounts.asset_token_program,
+        )?;
+
+        // Update tracking
+        ctx.accounts.asset_config.balance = ctx
+            .accounts
+            .asset_config
+            .balance
+            .checked_sub(asset_amount)
+            .ok_or(ExtError::MathUnderflow)?;
+
+        ctx.accounts.global_account.yield_config.total_assets = ctx
+            .accounts
+            .global_account
+            .yield_config
+            .total_assets
+            .checked_sub(m_amount)
+            .ok_or(ExtError::MathUnderflow)?;
+
+        Ok(())
+    }
+}

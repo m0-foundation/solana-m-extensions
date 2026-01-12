@@ -95,6 +95,19 @@ impl Unwrap<'_> {
             return err!(ExtError::InvalidAmount);
         }
 
+        // JMI: validate M backing - amount must not exceed (ext_supply - total_assets)
+        #[cfg(feature = "jmi")]
+        {
+            let m_backing = self
+                .ext_mint
+                .supply
+                .checked_sub(self.global_account.yield_config.total_assets)
+                .ok_or(ExtError::MathOverflow)?;
+            if ext_principal > m_backing {
+                return err!(ExtError::InsufficientMBacking);
+            }
+        }
+
         Ok(())
     }
 

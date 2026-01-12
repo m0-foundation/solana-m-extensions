@@ -187,6 +187,56 @@ pub fn index_to_multiplier(index: u64) -> Result<f64> {
     Ok(index as f64 / INDEX_SCALE_F64)
 }
 
+/// Convert an amount from its native decimals to 6 decimals (M's precision)
+/// Used by JMI for tracking total_assets
+#[cfg(feature = "jmi")]
+pub fn convert_to_6_decimals(amount: u64, from_decimals: u8) -> Result<u64> {
+    const TARGET_DECIMALS: u8 = 6;
+
+    if from_decimals == TARGET_DECIMALS {
+        return Ok(amount);
+    }
+
+    if from_decimals > TARGET_DECIMALS {
+        // Scale down (e.g., 18 decimals to 6)
+        let divisor = 10u64
+            .checked_pow((from_decimals - TARGET_DECIMALS) as u32)
+            .ok_or(ExtError::MathOverflow)?;
+        amount.checked_div(divisor).ok_or(ExtError::MathUnderflow.into())
+    } else {
+        // Scale up (e.g., 2 decimals to 6)
+        let multiplier = 10u64
+            .checked_pow((TARGET_DECIMALS - from_decimals) as u32)
+            .ok_or(ExtError::MathOverflow)?;
+        amount.checked_mul(multiplier).ok_or(ExtError::MathOverflow.into())
+    }
+}
+
+/// Convert an amount from 6 decimals (M's precision) to target decimals
+/// Used by JMI for converting ext amounts to asset decimals
+#[cfg(feature = "jmi")]
+pub fn convert_from_6_decimals(amount: u64, to_decimals: u8) -> Result<u64> {
+    const FROM_DECIMALS: u8 = 6;
+
+    if to_decimals == FROM_DECIMALS {
+        return Ok(amount);
+    }
+
+    if to_decimals > FROM_DECIMALS {
+        // Scale up (e.g., 6 decimals to 18)
+        let multiplier = 10u64
+            .checked_pow((to_decimals - FROM_DECIMALS) as u32)
+            .ok_or(ExtError::MathOverflow)?;
+        amount.checked_mul(multiplier).ok_or(ExtError::MathOverflow.into())
+    } else {
+        // Scale down (e.g., 6 decimals to 2)
+        let divisor = 10u64
+            .checked_pow((FROM_DECIMALS - to_decimals) as u32)
+            .ok_or(ExtError::MathOverflow)?;
+        amount.checked_div(divisor).ok_or(ExtError::MathUnderflow.into())
+    }
+}
+
 pub fn get_mint_extensions<'info>(
     mint: &InterfaceAccount<'info, Mint>,
 ) -> Result<Vec<spl_token_2022::extension::ExtensionType>> {

@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
-use m_ext::cpi::accounts::{Unwrap, Wrap};
+use m_ext::cpi::accounts::{ReplaceAssetWithM as ExtReplaceAssetWithM, Unwrap};
 use m_ext::state::{EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
 
 use crate::{
@@ -9,12 +9,12 @@ use crate::{
 };
 
 #[derive(Accounts)]
-pub struct Swap<'info> {
+pub struct ReplaceAssetWithM<'info> {
     pub signer: Signer<'info>,
 
     // Required if the swap program is not whitelisted on the extension
-    pub wrap_authority: Option<Signer<'info>>,
     pub unwrap_authority: Option<Signer<'info>>,
+    pub replace_authority: Option<Signer<'info>>,
 
     /*
      * Program globals
@@ -24,6 +24,8 @@ pub struct Swap<'info> {
         bump = swap_global.bump,
     )]
     pub swap_global: Box<Account<'info, SwapGlobal>>,
+
+    /// Source extension global (for unwrap)
     #[account(
         mut,
         seeds = [EXT_GLOBAL_SEED],
@@ -32,14 +34,16 @@ pub struct Swap<'info> {
     )]
     /// CHECK: CPI will validate the global account
     pub from_global: AccountInfo<'info>,
+
+    /// JMI extension global (for replace_asset_with_m)
     #[account(
         mut,
         seeds = [EXT_GLOBAL_SEED],
-        seeds::program = to_ext_program.key(),
+        seeds::program = jmi_ext_program.key(),
         bump,
     )]
     /// CHECK: CPI will validate the global account
-    pub to_global: AccountInfo<'info>,
+    pub jmi_global: AccountInfo<'info>,
 
     /*
      * Mints
@@ -47,11 +51,17 @@ pub struct Swap<'info> {
     #[account(mut)]
     /// Validated by unwrap on the extension program
     pub from_mint: Box<InterfaceAccount<'info, Mint>>,
-    #[account(mut)]
-    /// Validated by wrap on the extension program
-    pub to_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mint::token_program = m_token_program)]
     pub m_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(mint::token_program = asset_token_program)]
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    /*
+     * Asset config for JMI
+     */
+    #[account(mut)]
+    /// CHECK: CPI will validate the asset config
+    pub asset_config: AccountInfo<'info>,
 
     /*
      * Token Accounts
@@ -64,10 +74,10 @@ pub struct Swap<'info> {
     pub from_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
-        token::mint = to_mint,
-        token::token_program = to_token_program,
+        token::mint = asset_mint,
+        token::token_program = asset_token_program,
     )]
-    pub to_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub to_asset_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         associated_token::mint = m_mint,
@@ -77,7 +87,7 @@ pub struct Swap<'info> {
     pub swap_m_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /*
-     * Authorities
+     * Authorities & Vaults for source extension (unwrap)
      */
     #[account(
         seeds = [M_VAULT_SEED],
@@ -87,13 +97,6 @@ pub struct Swap<'info> {
     /// CHECK: account does not hold data
     pub from_m_vault_auth: AccountInfo<'info>,
     #[account(
-        seeds = [M_VAULT_SEED],
-        seeds::program = to_ext_program.key(),
-        bump,
-    )]
-    /// CHECK: account does not hold data
-    pub to_m_vault_auth: AccountInfo<'info>,
-    #[account(
         seeds = [MINT_AUTHORITY_SEED],
         seeds::program = from_ext_program.key(),
         bump,
@@ -101,39 +104,43 @@ pub struct Swap<'info> {
     /// CHECK: account does not hold data
     pub from_mint_authority: AccountInfo<'info>,
     #[account(
-        seeds = [MINT_AUTHORITY_SEED],
-        seeds::program = to_ext_program.key(),
-        bump,
-    )]
-    /// CHECK: account does not hold data
-    pub to_mint_authority: AccountInfo<'info>,
-
-    /*
-     * Vaults
-     */
-    #[account(
         mut,
         associated_token::mint = m_mint,
         associated_token::authority = from_m_vault_auth,
         associated_token::token_program = m_token_program,
     )]
     pub from_m_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+
+    /*
+     * Vaults for JMI extension (replace_asset_with_m)
+     */
+    #[account(
+        seeds = [M_VAULT_SEED],
+        seeds::program = jmi_ext_program.key(),
+        bump,
+    )]
+    /// CHECK: account does not hold data
+    pub jmi_m_vault_auth: AccountInfo<'info>,
     #[account(
         mut,
         associated_token::mint = m_mint,
-        associated_token::authority = to_m_vault_auth,
+        associated_token::authority = jmi_m_vault_auth,
         associated_token::token_program = m_token_program,
     )]
-    pub to_m_vault: Box<InterfaceAccount<'info, TokenAccount>>,
-
-    /// CHECK: validated within the destination wrap CPI if provided
-    pub asset_config: Option<UncheckedAccount<'info>>,
+    pub jmi_m_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(
+        mut,
+        associated_token::mint = asset_mint,
+        associated_token::authority = jmi_m_vault_auth,
+        associated_token::token_program = asset_token_program,
+    )]
+    pub jmi_asset_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /*
      * Token Programs
      */
     pub from_token_program: Interface<'info, TokenInterface>,
-    pub to_token_program: Interface<'info, TokenInterface>,
+    pub asset_token_program: Interface<'info, TokenInterface>,
     pub m_token_program: Interface<'info, TokenInterface>,
 
     /*
@@ -142,26 +149,17 @@ pub struct Swap<'info> {
     /// CHECK: checked against whitelisted extensions
     pub from_ext_program: UncheckedAccount<'info>,
     /// CHECK: checked against whitelisted extensions
-    #[account(constraint = to_ext_program.key() != from_ext_program.key())]
-    pub to_ext_program: UncheckedAccount<'info>,
+    pub jmi_ext_program: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
 }
 
-impl<'info> Swap<'info> {
-    fn validate(
-        &self,
-        from_principal: u64,
-        remaining_accounts: &[AccountInfo<'_>],
-        remaining_accounts_split_idx: usize,
-    ) -> Result<()> {
-        for ext_program in [&self.from_ext_program, &self.to_ext_program] {
+impl<'info> ReplaceAssetWithM<'info> {
+    fn validate(&self, from_principal: u64) -> Result<()> {
+        // Validate both extensions are whitelisted
+        for ext_program in [&self.from_ext_program, &self.jmi_ext_program] {
             if !self.swap_global.is_extension_whitelisted(ext_program.key) {
                 return err!(SwapError::InvalidExtension);
             }
-        }
-
-        if remaining_accounts_split_idx > remaining_accounts.len() {
-            return err!(SwapError::InvalidIndex);
         }
 
         if from_principal == 0 {
@@ -171,19 +169,9 @@ impl<'info> Swap<'info> {
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(from_principal, ctx.remaining_accounts, remaining_accounts_split_idx))]
-    pub fn handler(
-        ctx: Context<'_, '_, '_, 'info, Self>,
-        from_principal: u64,
-        remaining_accounts_split_idx: usize,
-    ) -> Result<()> {
+    #[access_control(ctx.accounts.validate(from_principal))]
+    pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, from_principal: u64) -> Result<()> {
         let m_pre_balance = ctx.accounts.swap_m_account.amount;
-        let to_pre_balance = ctx.accounts.to_token_account.amount;
-
-        // Optional remaining accounts passed to the instructions
-        let remaining_accounts = ctx.remaining_accounts;
-        let (unwrap_remaining_accounts, wrap_remaining_accounts) =
-            remaining_accounts.split_at(remaining_accounts_split_idx);
 
         // Set swap program as authority if none provided
         let unwrap_authority = match &ctx.accounts.unwrap_authority {
@@ -191,6 +179,7 @@ impl<'info> Swap<'info> {
             None => ctx.accounts.swap_global.to_account_info(),
         };
 
+        // 1. Unwrap source extension → M (to swap_m_account)
         m_ext::cpi::unwrap(
             CpiContext::new_with_signer(
                 ctx.accounts.from_ext_program.to_account_info(),
@@ -209,53 +198,45 @@ impl<'info> Swap<'info> {
                     ext_token_program: ctx.accounts.from_token_program.to_account_info(),
                 },
                 &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
-            )
-            .with_remaining_accounts(unwrap_remaining_accounts.to_vec()),
+            ),
             from_principal,
         )?;
 
-        // Reload M balance and wrap difference
+        // 2. Calculate M received
         ctx.accounts.swap_m_account.reload()?;
-        let m_delta = ctx.accounts.swap_m_account.amount - m_pre_balance;
+        let m_amount = ctx.accounts.swap_m_account.amount - m_pre_balance;
 
         // Set swap program as authority if none provided
-        let wrap_authority = match &ctx.accounts.wrap_authority {
+        let replace_authority = match &ctx.accounts.replace_authority {
             Some(auth) => auth.to_account_info(),
             None => ctx.accounts.swap_global.to_account_info(),
         };
 
-        m_ext::cpi::wrap(
+        // 3. Call JMI replace_asset_with_m
+        m_ext::cpi::replace_asset_with_m(
             CpiContext::new_with_signer(
-                ctx.accounts.to_ext_program.to_account_info(),
-                Wrap {
+                ctx.accounts.jmi_ext_program.to_account_info(),
+                ExtReplaceAssetWithM {
                     token_authority: ctx.accounts.swap_global.to_account_info(),
-                    wrap_authority: Some(wrap_authority),
-                    source_mint: ctx.accounts.m_mint.to_account_info(),
-                    ext_mint: ctx.accounts.to_mint.to_account_info(),
-                    global_account: ctx.accounts.to_global.to_account_info(),
-                    source_vault: ctx.accounts.to_m_vault_auth.to_account_info(),
-                    ext_mint_authority: ctx.accounts.to_mint_authority.to_account_info(),
-                    from_source_token_account: ctx.accounts.swap_m_account.to_account_info(),
-                    vault_source_token_account: ctx.accounts.to_m_vault.to_account_info(),
-                    to_ext_token_account: ctx.accounts.to_token_account.to_account_info(),
-                    source_token_program: ctx.accounts.m_token_program.to_account_info(),
-                    ext_token_program: ctx.accounts.to_token_program.to_account_info(),
-                    asset_config: ctx
-                        .accounts
-                        .asset_config
-                        .as_ref()
-                        .map(|a| a.to_account_info()),
+                    replace_authority: Some(replace_authority),
+                    m_mint: ctx.accounts.m_mint.to_account_info(),
+                    asset_mint: ctx.accounts.asset_mint.to_account_info(),
+                    global_account: ctx.accounts.jmi_global.to_account_info(),
+                    asset_config: ctx.accounts.asset_config.to_account_info(),
+                    m_vault: ctx.accounts.jmi_m_vault_auth.to_account_info(),
+                    from_m_token_account: ctx.accounts.swap_m_account.to_account_info(),
+                    vault_m_token_account: ctx.accounts.jmi_m_vault.to_account_info(),
+                    vault_asset_token_account: ctx.accounts.jmi_asset_vault.to_account_info(),
+                    to_asset_token_account: ctx.accounts.to_asset_token_account.to_account_info(),
+                    m_token_program: ctx.accounts.m_token_program.to_account_info(),
+                    asset_token_program: ctx.accounts.asset_token_program.to_account_info(),
                 },
                 &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
-            )
-            .with_remaining_accounts(wrap_remaining_accounts.to_vec()),
-            m_delta,
+            ),
+            m_amount,
         )?;
 
-        // Reload and log amounts
-        ctx.accounts.to_token_account.reload()?;
-        let to_principal = ctx.accounts.to_token_account.amount - to_pre_balance;
-        msg!("{} -> {} M -> {}", from_principal, m_delta, to_principal);
+        msg!("{} ext -> {} M -> asset", from_principal, m_amount);
 
         Ok(())
     }

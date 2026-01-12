@@ -41,6 +41,10 @@ pub const MINT_AUTHORITY_SEED: &[u8] = b"mint_authority";
 #[constant]
 pub const M_VAULT_SEED: &[u8] = b"m_vault";
 
+#[cfg(feature = "jmi")]
+#[constant]
+pub const ASSET_CONFIG_SEED: &[u8] = b"asset_config";
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 #[repr(u8)]
 pub enum YieldVariant {
@@ -92,7 +96,27 @@ cfg_if! {
 
         pub use earner::*;
         pub use earn_manager::*;
+    } else if #[cfg(feature = "jmi")] {
+        // JMI extends no-yield with additional fields
+        #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+        pub struct YieldConfig {
+            pub yield_variant: YieldVariant,   // 1 byte
+            pub total_assets: u64,             // 8 bytes - sum of non-M assets (6 decimals)
+            pub is_paused: bool,               // 1 byte - global pause state
+        }
+
+        impl YieldConfig {
+            pub fn space() -> usize {
+                1 + // yield_variant
+                8 + // total_assets
+                1   // is_paused
+            }
+        }
+
+        pub mod asset_config;
+        pub use asset_config::*;
     } else {
+        // Base no-yield without JMI
         #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
         pub struct YieldConfig {
             pub yield_variant: YieldVariant, // variant of yield config

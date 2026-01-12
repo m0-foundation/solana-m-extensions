@@ -34,4 +34,17 @@ pub enum ExtError {
     InvalidTokenProgram,
     #[msg("Vault token account frozen.")]
     VaultFrozen,
+
+    #[msg("Contract is paused.")]
+    Paused,
+    #[msg("Asset not allowed for wrapping.")]
+    AssetNotAllowed,
+    #[msg("Asset cap would be exceeded.")]
+    AssetCapExceeded,
+    #[msg("Insufficient M backing for unwrap.")]
+    InsufficientMBacking,
+    #[msg("Cannot set cap for M token.")]
+    CannotCapMToken,
+    #[msg("Insufficient asset backing for replacement.")]
+    InsufficientAssetBacking,
 }
