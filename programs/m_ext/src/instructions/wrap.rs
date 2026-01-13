@@ -7,29 +7,19 @@ use crate::{
     utils::token::{mint_tokens, transfer_tokens_interface},
 };
 
-#[cfg(feature = "jmi")]
-use crate::state::{AssetConfig, ASSET_CONFIG_SEED};
-
 use crate::utils::conversion::{
     amount_to_principal_down, multiplier_to_index, principal_to_amount_down, sync_index,
 };
 
-#[cfg(feature = "jmi")]
-use crate::utils::conversion::convert_to_6_decimals;
-
-/// Unified Wrap accounts struct
-/// - Non-JMI: source_mint must be M
-/// - JMI: source_mint can be M or approved asset
 #[derive(Accounts)]
 pub struct Wrap<'info> {
     pub token_authority: Signer<'info>,
 
-    /// Will be set if a whitelisted authority is signing for a user
+    // Will be set if a whitelisted authority is signing for a user
     pub wrap_authority: Option<Signer<'info>>,
 
-    /// Source token mint (M for non-JMI; M or approved asset for JMI)
-    #[account(mint::token_program = source_token_program)]
-    pub source_mint: InterfaceAccount<'info, Mint>,
+    #[account(mint::token_program = m_token_program)]
+    pub m_mint: InterfaceAccount<'info, Mint>,
 
     #[account(mut, mint::token_program = ext_token_program)]
     pub ext_mint: InterfaceAccount<'info, Mint>,
@@ -47,7 +37,7 @@ pub struct Wrap<'info> {
         seeds = [M_VAULT_SEED],
         bump = global_account.m_vault_bump
     )]
-    pub source_vault: AccountInfo<'info>,
+    pub m_vault: AccountInfo<'info>,
 
     /// CHECK: This account is validated by the seed, it stores no data
     #[account(
@@ -58,43 +48,37 @@ pub struct Wrap<'info> {
 
     #[account(
         mut,
-        token::mint = source_mint,
-        token::token_program = source_token_program,
+        token::mint = m_mint,
+        // signer must be authority of the from token account or delegated by the owner
+        // this is checked by the token program
+        token::token_program = m_token_program,
     )]
-    pub from_source_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub from_m_token_account: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         mut,
-        associated_token::mint = source_mint,
-        associated_token::authority = source_vault,
-        associated_token::token_program = source_token_program,
+        associated_token::mint = m_mint,
+        associated_token::authority = m_vault,
+        associated_token::token_program = m_token_program,
     )]
-    pub vault_source_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub vault_m_token_account: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         mut,
         token::mint = ext_mint,
+        // signer is arbitrary to allow wrapping to another user's account
         token::token_program = ext_token_program,
     )]
     pub to_ext_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    #[cfg(feature = "jmi")]
-    /// AssetConfig for non-M assets (JMI only)
-    /// - JMI + M path: must be None
-    /// - JMI + asset path: must be Some with cap > 0
-    #[account(
-        mut,
-        seeds = [ASSET_CONFIG_SEED, global_account.key().as_ref(), source_mint.key().as_ref()],
-        bump = asset_config.bump,
-    )]
-    pub asset_config: Option<Account<'info, AssetConfig>>,
-
-    pub source_token_program: Interface<'info, TokenInterface>,
+    // we have duplicate entries for the token2022 program since the interface needs to be consistent
+    // but we want to leave open the possibility that either may not have to be token2022 in the future
+    pub m_token_program: Interface<'info, TokenInterface>,
     pub ext_token_program: Interface<'info, TokenInterface>,
 }
 
 impl Wrap<'_> {
-    pub fn validate(&self, amount: u64) -> Result<()> {
+    pub fn validate(&self, m_principal: u64) -> Result<()> {
         let auth = match &self.wrap_authority {
             Some(auth) => auth.key,
             None => self.token_authority.key,
@@ -105,116 +89,65 @@ impl Wrap<'_> {
             return err!(ExtError::NotAuthorized);
         }
 
-        if amount == 0 {
+        if m_principal == 0 {
             return err!(ExtError::InvalidAmount);
         }
 
-        // Non-JMI: source_mint MUST be m_mint (replaces has_one constraint)
-        #[cfg(not(feature = "jmi"))]
-        {
-            if self.source_mint.key() != self.global_account.m_mint {
-                return err!(ExtError::InvalidAccount);
-            }
-        }
-
-        // JMI: validate asset is either M or has an AssetConfig with cap > 0
-        #[cfg(feature = "jmi")]
-        {
-            let is_m = self.source_mint.key() == self.global_account.m_mint;
-            if !is_m {
-                match &self.asset_config {
-                    Some(config) => {
-                        if config.cap == 0 {
-                            return err!(ExtError::AssetNotAllowed);
-                        }
-                    }
-                    None => {
-                        return err!(ExtError::AssetNotAllowed);
-                    }
-                }
-            }
+        if self.m_mint.key() != self.global_account.m_mint {
+            return err!(ExtError::InvalidAccount);
         }
 
         Ok(())
     }
 
     // Single unified handler for all feature combinations
-    #[access_control(ctx.accounts.validate(amount))]
-    pub fn handler(ctx: Context<Self>, amount: u64) -> Result<()> {
+    #[access_control(ctx.accounts.validate(m_principal))]
+    pub fn handler(ctx: Context<Self>, m_principal: u64) -> Result<()> {
         let authority_seeds: &[&[&[u8]]] = &[&[
             MINT_AUTHORITY_SEED,
             &[ctx.accounts.global_account.ext_mint_authority_bump],
         ]];
 
-        let mut ext_amount = {
+        // If necessary, sync the index between M and Ext tokens
+        // Return the current value to use for conversions
+        let ext_m_principal = {
             let ext_index: u64 = sync_index(
                 &mut ctx.accounts.ext_mint,
                 &mut ctx.accounts.global_account,
-                &ctx.accounts.source_mint,
-                &ctx.accounts.vault_source_token_account,
+                &ctx.accounts.m_mint,
+                &ctx.accounts.vault_m_token_account,
                 &ctx.accounts.ext_mint_authority,
                 authority_seeds,
                 &ctx.accounts.ext_token_program,
             )?;
 
             let m_scaled_ui_config =
-                earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.source_mint)?;
+                earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
             let m_index = multiplier_to_index(m_scaled_ui_config.new_multiplier.into())?;
 
-            amount_to_principal_down(principal_to_amount_down(amount, m_index)?, ext_index)?
+            // Calculate the principal amount of ext tokens to mint
+            // based on the principal amount of m tokens to wrap
+            amount_to_principal_down(principal_to_amount_down(m_principal, m_index)?, ext_index)?
         };
 
-        // JMI: cap tracking for non-M assets (only with no-yield)
-        #[cfg(feature = "jmi")]
-        {
-            let is_m = ctx.accounts.source_mint.key() == ctx.accounts.global_account.m_mint;
-            if !is_m {
-                let asset_config = ctx
-                    .accounts
-                    .asset_config
-                    .as_mut()
-                    .ok_or(ExtError::AssetNotAllowed)?;
-
-                let new_balance = asset_config
-                    .balance
-                    .checked_add(amount)
-                    .ok_or(ExtError::MathOverflow)?;
-                if new_balance > asset_config.cap {
-                    return err!(ExtError::AssetCapExceeded);
-                }
-                asset_config.balance = new_balance;
-
-                let amount_in_6_decimals = convert_to_6_decimals(amount, asset_config.decimals)?;
-                ctx.accounts.global_account.yield_config.total_assets = ctx
-                    .accounts
-                    .global_account
-                    .yield_config
-                    .total_assets
-                    .checked_add(amount_in_6_decimals)
-                    .ok_or(ExtError::MathOverflow)?;
-
-                ext_amount = amount_in_6_decimals;
-            }
-        }
-
-        // Transfer source tokens from user to vault
+        // Transfer M tokens from user to vault
         transfer_tokens_interface(
-            &ctx.accounts.from_source_token_account,
-            &ctx.accounts.vault_source_token_account,
-            amount,
-            &ctx.accounts.source_mint,
-            &ctx.accounts.token_authority.to_account_info(),
-            &ctx.accounts.source_token_program,
+            &ctx.accounts.from_m_token_account,               // from
+            &ctx.accounts.vault_m_token_account,              // to
+            m_principal,                                           // m_principal
+            &ctx.accounts.m_mint,                             // mint
+            &ctx.accounts.token_authority.to_account_info(),  // authority
+            &ctx.accounts.m_token_program,                    // token program
         )?;
 
-        // Mint ext tokens to user
+        // Mint the m_principal of ext tokens to the user
         mint_tokens(
-            &ctx.accounts.to_ext_token_account,
-            ext_amount,
-            &ctx.accounts.ext_mint,
-            &ctx.accounts.ext_mint_authority,
-            authority_seeds,
-            &ctx.accounts.ext_token_program,
+            &ctx.accounts.to_ext_token_account, // to
+            ext_m_principal,                         // m_principal
+            &ctx.accounts.ext_mint,             // mint
+            &ctx.accounts.ext_mint_authority,   // authority
+            authority_seeds,                    // authority seeds
+            &ctx.accounts.ext_token_program,    // token program
         )?;
 
         Ok(())

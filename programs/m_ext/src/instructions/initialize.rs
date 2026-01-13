@@ -202,17 +202,12 @@ impl Initialize<'_> {
                     last_ext_index: INDEX_SCALE_U64, // we set the extension index to 1.0 initially
                     timestamp: timestamp as u64,
                 };
-            } else if #[cfg(feature = "jmi")] {
+            } else {
                 // JMI extends no-yield with additional fields
                 yield_config = YieldConfig {
                     yield_variant: YieldVariant::NoYield,
                     total_assets: 0,
                     is_paused: false,
-                };
-            } else {
-                // Base no-yield without JMI
-                yield_config = YieldConfig {
-                    yield_variant: YieldVariant::NoYield,
                 };
             }
         }

@@ -136,6 +136,11 @@ pub mod m_ext {
         ReplaceAssetWithM::handler(ctx, m_amount)
     }
 
+    #[cfg(feature = "jmi")]
+    pub fn wrap_asset(ctx: Context<WrapAsset>, amount: u64) -> Result<()> {
+        WrapAsset::handler(ctx, amount)
+    }
+
     #[cfg(feature = "crank")]
     pub fn set_earn_authority(
         ctx: Context<SetEarnAuthority>,
@@ -165,8 +170,8 @@ pub mod m_ext {
 
     // Wrap authority instructions
 
-    pub fn wrap(ctx: Context<Wrap>, amount: u64) -> Result<()> {
-        Wrap::handler(ctx, amount)
+    pub fn wrap(ctx: Context<Wrap>, m_principal: u64) -> Result<()> {
+        Wrap::handler(ctx, m_principal)
     }
 
     pub fn unwrap(ctx: Context<Unwrap>, amount: u64) -> Result<()> {

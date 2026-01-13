@@ -96,8 +96,8 @@ cfg_if! {
 
         pub use earner::*;
         pub use earn_manager::*;
-    } else if #[cfg(feature = "jmi")] {
-        // JMI extends no-yield with additional fields
+    } else {
+        // no-yield contains fields JMI fields
         #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
         pub struct YieldConfig {
             pub yield_variant: YieldVariant,   // 1 byte
@@ -115,17 +115,5 @@ cfg_if! {
 
         pub mod asset_config;
         pub use asset_config::*;
-    } else {
-        // Base no-yield without JMI
-        #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
-        pub struct YieldConfig {
-            pub yield_variant: YieldVariant, // variant of yield config
-        }
-
-        impl YieldConfig {
-            pub fn space() -> usize {
-                1 // yield_variant
-            }
-        }
     }
 }

@@ -1,13 +1,13 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
-use m_ext::cpi::accounts::Wrap as ExtWrap;
+use m_ext::cpi::accounts::WrapAsset as ExtWrapAsset;
 use m_ext::state::{EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
 
 use crate::errors::SwapError;
 use crate::state::{SwapGlobal, GLOBAL_SEED};
 
 #[derive(Accounts)]
-pub struct Wrap<'info> {
+pub struct WrapAsset<'info> {
     pub signer: Signer<'info>,
 
     // Required if the swap program is not whitelisted on the extension
@@ -34,20 +34,27 @@ pub struct Wrap<'info> {
      * Mints
      */
     #[account(mut)]
-    /// Validated by wrap on the extension program
+    /// Validated by wrap_asset on the extension program
     pub to_mint: Box<InterfaceAccount<'info, Mint>>,
-    #[account(mint::token_program = m_token_program)]
-    pub m_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(mint::token_program = asset_token_program)]
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    /*
+     * Asset config - required for wrap_asset
+     */
+    #[account(mut)]
+    /// CHECK: CPI will validate the asset config
+    pub asset_config: AccountInfo<'info>,
 
     /*
      * Token Accounts
      */
     #[account(
         mut,
-        token::mint = m_mint,
-        token::token_program = m_token_program,
+        token::mint = asset_mint,
+        token::token_program = asset_token_program,
     )]
-    pub from_m_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub asset_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         token::mint = to_mint,
@@ -78,17 +85,17 @@ pub struct Wrap<'info> {
      */
     #[account(
         mut,
-        associated_token::mint = m_mint,
+        associated_token::mint = asset_mint,
         associated_token::authority = to_vault_auth,
-        associated_token::token_program = m_token_program,
+        associated_token::token_program = asset_token_program,
     )]
-    pub to_m_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub to_asset_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /*
      * Token Programs
      */
     pub to_token_program: Interface<'info, TokenInterface>,
-    pub m_token_program: Interface<'info, TokenInterface>,
+    pub asset_token_program: Interface<'info, TokenInterface>,
 
     /*
      * Programs
@@ -98,8 +105,8 @@ pub struct Wrap<'info> {
     pub system_program: Program<'info, System>,
 }
 
-impl<'info> Wrap<'info> {
-    fn validate(&self, m_principal: u64) -> Result<()> {
+impl<'info> WrapAsset<'info> {
+    fn validate(&self, amount: u64) -> Result<()> {
         if !self
             .swap_global
             .is_extension_whitelisted(self.to_ext_program.key)
@@ -107,42 +114,43 @@ impl<'info> Wrap<'info> {
             return err!(SwapError::InvalidExtension);
         }
 
-        if m_principal == 0 {
+        if amount == 0 {
             return err!(SwapError::InvalidAmount);
         }
 
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(m_principal))]
-    pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, m_principal: u64) -> Result<()> {
+    #[access_control(ctx.accounts.validate(amount))]
+    pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, amount: u64) -> Result<()> {
         // Set swap program as authority if none provided
         let wrap_authority = match &ctx.accounts.wrap_authority {
             Some(auth) => auth.to_account_info(),
             None => ctx.accounts.swap_global.to_account_info(),
         };
 
-        m_ext::cpi::wrap(
+        m_ext::cpi::wrap_asset(
             CpiContext::new_with_signer(
                 ctx.accounts.to_ext_program.to_account_info(),
-                ExtWrap {
+                ExtWrapAsset {
                     token_authority: ctx.accounts.signer.to_account_info(),
                     wrap_authority: Some(wrap_authority),
-                    m_mint: ctx.accounts.m_mint.to_account_info(),
+                    asset_mint: ctx.accounts.asset_mint.to_account_info(),
                     ext_mint: ctx.accounts.to_mint.to_account_info(),
                     global_account: ctx.accounts.to_global.to_account_info(),
-                    m_vault: ctx.accounts.to_vault_auth.to_account_info(),
+                    asset_config: ctx.accounts.asset_config.to_account_info(),
+                    asset_vault: ctx.accounts.to_vault_auth.to_account_info(),
                     ext_mint_authority: ctx.accounts.to_mint_authority.to_account_info(),
-                    from_m_token_account: ctx.accounts.from_m_token_account.to_account_info(),
-                    vault_m_token_account: ctx.accounts.to_m_vault.to_account_info(),
+                    from_asset_token_account: ctx.accounts.asset_token_account.to_account_info(),
+                    vault_asset_token_account: ctx.accounts.to_asset_vault.to_account_info(),
                     to_ext_token_account: ctx.accounts.to_token_account.to_account_info(),
-                    m_token_program: ctx.accounts.m_token_program.to_account_info(),
+                    asset_token_program: ctx.accounts.asset_token_program.to_account_info(),
                     ext_token_program: ctx.accounts.to_token_program.to_account_info(),
                 },
                 &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
             )
             .with_remaining_accounts(ctx.remaining_accounts.to_vec()),
-            m_principal,
+            amount,
         )
     }
 }

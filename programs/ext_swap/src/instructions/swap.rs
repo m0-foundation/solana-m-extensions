@@ -126,9 +126,6 @@ pub struct Swap<'info> {
     )]
     pub to_m_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// CHECK: validated within the destination wrap CPI if provided
-    pub asset_config: Option<UncheckedAccount<'info>>,
-
     /*
      * Token Programs
      */
@@ -230,21 +227,16 @@ impl<'info> Swap<'info> {
                 Wrap {
                     token_authority: ctx.accounts.swap_global.to_account_info(),
                     wrap_authority: Some(wrap_authority),
-                    source_mint: ctx.accounts.m_mint.to_account_info(),
+                    m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.to_mint.to_account_info(),
                     global_account: ctx.accounts.to_global.to_account_info(),
-                    source_vault: ctx.accounts.to_m_vault_auth.to_account_info(),
+                    m_vault: ctx.accounts.to_m_vault_auth.to_account_info(),
                     ext_mint_authority: ctx.accounts.to_mint_authority.to_account_info(),
-                    from_source_token_account: ctx.accounts.swap_m_account.to_account_info(),
-                    vault_source_token_account: ctx.accounts.to_m_vault.to_account_info(),
+                    from_m_token_account: ctx.accounts.swap_m_account.to_account_info(),
+                    vault_m_token_account: ctx.accounts.to_m_vault.to_account_info(),
                     to_ext_token_account: ctx.accounts.to_token_account.to_account_info(),
-                    source_token_program: ctx.accounts.m_token_program.to_account_info(),
+                    m_token_program: ctx.accounts.m_token_program.to_account_info(),
                     ext_token_program: ctx.accounts.to_token_program.to_account_info(),
-                    asset_config: ctx
-                        .accounts
-                        .asset_config
-                        .as_ref()
-                        .map(|a| a.to_account_info()),
                 },
                 &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
             )
