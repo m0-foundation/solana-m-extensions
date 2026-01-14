@@ -1,10 +1,10 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
+use anchor_spl::token_interface::{Mint, Token2022, TokenAccount, TokenInterface};
 
 use crate::{
     errors::ExtError,
     state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
-    utils::token::{mint_tokens, transfer_tokens_interface},
+    utils::token::{mint_tokens, transfer_tokens},
 };
 
 use crate::utils::conversion::{
@@ -74,7 +74,7 @@ pub struct Wrap<'info> {
 
     // we have duplicate entries for the token2022 program since the interface needs to be consistent
     // but we want to leave open the possibility that either may not have to be token2022 in the future
-    pub m_token_program: Interface<'info, TokenInterface>,
+    pub m_token_program: Program<'info, Token2022>,
     pub ext_token_program: Interface<'info, TokenInterface>,
 }
 
@@ -128,19 +128,19 @@ impl Wrap<'_> {
         };
 
         // Transfer M tokens from user to vault
-        transfer_tokens_interface(
-            &ctx.accounts.from_m_token_account,               // from
-            &ctx.accounts.vault_m_token_account,              // to
-            m_principal,                                           // m_principal
-            &ctx.accounts.m_mint,                             // mint
-            &ctx.accounts.token_authority.to_account_info(),  // authority
-            &ctx.accounts.m_token_program,                    // token program
+        transfer_tokens(
+            &ctx.accounts.from_m_token_account,              // from
+            &ctx.accounts.vault_m_token_account,             // to
+            m_principal,                                     // m_principal
+            &ctx.accounts.m_mint,                            // mint
+            &ctx.accounts.token_authority.to_account_info(), // authority
+            &ctx.accounts.m_token_program,                   // token program
         )?;
 
         // Mint the m_principal of ext tokens to the user
         mint_tokens(
             &ctx.accounts.to_ext_token_account, // to
-            ext_m_principal,                         // m_principal
+            ext_m_principal,                    // m_principal
             &ctx.accounts.ext_mint,             // mint
             &ctx.accounts.ext_mint_authority,   // authority
             authority_seeds,                    // authority seeds

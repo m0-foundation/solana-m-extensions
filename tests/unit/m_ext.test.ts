@@ -359,12 +359,14 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               extMintAuthorityBump,
               yieldConfig: {
                 yieldVariant: { noYield: {} },
+                totalAssets: new BN(0),
+                isPaused: false,
               },
               wrapAuthorities,
             });
 
             // Confirm the size of the global account based on the number of wrap authorities
-            const expectedSize = 176 + 1 + wrapAuthorities.length * 32; // 176 bytes base size + 1 for yield config discriminator + 4 bytes for vector length + 32 bytes per wrap authority
+            const expectedSize = 176 + 10 + wrapAuthorities.length * 32; // 176 bytes base size + 10 for yield config + 4 bytes for vector length + 32 bytes per wrap authority
             const extGlobalSize = await $.provider.connection
               .getAccountInfo(globalAccount)
               .then((info) => info?.data.length || 0);

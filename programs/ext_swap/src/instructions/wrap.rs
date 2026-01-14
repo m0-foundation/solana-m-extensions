@@ -47,7 +47,7 @@ pub struct Wrap<'info> {
         token::mint = m_mint,
         token::token_program = m_token_program,
     )]
-    pub from_m_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub m_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         token::mint = to_mint,
@@ -133,7 +133,7 @@ impl<'info> Wrap<'info> {
                     global_account: ctx.accounts.to_global.to_account_info(),
                     m_vault: ctx.accounts.to_vault_auth.to_account_info(),
                     ext_mint_authority: ctx.accounts.to_mint_authority.to_account_info(),
-                    from_m_token_account: ctx.accounts.from_m_token_account.to_account_info(),
+                    from_m_token_account: ctx.accounts.m_token_account.to_account_info(),
                     vault_m_token_account: ctx.accounts.to_m_vault.to_account_info(),
                     to_ext_token_account: ctx.accounts.to_token_account.to_account_info(),
                     m_token_program: ctx.accounts.m_token_program.to_account_info(),

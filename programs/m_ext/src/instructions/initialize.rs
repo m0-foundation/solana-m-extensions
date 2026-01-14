@@ -114,11 +114,7 @@ impl Initialize<'_> {
     // The wrap authorities are validated and stored in the global account.
     // The fee_bps is used by the scaled-ui variant. It is validated to be within the allowed range.
     // The earn_authority is only required for the crank variant.
-    fn validate(
-        &self,
-        _fee_bps: Option<u64>,
-        _earn_authority: Option<Pubkey>,
-    ) -> Result<()> {
+    fn validate(&self, _fee_bps: Option<u64>, _earn_authority: Option<Pubkey>) -> Result<()> {
         // Validate the ext_mint_authority PDA is the mint authority for the ext mint
         let ext_mint_authority = self.ext_mint_authority.key();
         if self.ext_mint.mint_authority.unwrap_or_default() != ext_mint_authority {

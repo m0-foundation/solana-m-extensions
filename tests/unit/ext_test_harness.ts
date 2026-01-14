@@ -36,6 +36,7 @@ import {
   getExtensionData,
   createApproveCheckedInstruction,
   createFreezeAccountInstruction,
+  pause,
 } from "@solana/spl-token";
 import {
   ZERO_WORD,
@@ -88,6 +89,8 @@ export type YieldConfig<V extends Variant> = V extends Variant.ScaledUi
     }
   : {
       yieldVariant?: YieldVariant;
+      totalAssets?: BN;
+      isPaused?: boolean;
     };
 
 export type ExtGlobal<V extends Variant> = {
@@ -1326,9 +1329,10 @@ export class ExtensionTest<
     if (expected.yieldConfig) {
       switch (this.variant) {
         case Variant.NoYield:
-          expect(state.yieldConfig).toEqual({
-            yieldVariant: { noYield: {} },
-          });
+          this.expectNoYieldYieldConfig(
+            state.yieldConfig,
+            expected.yieldConfig
+          );
           break;
         case Variant.ScaledUi:
           this.expectScaledUiYieldConfig(
@@ -1396,6 +1400,22 @@ export class ExtensionTest<
       expect(actual.timestamp!.toString()).toEqual(
         expected.timestamp.toString()
       );
+    }
+  }
+
+  private expectNoYieldYieldConfig<V extends Variant.NoYield>(
+    actual: YieldConfig<V>,
+    expected: YieldConfig<V>
+  ) {
+    expect(actual.yieldVariant!).toEqual({ noYield: {} });
+
+    if (expected.totalAssets) {
+      expect(actual.totalAssets!.toString()).toEqual(
+        expected.totalAssets.toString()
+      );
+    }
+    if (expected.isPaused !== undefined) {
+      expect(actual.isPaused).toEqual(expected.isPaused);
     }
   }
 

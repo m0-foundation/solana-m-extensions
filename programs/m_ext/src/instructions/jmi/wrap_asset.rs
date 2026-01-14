@@ -3,7 +3,10 @@ use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::{
     errors::ExtError,
-    state::{AssetConfig, ExtGlobalV2, ASSET_CONFIG_SEED, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
+    state::{
+        AssetConfig, ExtGlobalV2, ASSET_CONFIG_SEED, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED,
+        M_VAULT_SEED,
+    },
     utils::token::{mint_tokens, transfer_tokens_interface},
 };
 

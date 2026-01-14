@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
-use m_ext::cpi::accounts::{UnwrapAsset as ExtUnwrapAsset, Unwrap};
+use m_ext::cpi::accounts::{Unwrap, UnwrapAsset as ExtUnwrapAsset};
 use m_ext::state::{EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
 
 use crate::{
@@ -14,6 +14,14 @@ pub struct UnwrapAsset<'info> {
 
     // Required if the swap program is not whitelisted on the extension
     pub unwrap_authority: Option<Signer<'info>>,
+    pub replace_authority: Option<Signer<'info>>,
+
+    /// CHECK: PDA used as replace authority for JMI extensions
+    #[account(
+        seeds = [REPLACE_AUTHORITY_SEED],
+        bump,
+    )]
+    pub fallback_replace_authority: AccountInfo<'info>,
 
     /*
      * Program globals
@@ -23,13 +31,6 @@ pub struct UnwrapAsset<'info> {
         bump = swap_global.bump,
     )]
     pub swap_global: Box<Account<'info, SwapGlobal>>,
-
-    /// CHECK: PDA used as replace authority for JMI extensions
-    #[account(
-        seeds = [REPLACE_AUTHORITY_SEED],
-        bump,
-    )]
-    pub replace_authority_pda: AccountInfo<'info>,
 
     /// Source extension global (for unwrap)
     #[account(
@@ -87,7 +88,7 @@ pub struct UnwrapAsset<'info> {
     #[account(
         mut,
         associated_token::mint = m_mint,
-        associated_token::authority = replace_authority_pda,
+        associated_token::authority = swap_global,
         associated_token::token_program = m_token_program,
     )]
     pub swap_m_account: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -212,13 +213,19 @@ impl<'info> UnwrapAsset<'info> {
         ctx.accounts.swap_m_account.reload()?;
         let m_amount = ctx.accounts.swap_m_account.amount - m_pre_balance;
 
+        // Set replace authority as authority if none provided
+        let replace_authority = match &ctx.accounts.replace_authority {
+            Some(auth) => auth.to_account_info(),
+            None => ctx.accounts.fallback_replace_authority.to_account_info(),
+        };
+
         // 3. Call JMI unwrap_asset (signed by replace_authority_pda)
         m_ext::cpi::unwrap_asset(
             CpiContext::new_with_signer(
                 ctx.accounts.jmi_ext_program.to_account_info(),
                 ExtUnwrapAsset {
-                    token_authority: ctx.accounts.replace_authority_pda.to_account_info(),
-                    replace_authority: None,
+                    token_authority: ctx.accounts.fallback_replace_authority.to_account_info(),
+                    replace_authority: Some(replace_authority),
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     asset_mint: ctx.accounts.asset_mint.to_account_info(),
                     global_account: ctx.accounts.jmi_global.to_account_info(),
@@ -231,7 +238,10 @@ impl<'info> UnwrapAsset<'info> {
                     m_token_program: ctx.accounts.m_token_program.to_account_info(),
                     asset_token_program: ctx.accounts.asset_token_program.to_account_info(),
                 },
-                &[&[REPLACE_AUTHORITY_SEED, &[ctx.bumps.replace_authority_pda]]],
+                &[&[
+                    REPLACE_AUTHORITY_SEED,
+                    &[ctx.bumps.fallback_replace_authority],
+                ]],
             ),
             m_amount,
         )?;
