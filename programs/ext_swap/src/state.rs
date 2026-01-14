@@ -52,14 +52,14 @@ pub struct WhitelistedExtension {
 #[account]
 pub struct ExtensionGroup {
     pub name: [u8; 16],
-    pub valid_bridge_destinations: Vec<[u8; 32]>,
+    pub bridgeable_tokens: Vec<[u8; 32]>,
 }
 
 impl ExtensionGroup {
     pub fn size(destinations: usize) -> usize {
         8 + // discriminator
         16 + // name
-        4 + // length of valid_bridge_destinations vector
+        4 + // length of bridgeable_tokens vector
         destinations * 32 // each destination is 32 bytes
     }
 }

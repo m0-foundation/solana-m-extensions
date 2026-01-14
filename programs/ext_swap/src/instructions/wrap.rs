@@ -4,7 +4,7 @@ use m_ext::cpi::accounts::Wrap as ExtWrap;
 use m_ext::state::{EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
 
 use crate::errors::SwapError;
-use crate::state::{SwapGlobal, GLOBAL_SEED};
+use crate::state::{ExtensionGroup, SwapGlobal, GLOBAL_SEED, GROUP_SEED};
 
 #[derive(Accounts)]
 pub struct Wrap<'info> {
@@ -97,6 +97,16 @@ pub struct Wrap<'info> {
     pub to_ext_program: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
 }
+#[derive(Accounts)]
+pub struct BridgeWrap<'info> {
+    pub common: Wrap<'info>,
+
+    #[account(
+        seeds = [GROUP_SEED, extension_group.name.as_ref()],
+        bump,
+    )]
+    pub extension_group: Account<'info, ExtensionGroup>,
+}
 
 impl<'info> Wrap<'info> {
     fn validate(&self, m_principal: u64) -> Result<()> {
@@ -142,6 +152,47 @@ impl<'info> Wrap<'info> {
                 &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
             )
             .with_remaining_accounts(ctx.remaining_accounts.to_vec()),
+            m_principal,
+        )
+    }
+}
+
+impl<'info> BridgeWrap<'info> {
+    fn validate(&self, source_token: [u8; 32]) -> Result<()> {
+        let extension = self
+            .common
+            .swap_global
+            .get_extension(self.common.to_ext_program.key)?;
+
+        if extension.group_key != self.extension_group.key() {
+            return err!(SwapError::MixedExtensionGroups);
+        }
+
+        // Validate the source token
+        if !self
+            .extension_group
+            .bridgeable_tokens
+            .contains(&source_token)
+        {
+            return err!(SwapError::BridgeDestinationNotFound);
+        }
+
+        Ok(())
+    }
+
+    #[access_control(ctx.accounts.validate(source_token))]
+    pub fn handler(
+        ctx: Context<'_, '_, '_, 'info, Self>,
+        m_principal: u64,
+        source_token: [u8; 32],
+    ) -> Result<()> {
+        Wrap::handler(
+            Context::new(
+                ctx.program_id,
+                &mut ctx.accounts.common,
+                ctx.remaining_accounts,
+                ctx.bumps.common,
+            ),
             m_principal,
         )
     }

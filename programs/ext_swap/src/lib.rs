@@ -58,18 +58,22 @@ pub mod ext_swap {
         ResetWhitelists::handler(ctx)
     }
 
-    pub fn add_group_bridge_destination(
-        ctx: Context<AddGroupBridgeDestination>,
-        destination: [u8; 32],
-    ) -> Result<()> {
-        AddGroupBridgeDestination::handler(ctx, destination)
+    pub fn create_extension_group(ctx: Context<CreateExtensionGroup>, name: String) -> Result<()> {
+        CreateExtensionGroup::handler(ctx, name)
     }
 
-    pub fn remove_group_bridge_destination(
-        ctx: Context<RemoveGroupBridgeDestination>,
-        destination: [u8; 32],
+    pub fn add_group_bridgeable_token(
+        ctx: Context<AddGroupBridgeableToken>,
+        token: [u8; 32],
     ) -> Result<()> {
-        RemoveGroupBridgeDestination::handler(ctx, destination)
+        AddGroupBridgeableToken::handler(ctx, token)
+    }
+
+    pub fn remove_group_bridgeable_token(
+        ctx: Context<RemoveGroupBridgeableToken>,
+        token: [u8; 32],
+    ) -> Result<()> {
+        RemoveGroupBridgeableToken::handler(ctx, token)
     }
 
     pub fn swap<'info>(
@@ -89,5 +93,21 @@ pub mod ext_swap {
         amount: u64,
     ) -> Result<()> {
         Unwrap::handler(ctx, amount)
+    }
+
+    pub fn bridge_wrap<'info>(
+        ctx: Context<'_, '_, '_, 'info, BridgeWrap<'info>>,
+        amount: u64,
+        source_token: [u8; 32],
+    ) -> Result<()> {
+        BridgeWrap::handler(ctx, amount, source_token)
+    }
+
+    pub fn bridge_unwrap<'info>(
+        ctx: Context<'_, '_, '_, 'info, BridgeUnwrap<'info>>,
+        amount: u64,
+        destination_token: [u8; 32],
+    ) -> Result<()> {
+        BridgeUnwrap::handler(ctx, amount, destination_token)
     }
 }

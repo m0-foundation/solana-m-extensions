@@ -4,7 +4,7 @@ use m_ext::cpi::accounts::Unwrap as ExtUnwrap;
 use m_ext::state::{EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
 
 use crate::errors::SwapError;
-use crate::state::{SwapGlobal, GLOBAL_SEED};
+use crate::state::{ExtensionGroup, SwapGlobal, GLOBAL_SEED, GROUP_SEED};
 
 #[derive(Accounts)]
 pub struct Unwrap<'info> {
@@ -99,6 +99,17 @@ pub struct Unwrap<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct BridgeUnwrap<'info> {
+    pub common: Unwrap<'info>,
+
+    #[account(
+        seeds = [GROUP_SEED, extension_group.name.as_ref()],
+        bump,
+    )]
+    pub extension_group: Account<'info, ExtensionGroup>,
+}
+
 impl<'info> Unwrap<'info> {
     fn validate(&self, ext_principal: u64) -> Result<()> {
         if !self
@@ -157,6 +168,47 @@ impl<'info> Unwrap<'info> {
             )
             .with_remaining_accounts(ctx.remaining_accounts.to_vec()),
             ext_principal,
+        )
+    }
+}
+
+impl<'info> BridgeUnwrap<'info> {
+    fn validate(&self, destination_token: [u8; 32]) -> Result<()> {
+        let extension = self
+            .common
+            .swap_global
+            .get_extension(self.common.from_ext_program.key)?;
+
+        if extension.group_key != self.extension_group.key() {
+            return err!(SwapError::MixedExtensionGroups);
+        }
+
+        // Validate the destination
+        if !self
+            .extension_group
+            .bridgeable_tokens
+            .contains(&destination_token)
+        {
+            return err!(SwapError::BridgeDestinationNotFound);
+        }
+
+        Ok(())
+    }
+
+    #[access_control(ctx.accounts.validate(source_token))]
+    pub fn handler(
+        ctx: Context<'_, '_, '_, 'info, Self>,
+        m_principal: u64,
+        source_token: [u8; 32],
+    ) -> Result<()> {
+        Unwrap::handler(
+            Context::new(
+                ctx.program_id,
+                &mut ctx.accounts.common,
+                ctx.remaining_accounts,
+                ctx.bumps.common,
+            ),
+            m_principal,
         )
     }
 }

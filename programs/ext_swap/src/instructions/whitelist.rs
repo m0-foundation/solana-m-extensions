@@ -263,7 +263,7 @@ impl CreateExtensionGroup<'_> {
 
         ctx.accounts.extension_group.set_inner(ExtensionGroup {
             name: name_arr,
-            valid_bridge_destinations: vec![],
+            bridgeable_tokens: vec![],
         });
 
         Ok(())
@@ -271,7 +271,7 @@ impl CreateExtensionGroup<'_> {
 }
 
 #[derive(Accounts)]
-pub struct AddGroupBridgeDestination<'info> {
+pub struct AddGroupBridgeableToken<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
 
@@ -286,7 +286,7 @@ pub struct AddGroupBridgeDestination<'info> {
         mut,
         seeds = [GROUP_SEED, extension_group.name.as_ref()],
         bump,
-        realloc = ExtensionGroup::size(extension_group.valid_bridge_destinations.len() + 1),
+        realloc = ExtensionGroup::size(extension_group.bridgeable_tokens.len() + 1),
         realloc::payer = admin,
         realloc::zero = false,
     )]
@@ -295,32 +295,25 @@ pub struct AddGroupBridgeDestination<'info> {
     pub system_program: Program<'info, System>,
 }
 
-impl AddGroupBridgeDestination<'_> {
-    fn validate(&self, destination: &[u8; 32]) -> Result<()> {
-        if self
-            .extension_group
-            .valid_bridge_destinations
-            .contains(destination)
-        {
+impl AddGroupBridgeableToken<'_> {
+    fn validate(&self, token: &[u8; 32]) -> Result<()> {
+        if self.extension_group.bridgeable_tokens.contains(token) {
             return err!(SwapError::BridgeDestinationAlreadyExists);
         }
 
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(&destination))]
-    pub fn handler(ctx: Context<Self>, destination: [u8; 32]) -> Result<()> {
-        ctx.accounts
-            .extension_group
-            .valid_bridge_destinations
-            .push(destination);
+    #[access_control(ctx.accounts.validate(&token))]
+    pub fn handler(ctx: Context<Self>, token: [u8; 32]) -> Result<()> {
+        ctx.accounts.extension_group.bridgeable_tokens.push(token);
 
         Ok(())
     }
 }
 
 #[derive(Accounts)]
-pub struct RemoveGroupBridgeDestination<'info> {
+pub struct RemoveGroupBridgeableToken<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
 
@@ -335,7 +328,7 @@ pub struct RemoveGroupBridgeDestination<'info> {
         mut,
         seeds = [GROUP_SEED, extension_group.name.as_ref()],
         bump,
-        realloc = ExtensionGroup::size(extension_group.valid_bridge_destinations.len() - 1),
+        realloc = ExtensionGroup::size(extension_group.bridgeable_tokens.len() - 1),
         realloc::payer = admin,
         realloc::zero = false,
     )]
@@ -344,25 +337,21 @@ pub struct RemoveGroupBridgeDestination<'info> {
     pub system_program: Program<'info, System>,
 }
 
-impl RemoveGroupBridgeDestination<'_> {
-    fn validate(&self, destination: &[u8; 32]) -> Result<()> {
-        if !self
-            .extension_group
-            .valid_bridge_destinations
-            .contains(destination)
-        {
+impl RemoveGroupBridgeableToken<'_> {
+    fn validate(&self, token: &[u8; 32]) -> Result<()> {
+        if !self.extension_group.bridgeable_tokens.contains(token) {
             return err!(SwapError::BridgeDestinationNotFound);
         }
 
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(&destination))]
-    pub fn handler(ctx: Context<Self>, destination: [u8; 32]) -> Result<()> {
+    #[access_control(ctx.accounts.validate(&token))]
+    pub fn handler(ctx: Context<Self>, token: [u8; 32]) -> Result<()> {
         ctx.accounts
             .extension_group
-            .valid_bridge_destinations
-            .retain(|d| d != &destination);
+            .bridgeable_tokens
+            .retain(|d| d != &token);
 
         Ok(())
     }
