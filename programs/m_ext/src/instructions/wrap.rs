@@ -28,6 +28,7 @@ pub struct Wrap<'info> {
         mut,
         seeds = [EXT_GLOBAL_SEED],
         bump = global_account.bump,
+        has_one = m_mint @ ExtError::InvalidAccount,
         has_one = ext_mint @ ExtError::InvalidAccount,
     )]
     pub global_account: Account<'info, ExtGlobalV2>,
@@ -91,10 +92,6 @@ impl Wrap<'_> {
 
         if m_principal == 0 {
             return err!(ExtError::InvalidAmount);
-        }
-
-        if self.m_mint.key() != self.global_account.m_mint {
-            return err!(ExtError::InvalidAccount);
         }
 
         Ok(())

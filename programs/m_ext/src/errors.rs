@@ -47,4 +47,6 @@ pub enum ExtError {
     CannotCapMToken,
     #[msg("Insufficient asset backing for replacement.")]
     InsufficientAssetBacking,
+    #[msg("Asset must have 6 decimals.")]
+    InvalidDecimals,
 }

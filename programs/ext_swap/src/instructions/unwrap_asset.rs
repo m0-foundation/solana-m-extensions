@@ -1,20 +1,19 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
-use m_ext::cpi::accounts::{ReplaceAssetWithM as ExtReplaceAssetWithM, Unwrap};
+use m_ext::cpi::accounts::{UnwrapAsset as ExtUnwrapAsset, Unwrap};
 use m_ext::state::{EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
 
 use crate::{
     errors::SwapError,
-    state::{SwapGlobal, GLOBAL_SEED},
+    state::{SwapGlobal, GLOBAL_SEED, REPLACE_AUTHORITY_SEED},
 };
 
 #[derive(Accounts)]
-pub struct ReplaceAssetWithM<'info> {
+pub struct UnwrapAsset<'info> {
     pub signer: Signer<'info>,
 
     // Required if the swap program is not whitelisted on the extension
     pub unwrap_authority: Option<Signer<'info>>,
-    pub replace_authority: Option<Signer<'info>>,
 
     /*
      * Program globals
@@ -24,6 +23,13 @@ pub struct ReplaceAssetWithM<'info> {
         bump = swap_global.bump,
     )]
     pub swap_global: Box<Account<'info, SwapGlobal>>,
+
+    /// CHECK: PDA used as replace authority for JMI extensions
+    #[account(
+        seeds = [REPLACE_AUTHORITY_SEED],
+        bump,
+    )]
+    pub replace_authority_pda: AccountInfo<'info>,
 
     /// Source extension global (for unwrap)
     #[account(
@@ -35,7 +41,7 @@ pub struct ReplaceAssetWithM<'info> {
     /// CHECK: CPI will validate the global account
     pub from_global: AccountInfo<'info>,
 
-    /// JMI extension global (for replace_asset_with_m)
+    /// JMI extension global (for unwrap_asset)
     #[account(
         mut,
         seeds = [EXT_GLOBAL_SEED],
@@ -81,7 +87,7 @@ pub struct ReplaceAssetWithM<'info> {
     #[account(
         mut,
         associated_token::mint = m_mint,
-        associated_token::authority = swap_global,
+        associated_token::authority = replace_authority_pda,
         associated_token::token_program = m_token_program,
     )]
     pub swap_m_account: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -112,7 +118,7 @@ pub struct ReplaceAssetWithM<'info> {
     pub from_m_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /*
-     * Vaults for JMI extension (replace_asset_with_m)
+     * Vaults for JMI extension (unwrap_asset)
      */
     #[account(
         seeds = [M_VAULT_SEED],
@@ -153,7 +159,7 @@ pub struct ReplaceAssetWithM<'info> {
     pub system_program: Program<'info, System>,
 }
 
-impl<'info> ReplaceAssetWithM<'info> {
+impl<'info> UnwrapAsset<'info> {
     fn validate(&self, from_principal: u64) -> Result<()> {
         // Validate both extensions are whitelisted
         for ext_program in [&self.from_ext_program, &self.jmi_ext_program] {
@@ -206,19 +212,13 @@ impl<'info> ReplaceAssetWithM<'info> {
         ctx.accounts.swap_m_account.reload()?;
         let m_amount = ctx.accounts.swap_m_account.amount - m_pre_balance;
 
-        // Set swap program as authority if none provided
-        let replace_authority = match &ctx.accounts.replace_authority {
-            Some(auth) => auth.to_account_info(),
-            None => ctx.accounts.swap_global.to_account_info(),
-        };
-
-        // 3. Call JMI replace_asset_with_m
-        m_ext::cpi::replace_asset_with_m(
+        // 3. Call JMI unwrap_asset (signed by replace_authority_pda)
+        m_ext::cpi::unwrap_asset(
             CpiContext::new_with_signer(
                 ctx.accounts.jmi_ext_program.to_account_info(),
-                ExtReplaceAssetWithM {
-                    token_authority: ctx.accounts.swap_global.to_account_info(),
-                    replace_authority: Some(replace_authority),
+                ExtUnwrapAsset {
+                    token_authority: ctx.accounts.replace_authority_pda.to_account_info(),
+                    replace_authority: None,
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     asset_mint: ctx.accounts.asset_mint.to_account_info(),
                     global_account: ctx.accounts.jmi_global.to_account_info(),
@@ -231,7 +231,7 @@ impl<'info> ReplaceAssetWithM<'info> {
                     m_token_program: ctx.accounts.m_token_program.to_account_info(),
                     asset_token_program: ctx.accounts.asset_token_program.to_account_info(),
                 },
-                &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
+                &[&[REPLACE_AUTHORITY_SEED, &[ctx.bumps.replace_authority_pda]]],
             ),
             m_amount,
         )?;

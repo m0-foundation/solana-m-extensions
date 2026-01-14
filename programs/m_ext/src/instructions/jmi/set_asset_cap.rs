@@ -62,6 +62,10 @@ impl SetAssetCap<'_> {
         if self.asset_mint.key() == self.global_account.m_mint {
             return err!(ExtError::CannotCapMToken);
         }
+        // Only accept assets with 6 decimals
+        if self.asset_mint.decimals != 6 {
+            return err!(ExtError::InvalidDecimals);
+        }
         Ok(())
     }
 
@@ -69,9 +73,8 @@ impl SetAssetCap<'_> {
     pub fn handler(ctx: Context<Self>, cap: u64) -> Result<()> {
         let asset_config = &mut ctx.accounts.asset_config;
 
-        // If first initialization (all fields are zero), set decimals and bump
-        if asset_config.decimals == 0 && asset_config.cap == 0 && asset_config.balance == 0 {
-            asset_config.decimals = ctx.accounts.asset_mint.decimals;
+        // If first initialization (all fields are zero), set bump
+        if asset_config.cap == 0 && asset_config.bump == 0 {
             asset_config.bump = ctx.bumps.asset_config;
         }
 

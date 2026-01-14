@@ -4,10 +4,7 @@ use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use crate::{
     errors::ExtError,
     state::{AssetConfig, ExtGlobalV2, ASSET_CONFIG_SEED, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
-    utils::{
-        conversion::convert_to_6_decimals,
-        token::{mint_tokens, transfer_tokens_interface},
-    },
+    utils::token::{mint_tokens, transfer_tokens_interface},
 };
 
 #[derive(Accounts)]
@@ -35,7 +32,6 @@ pub struct WrapAsset<'info> {
 
     /// Asset configuration - REQUIRED for non-M assets
     #[account(
-        mut,
         seeds = [ASSET_CONFIG_SEED, global_account.key().as_ref(), asset_mint.key().as_ref()],
         bump = asset_config.bump,
     )]
@@ -128,18 +124,15 @@ impl WrapAsset<'_> {
         // 1. Validate cap not exceeded
         let new_balance = ctx
             .accounts
-            .asset_config
-            .balance
+            .vault_asset_token_account
+            .amount
             .checked_add(amount)
             .ok_or(ExtError::MathOverflow)?;
         if new_balance > ctx.accounts.asset_config.cap {
             return err!(ExtError::AssetCapExceeded);
         }
 
-        // 2. Convert asset amount to 6 decimals for ext minting and total_assets tracking
-        let amount_in_6_decimals = convert_to_6_decimals(amount, ctx.accounts.asset_config.decimals)?;
-
-        // 3. Transfer assets from user to vault
+        // 2. Transfer assets from user to vault
         transfer_tokens_interface(
             &ctx.accounts.from_asset_token_account,
             &ctx.accounts.vault_asset_token_account,
@@ -149,24 +142,23 @@ impl WrapAsset<'_> {
             &ctx.accounts.asset_token_program,
         )?;
 
-        // 4. Mint ext tokens (1:1 with 6-decimal amount)
+        // 3. Mint ext tokens (1:1 since all assets have 6 decimals)
         mint_tokens(
             &ctx.accounts.to_ext_token_account,
-            amount_in_6_decimals,
+            amount,
             &ctx.accounts.ext_mint,
             &ctx.accounts.ext_mint_authority,
             authority_seeds,
             &ctx.accounts.ext_token_program,
         )?;
 
-        // 5. Update tracking state
-        ctx.accounts.asset_config.balance = new_balance;
+        // 4. Update tracking state
         ctx.accounts.global_account.yield_config.total_assets = ctx
             .accounts
             .global_account
             .yield_config
             .total_assets
-            .checked_add(amount_in_6_decimals)
+            .checked_add(amount)
             .ok_or(ExtError::MathOverflow)?;
 
         Ok(())

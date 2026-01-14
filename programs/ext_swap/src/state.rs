@@ -3,6 +3,9 @@ use anchor_lang::prelude::*;
 #[constant]
 pub const GLOBAL_SEED: &[u8] = b"global";
 
+#[constant]
+pub const REPLACE_AUTHORITY_SEED: &[u8] = b"replace_authority";
+
 #[account]
 pub struct SwapGlobal {
     pub bump: u8,

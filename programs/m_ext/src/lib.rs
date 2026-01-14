@@ -132,8 +132,8 @@ pub mod m_ext {
     }
 
     #[cfg(feature = "jmi")]
-    pub fn replace_asset_with_m(ctx: Context<ReplaceAssetWithM>, m_amount: u64) -> Result<()> {
-        ReplaceAssetWithM::handler(ctx, m_amount)
+    pub fn unwrap_asset(ctx: Context<UnwrapAsset>, m_amount: u64) -> Result<()> {
+        UnwrapAsset::handler(ctx, m_amount)
     }
 
     #[cfg(feature = "jmi")]

@@ -5,13 +5,14 @@ use crate::{
     errors::ExtError,
     state::{AssetConfig, ExtGlobalV2, ASSET_CONFIG_SEED, EXT_GLOBAL_SEED, M_VAULT_SEED},
     utils::{
-        conversion::convert_from_6_decimals,
+        conversion::{multiplier_to_index, principal_to_amount_down},
         token::{transfer_tokens, transfer_tokens_from_program_interface},
     },
 };
+use earn::utils::conversion::get_scaled_ui_config;
 
 #[derive(Accounts)]
-pub struct ReplaceAssetWithM<'info> {
+pub struct UnwrapAsset<'info> {
     pub token_authority: Signer<'info>,
 
     /// Will be set if a whitelisted authority is signing for a user
@@ -32,7 +33,6 @@ pub struct ReplaceAssetWithM<'info> {
     pub global_account: Account<'info, ExtGlobalV2>,
 
     #[account(
-        mut,
         seeds = [ASSET_CONFIG_SEED, global_account.key().as_ref(), asset_mint.key().as_ref()],
         bump = asset_config.bump,
     )]
@@ -79,7 +79,7 @@ pub struct ReplaceAssetWithM<'info> {
     pub asset_token_program: Interface<'info, TokenInterface>,
 }
 
-impl ReplaceAssetWithM<'_> {
+impl UnwrapAsset<'_> {
     pub fn validate(&self, m_amount: u64) -> Result<()> {
         let auth = match &self.replace_authority {
             Some(auth) => auth.key,
@@ -105,11 +105,13 @@ impl ReplaceAssetWithM<'_> {
 
     #[access_control(ctx.accounts.validate(m_amount))]
     pub fn handler(ctx: Context<Self>, m_amount: u64) -> Result<()> {
-        // Convert M amount (6 decimals) to asset amount (asset decimals)
-        let asset_amount = convert_from_6_decimals(m_amount, ctx.accounts.asset_config.decimals)?;
+        // Get M index and convert principal to economic value
+        let m_scaled_ui_config = get_scaled_ui_config(&ctx.accounts.m_mint)?;
+        let m_index: u64 = multiplier_to_index(m_scaled_ui_config.new_multiplier.into())?;
+        let asset_amount: u64 = principal_to_amount_down(m_amount, m_index)?;
 
         // Validate sufficient asset backing
-        if asset_amount > ctx.accounts.asset_config.balance {
+        if asset_amount > ctx.accounts.vault_asset_token_account.amount {
             return err!(ExtError::InsufficientAssetBacking);
         }
 
@@ -135,19 +137,12 @@ impl ReplaceAssetWithM<'_> {
         )?;
 
         // Update tracking
-        ctx.accounts.asset_config.balance = ctx
-            .accounts
-            .asset_config
-            .balance
-            .checked_sub(asset_amount)
-            .ok_or(ExtError::MathUnderflow)?;
-
         ctx.accounts.global_account.yield_config.total_assets = ctx
             .accounts
             .global_account
             .yield_config
             .total_assets
-            .checked_sub(m_amount)
+            .checked_sub(asset_amount)
             .ok_or(ExtError::MathUnderflow)?;
 
         Ok(())
