@@ -15,6 +15,8 @@ import {
   AuthorityType,
   createInitializeMetadataPointerInstruction,
   createInitializeMintInstruction,
+  createInitializePausableConfigInstruction,
+  createInitializePermanentDelegateInstruction,
   createInitializeTransferHookInstruction,
   createSetAuthorityInstruction,
   ExtensionType,
@@ -137,8 +139,14 @@ async function main() {
     .option("--init-scaled-ui", "Enable scaled UI amounts", false)
     .option("--init-confidential", "Enable confidential transfers", false)
     .option("--init-transfer-hook", "Enable transfer hook", false)
+    .option("--pause-authority", "Enable pauser extension", "")
+    .option(
+      "--permanent-delegate-authority",
+      "permanent delegate extension",
+      ""
+    )
     .option("--legacy-program", "Do not use Token2022 program", false)
-    .option("-f --freeze-authority <pubkey>", "Token freeze authority")
+    .option("-f --freeze-authority <pubkey>", "Token freeze authority", "")
     .action(
       async ({
         name,
@@ -147,8 +155,10 @@ async function main() {
         initScaledUi,
         initConfidential,
         initTransferHook,
+        pauseAuthority,
         legacyProgram,
         freezeAuthority,
+        permanentDelegateAuthority,
       }) => {
         const [payer, mint, ext] = keysFromEnv([
           "PAYER_KEYPAIR",
@@ -228,13 +238,24 @@ async function main() {
         // Create the list of extensions
         let extensions: ExtensionType[] = [ExtensionType.MetadataPointer];
         if (initScaledUi) {
+          console.log("Adding scaled UI amount extension");
           extensions.push(ExtensionType.ScaledUiAmountConfig);
         }
         if (initConfidential) {
+          console.log("Adding confidential transfer extension");
           extensions.push(ExtensionType.ConfidentialTransferMint);
         }
         if (initTransferHook) {
+          console.log("Adding transfer hook extension");
           extensions.push(ExtensionType.TransferHook);
+        }
+        if (pauseAuthority) {
+          console.log("Adding pausable extension");
+          extensions.push(ExtensionType.PausableConfig);
+        }
+        if (permanentDelegateAuthority) {
+          console.log("Adding permanent delegate extension");
+          extensions.push(ExtensionType.PermanentDelegate);
         }
 
         // Create the token 2022 mint with the ScaledUiAmount extension
@@ -244,7 +265,11 @@ async function main() {
           authority,
           mint,
           mintAuthority,
-          authority, // freeze authority
+          freezeAuthority ? new PublicKey(freezeAuthority) : authority,
+          pauseAuthority ? new PublicKey(pauseAuthority) : null,
+          permanentDelegateAuthority
+            ? new PublicKey(permanentDelegateAuthority)
+            : null,
           name,
           symbol,
           uri,
@@ -1031,6 +1056,8 @@ async function createToken2022Mint(
   mint: Keypair,
   mintAuthority: PublicKey,
   freezeAuthority: PublicKey | null,
+  pauserAuthority: PublicKey | null,
+  permanentDelegateAuthority: PublicKey | null,
   tokenName: string,
   tokenSymbol: string,
   uri: string,
@@ -1103,6 +1130,24 @@ async function createToken2022Mint(
             mint.publicKey,
             authority,
             false
+          )
+        );
+        break;
+      case ExtensionType.PausableConfig:
+        instructions.push(
+          createInitializePausableConfigInstruction(
+            mint.publicKey,
+            pauserAuthority!,
+            TOKEN_2022_PROGRAM_ID
+          )
+        );
+        break;
+      case ExtensionType.PermanentDelegate:
+        instructions.push(
+          createInitializePermanentDelegateInstruction(
+            mint.publicKey,
+            permanentDelegateAuthority!,
+            TOKEN_2022_PROGRAM_ID
           )
         );
         break;
