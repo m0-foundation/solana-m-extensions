@@ -1,7 +1,11 @@
 use anchor_lang::prelude::*;
 
+use crate::errors::SwapError;
+
 #[constant]
 pub const GLOBAL_SEED: &[u8] = b"global";
+#[constant]
+pub const GROUP_SEED: &[u8] = b"group";
 
 #[account]
 pub struct SwapGlobal {
@@ -27,6 +31,14 @@ impl SwapGlobal {
             .iter()
             .any(|ext| ext.program_id.eq(program_id))
     }
+
+    pub fn get_extension(&self, program_id: &Pubkey) -> Result<WhitelistedExtension> {
+        self.whitelisted_extensions
+            .iter()
+            .find(|ext| ext.program_id.eq(program_id))
+            .cloned()
+            .ok_or_else(|| error!(SwapError::InvalidExtension))
+    }
 }
 
 #[account]
@@ -34,4 +46,20 @@ pub struct WhitelistedExtension {
     pub program_id: Pubkey,
     pub mint: Pubkey,
     pub token_program: Pubkey,
+    pub group_key: Pubkey,
+}
+
+#[account]
+pub struct ExtensionGroup {
+    pub name: [u8; 16],
+    pub valid_bridge_destinations: Vec<[u8; 32]>,
+}
+
+impl ExtensionGroup {
+    pub fn size(destinations: usize) -> usize {
+        8 + // discriminator
+        16 + // name
+        4 + // length of valid_bridge_destinations vector
+        destinations * 32 // each destination is 32 bytes
+    }
 }

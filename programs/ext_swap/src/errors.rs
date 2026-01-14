@@ -14,4 +14,12 @@ pub enum SwapError {
     NotAuthorized,
     #[msg("Invalid amount")]
     InvalidAmount,
+    #[msg("Extensions must belong to the same extension group")]
+    MixedExtensionGroups,
+    #[msg("Bridge destination already exists")]
+    BridgeDestinationAlreadyExists,
+    #[msg("Bridge destination not found")]
+    BridgeDestinationNotFound,
+    #[msg("Invalid extension group name")]
+    InvalidName,
 }

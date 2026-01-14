@@ -151,10 +151,11 @@ impl<'info> Swap<'info> {
         remaining_accounts: &[AccountInfo<'_>],
         remaining_accounts_split_idx: usize,
     ) -> Result<()> {
-        for ext_program in [&self.from_ext_program, &self.to_ext_program] {
-            if !self.swap_global.is_extension_whitelisted(ext_program.key) {
-                return err!(SwapError::InvalidExtension);
-            }
+        let from_extension = self.swap_global.get_extension(self.from_ext_program.key)?;
+        let to_extension = self.swap_global.get_extension(self.to_ext_program.key)?;
+
+        if from_extension.group_key != to_extension.group_key {
+            return err!(SwapError::MixedExtensionGroups);
         }
 
         if remaining_accounts_split_idx > remaining_accounts.len() {

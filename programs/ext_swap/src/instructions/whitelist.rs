@@ -3,7 +3,7 @@ use anchor_spl::token_interface::Mint;
 
 use crate::{
     errors::SwapError,
-    state::{SwapGlobal, WhitelistedExtension, GLOBAL_SEED},
+    state::{ExtensionGroup, SwapGlobal, WhitelistedExtension, GLOBAL_SEED, GROUP_SEED},
 };
 
 #[derive(Accounts)]
@@ -24,6 +24,12 @@ pub struct WhitelistExt<'info> {
         realloc::zero = false,
     )]
     pub swap_global: Account<'info, SwapGlobal>,
+
+    #[account(
+        seeds = [GROUP_SEED, extension_group.name.as_ref()],
+        bump,
+    )]
+    pub extension_group: Account<'info, ExtensionGroup>,
 
     pub system_program: Program<'info, System>,
 
@@ -61,6 +67,7 @@ impl WhitelistExt<'_> {
                 program_id: ctx.accounts.ext_program.key(),
                 mint: ctx.accounts.ext_mint.key(),
                 token_program: *ctx.accounts.ext_mint.to_account_info().owner,
+                group_key: ctx.accounts.extension_group.key(),
             });
 
         Ok(())
@@ -214,4 +221,157 @@ impl ResetWhitelists<'_> {
 
         Ok(())
     }
+}
+
+#[derive(Accounts)]
+#[instruction(name: String)]
+pub struct CreateExtensionGroup<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+
+    #[account(
+        has_one = admin @ SwapError::NotAuthorized,
+        seeds = [GLOBAL_SEED],
+        bump = swap_global.bump,
+    )]
+    pub swap_global: Account<'info, SwapGlobal>,
+
+    #[account(
+        init,
+        seeds = [GROUP_SEED, &to_fixed_bytes::<16>(&name)],
+        bump,
+        space = ExtensionGroup::size(0),
+        payer = admin,
+    )]
+    pub extension_group: Account<'info, ExtensionGroup>,
+
+    pub system_program: Program<'info, System>,
+}
+
+impl CreateExtensionGroup<'_> {
+    fn validate(&self, name: &String) -> Result<()> {
+        if name.bytes().len() > 16 {
+            return err!(SwapError::InvalidName);
+        }
+
+        Ok(())
+    }
+
+    #[access_control(ctx.accounts.validate(&name))]
+    pub fn handler(ctx: Context<Self>, name: String) -> Result<()> {
+        let name_arr = to_fixed_bytes(&name);
+
+        ctx.accounts.extension_group.set_inner(ExtensionGroup {
+            name: name_arr,
+            valid_bridge_destinations: vec![],
+        });
+
+        Ok(())
+    }
+}
+
+#[derive(Accounts)]
+pub struct AddGroupBridgeDestination<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+
+    #[account(
+        has_one = admin @ SwapError::NotAuthorized,
+        seeds = [GLOBAL_SEED],
+        bump = swap_global.bump,
+    )]
+    pub swap_global: Account<'info, SwapGlobal>,
+
+    #[account(
+        mut,
+        seeds = [GROUP_SEED, extension_group.name.as_ref()],
+        bump,
+        realloc = ExtensionGroup::size(extension_group.valid_bridge_destinations.len() + 1),
+        realloc::payer = admin,
+        realloc::zero = false,
+    )]
+    pub extension_group: Account<'info, ExtensionGroup>,
+
+    pub system_program: Program<'info, System>,
+}
+
+impl AddGroupBridgeDestination<'_> {
+    fn validate(&self, destination: &[u8; 32]) -> Result<()> {
+        if self
+            .extension_group
+            .valid_bridge_destinations
+            .contains(destination)
+        {
+            return err!(SwapError::BridgeDestinationAlreadyExists);
+        }
+
+        Ok(())
+    }
+
+    #[access_control(ctx.accounts.validate(&destination))]
+    pub fn handler(ctx: Context<Self>, destination: [u8; 32]) -> Result<()> {
+        ctx.accounts
+            .extension_group
+            .valid_bridge_destinations
+            .push(destination);
+
+        Ok(())
+    }
+}
+
+#[derive(Accounts)]
+pub struct RemoveGroupBridgeDestination<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+
+    #[account(
+        has_one = admin @ SwapError::NotAuthorized,
+        seeds = [GLOBAL_SEED],
+        bump = swap_global.bump,
+    )]
+    pub swap_global: Account<'info, SwapGlobal>,
+
+    #[account(
+        mut,
+        seeds = [GROUP_SEED, extension_group.name.as_ref()],
+        bump,
+        realloc = ExtensionGroup::size(extension_group.valid_bridge_destinations.len() - 1),
+        realloc::payer = admin,
+        realloc::zero = false,
+    )]
+    pub extension_group: Account<'info, ExtensionGroup>,
+
+    pub system_program: Program<'info, System>,
+}
+
+impl RemoveGroupBridgeDestination<'_> {
+    fn validate(&self, destination: &[u8; 32]) -> Result<()> {
+        if !self
+            .extension_group
+            .valid_bridge_destinations
+            .contains(destination)
+        {
+            return err!(SwapError::BridgeDestinationNotFound);
+        }
+
+        Ok(())
+    }
+
+    #[access_control(ctx.accounts.validate(&destination))]
+    pub fn handler(ctx: Context<Self>, destination: [u8; 32]) -> Result<()> {
+        ctx.accounts
+            .extension_group
+            .valid_bridge_destinations
+            .retain(|d| d != &destination);
+
+        Ok(())
+    }
+}
+
+fn to_fixed_bytes<const N: usize>(s: &str) -> [u8; N] {
+    let mut arr = [0u8; N];
+    let bytes = s.as_bytes();
+    let len = bytes.len().min(N);
+    arr[..len].copy_from_slice(&bytes[..len]);
+    arr
 }

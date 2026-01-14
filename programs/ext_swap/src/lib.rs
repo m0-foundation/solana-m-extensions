@@ -58,6 +58,20 @@ pub mod ext_swap {
         ResetWhitelists::handler(ctx)
     }
 
+    pub fn add_group_bridge_destination(
+        ctx: Context<AddGroupBridgeDestination>,
+        destination: [u8; 32],
+    ) -> Result<()> {
+        AddGroupBridgeDestination::handler(ctx, destination)
+    }
+
+    pub fn remove_group_bridge_destination(
+        ctx: Context<RemoveGroupBridgeDestination>,
+        destination: [u8; 32],
+    ) -> Result<()> {
+        RemoveGroupBridgeDestination::handler(ctx, destination)
+    }
+
     pub fn swap<'info>(
         ctx: Context<'_, '_, '_, 'info, Swap<'info>>,
         amount: u64,
