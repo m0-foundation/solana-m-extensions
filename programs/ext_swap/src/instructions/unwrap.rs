@@ -189,7 +189,7 @@ impl<'info> BridgeUnwrap<'info> {
             .bridgeable_tokens
             .contains(&destination_token)
         {
-            return err!(SwapError::BridgeDestinationNotFound);
+            return err!(SwapError::BridgeableTokenNotFound);
         }
 
         Ok(())

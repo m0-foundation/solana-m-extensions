@@ -298,7 +298,7 @@ pub struct AddGroupBridgeableToken<'info> {
 impl AddGroupBridgeableToken<'_> {
     fn validate(&self, token: &[u8; 32]) -> Result<()> {
         if self.extension_group.bridgeable_tokens.contains(token) {
-            return err!(SwapError::BridgeDestinationAlreadyExists);
+            return err!(SwapError::BridgeableTokenAlreadyExists);
         }
 
         Ok(())
@@ -340,7 +340,7 @@ pub struct RemoveGroupBridgeableToken<'info> {
 impl RemoveGroupBridgeableToken<'_> {
     fn validate(&self, token: &[u8; 32]) -> Result<()> {
         if !self.extension_group.bridgeable_tokens.contains(token) {
-            return err!(SwapError::BridgeDestinationNotFound);
+            return err!(SwapError::BridgeableTokenNotFound);
         }
 
         Ok(())

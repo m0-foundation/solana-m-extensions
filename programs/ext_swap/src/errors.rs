@@ -16,10 +16,10 @@ pub enum SwapError {
     InvalidAmount,
     #[msg("Extensions must belong to the same extension group")]
     MixedExtensionGroups,
-    #[msg("Bridge destination already exists")]
-    BridgeDestinationAlreadyExists,
-    #[msg("Bridge destination not found")]
-    BridgeDestinationNotFound,
+    #[msg("Token already exists")]
+    BridgeableTokenAlreadyExists,
+    #[msg("Token not found")]
+    BridgeableTokenNotFound,
     #[msg("Invalid extension group name")]
     InvalidName,
 }
