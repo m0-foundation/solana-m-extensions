@@ -154,6 +154,7 @@ impl<'info> Swap<'info> {
         let from_extension = self.swap_global.get_extension(self.from_ext_program.key)?;
         let to_extension = self.swap_global.get_extension(self.to_ext_program.key)?;
 
+        // Only allow swaps between extensions in the same group
         if from_extension.group_key != to_extension.group_key {
             return err!(SwapError::MixedExtensionGroups);
         }
