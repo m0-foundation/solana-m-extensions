@@ -13,20 +13,18 @@ no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
 cpi = ["no-entrypoint"]
-default = ["no-yield"]
+default = ["jmi"]
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 
 # yield features
 scaled-ui = []
 no-yield = []
+jmi = []
 crank = []
 
 # Migration feature flag
 migrate = []
 wm = ["crank", "migrate"]
-
-# JMI modifier (works WITH no-yield only)
-jmi = []
 
 [dependencies]
 anchor-lang.workspace = true

@@ -47,8 +47,8 @@ import {
   ProofElement,
 } from "../test-utils";
 import { MExt as ScaledUIExt } from "../../target/types/scaled_ui";
-import { MExt as NoYieldExt } from "../../target/types/no_yield";
 import { MExt as CrankExt } from "../../target/types/crank";
+import { MExt as JmiExt } from "../../target/types/jmi";
 import { Earn } from "../programs/earn";
 import { ExtSwap } from "../../target/types/ext_swap";
 
@@ -63,12 +63,12 @@ export enum Comparison {
 // Type definitions for accounts to make it easier to do comparisons
 
 export enum Variant {
-  NoYield = "no_yield",
   ScaledUi = "scaled_ui",
   Crank = "crank",
+  Jmi = "jmi",
 }
 
-type MExt = NoYieldExt | ScaledUIExt | CrankExt;
+type MExt = ScaledUIExt | CrankExt | JmiExt;
 
 type YieldVariant = { noYield: {} } | { scaledUi: {} } | { crank: {} };
 
@@ -111,6 +111,11 @@ export type EarnManager = {
   isActive?: boolean;
   feeBps?: BN;
   feeTokenAccount?: PublicKey | null;
+  bump?: number;
+};
+
+export type AssetConfig = {
+  cap?: BN;
   bump?: number;
 };
 
@@ -1163,7 +1168,7 @@ export class ExtensionTest<
 
     // Create the Ext token mint
     switch (this.variant) {
-      case Variant.NoYield:
+      case Variant.Jmi:
         await this.createMint(
           this.extMint,
           this.getExtMintAuthority(),
@@ -1271,7 +1276,7 @@ export class ExtensionTest<
   }
 
   public async getCurrentExtIndex(): Promise<BN> {
-    if (this.variant === Variant.NoYield) {
+    if (this.variant === Variant.Jmi) {
       return new BN(1e12);
     } else if (this.variant === Variant.ScaledUi) {
       const yieldConfig: YieldConfig<Variant.ScaledUi> = (
@@ -1289,7 +1294,7 @@ export class ExtensionTest<
   }
 
   public async getNewExtIndex(newMIndex: BN): Promise<BN> {
-    if (this.variant === Variant.NoYield) {
+    if (this.variant === Variant.Jmi) {
       return new BN(1e12);
     } else if (this.variant === Variant.ScaledUi) {
       const yieldConfig: YieldConfig<Variant.ScaledUi> = (
@@ -1328,8 +1333,8 @@ export class ExtensionTest<
 
     if (expected.yieldConfig) {
       switch (this.variant) {
-        case Variant.NoYield:
-          this.expectNoYieldYieldConfig(
+        case Variant.Jmi:
+          this.expectJmiYieldConfig(
             state.yieldConfig,
             expected.yieldConfig
           );
@@ -1403,7 +1408,7 @@ export class ExtensionTest<
     }
   }
 
-  private expectNoYieldYieldConfig<V extends Variant.NoYield>(
+  private expectJmiYieldConfig<V extends Variant.Jmi>(
     actual: YieldConfig<V>,
     expected: YieldConfig<V>
   ) {
@@ -1546,7 +1551,7 @@ export class ExtensionTest<
           .signers([this.admin])
           .rpc();
         break;
-      case Variant.NoYield:
+      case Variant.Jmi:
         // Send the transaction
         await this.ext.methods
           .initialize(wrapAuthorities)
@@ -1719,10 +1724,308 @@ export class ExtensionTest<
     return { vaultMTokenAccount, toMTokenAccount, fromExtTokenAccount };
   }
 
+  // ============================================
+  // JMI-specific helper methods
+  // ============================================
+
+  public getAssetConfigAccount(assetMint: PublicKey): PublicKey {
+    const [assetConfig] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("asset_config"),
+        this.getExtGlobalAccount().toBuffer(),
+        assetMint.toBuffer(),
+      ],
+      this.ext.programId
+    );
+    return assetConfig;
+  }
+
+  public async createAssetMint(
+    decimals: number = 6,
+    useToken2022: boolean = false
+  ): Promise<Keypair> {
+    const assetMint = new Keypair();
+    await this.createMint(
+      assetMint,
+      this.admin.publicKey,
+      this.admin.publicKey,
+      useToken2022,
+      decimals
+    );
+    return assetMint;
+  }
+
+  public async mintAssetTokens(
+    assetMint: Keypair,
+    to: PublicKey,
+    amount: BN,
+    useToken2022: boolean = false
+  ): Promise<PublicKey> {
+    const tokenAccount = await this.getATA(
+      assetMint.publicKey,
+      to,
+      useToken2022
+    );
+
+    // Create mint-to instruction
+    const mintToIx = createMintToCheckedInstruction(
+      assetMint.publicKey,
+      tokenAccount,
+      this.admin.publicKey,
+      BigInt(amount.toString()),
+      6,
+      [],
+      useToken2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
+    );
+
+    const tx = new Transaction().add(mintToIx);
+    await this.provider.sendAndConfirm!(tx, [this.admin]);
+
+    return tokenAccount;
+  }
+
+  public async setAssetCap(
+    assetMint: PublicKey,
+    cap: BN,
+    admin?: Keypair,
+    useToken2022ForAsset: boolean = false
+  ): Promise<void> {
+    if (this.variant !== Variant.Jmi) {
+      throw new Error("setAssetCap is only available for JMI variant");
+    }
+
+    const signer = admin ?? this.admin;
+    const assetTokenProgram = useToken2022ForAsset
+      ? TOKEN_2022_PROGRAM_ID
+      : TOKEN_PROGRAM_ID;
+
+    await this.ext.methods
+      .setAssetCap(cap)
+      .accountsPartial({
+        admin: signer.publicKey,
+        assetMint: assetMint,
+        assetTokenProgram: assetTokenProgram,
+      })
+      .signers([signer])
+      .rpc();
+  }
+
+  public async pause(admin?: Keypair): Promise<void> {
+    if (this.variant !== Variant.Jmi) {
+      throw new Error("pause is only available for JMI variant");
+    }
+
+    const signer = admin ?? this.admin;
+
+    await this.ext.methods
+      .pause()
+      .accounts({
+        admin: signer.publicKey,
+      })
+      .signers([signer])
+      .rpc();
+  }
+
+  public async unpause(admin?: Keypair): Promise<void> {
+    if (this.variant !== Variant.Jmi) {
+      throw new Error("unpause is only available for JMI variant");
+    }
+
+    const signer = admin ?? this.admin;
+
+    await this.ext.methods
+      .unpause()
+      .accounts({
+        admin: signer.publicKey,
+      })
+      .signers([signer])
+      .rpc();
+  }
+
+  public async wrapAsset(
+    assetMint: PublicKey,
+    amount: BN,
+    tokenAuthority: Keypair,
+    wrapAuthority?: Keypair | null,
+    useToken2022ForAsset: boolean = false
+  ): Promise<{
+    fromAssetTokenAccount: PublicKey;
+    toExtTokenAccount: PublicKey;
+    vaultAssetTokenAccount: PublicKey;
+  }> {
+    if (this.variant !== Variant.Jmi) {
+      throw new Error("wrapAsset is only available for JMI variant");
+    }
+
+    const mVault = this.getMVault();
+    const assetTokenProgram = useToken2022ForAsset
+      ? TOKEN_2022_PROGRAM_ID
+      : TOKEN_PROGRAM_ID;
+
+    const fromAssetTokenAccount = await this.getATA(
+      assetMint,
+      tokenAuthority.publicKey,
+      useToken2022ForAsset
+    );
+    const toExtTokenAccount = await this.getATA(
+      this.extMint.publicKey,
+      tokenAuthority.publicKey,
+      this.useToken2022ForExt
+    );
+    const vaultAssetTokenAccount = await this.getATA(
+      assetMint,
+      mVault,
+      useToken2022ForAsset
+    );
+
+    await this.ext.methods
+      .wrapAsset(amount)
+      .accountsPartial({
+        tokenAuthority: tokenAuthority.publicKey,
+        wrapAuthority: wrapAuthority
+          ? wrapAuthority.publicKey
+          : this.ext.programId,
+        assetMint: assetMint,
+        assetConfig: this.getAssetConfigAccount(assetMint),
+        fromAssetTokenAccount,
+        toExtTokenAccount,
+        vaultAssetTokenAccount,
+        assetTokenProgram,
+        extTokenProgram: this.extTokenProgram,
+      })
+      .signers(
+        wrapAuthority ? [tokenAuthority, wrapAuthority] : [tokenAuthority]
+      )
+      .rpc();
+
+    return { fromAssetTokenAccount, toExtTokenAccount, vaultAssetTokenAccount };
+  }
+
+  public async unwrapAsset(
+    assetMint: PublicKey,
+    mAmount: BN,
+    tokenAuthority: Keypair,
+    replaceAuthority?: Keypair | null,
+    useToken2022ForAsset: boolean = false
+  ): Promise<{
+    fromMTokenAccount: PublicKey;
+    toAssetTokenAccount: PublicKey;
+    vaultMTokenAccount: PublicKey;
+    vaultAssetTokenAccount: PublicKey;
+  }> {
+    if (this.variant !== Variant.Jmi) {
+      throw new Error("unwrapAsset is only available for JMI variant");
+    }
+
+    const mVault = this.getMVault();
+    const assetTokenProgram = useToken2022ForAsset
+      ? TOKEN_2022_PROGRAM_ID
+      : TOKEN_PROGRAM_ID;
+
+    const fromMTokenAccount = await this.getATA(
+      this.mMint.publicKey,
+      tokenAuthority.publicKey
+    );
+    const toAssetTokenAccount = await this.getATA(
+      assetMint,
+      tokenAuthority.publicKey,
+      useToken2022ForAsset
+    );
+    const vaultMTokenAccount = await this.getATA(this.mMint.publicKey, mVault);
+    const vaultAssetTokenAccount = await this.getATA(
+      assetMint,
+      mVault,
+      useToken2022ForAsset
+    );
+
+    await this.ext.methods
+      .unwrapAsset(mAmount)
+      .accountsPartial({
+        tokenAuthority: tokenAuthority.publicKey,
+        replaceAuthority: replaceAuthority
+          ? replaceAuthority.publicKey
+          : this.ext.programId, // effectively a no-op if not replacing
+        mMint: this.mMint.publicKey,
+        assetMint: assetMint,
+        assetConfig: this.getAssetConfigAccount(assetMint),
+        fromMTokenAccount,
+        toAssetTokenAccount,
+        vaultMTokenAccount,
+        vaultAssetTokenAccount,
+        assetTokenProgram,
+        mTokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .signers(
+        replaceAuthority
+          ? [tokenAuthority, replaceAuthority]
+          : [tokenAuthority]
+      )
+      .rpc();
+
+    return {
+      fromMTokenAccount,
+      toAssetTokenAccount,
+      vaultMTokenAccount,
+      vaultAssetTokenAccount,
+    };
+  }
+
+  public async setupJmiAsset(
+    cap: BN,
+    decimals: number = 6,
+    useToken2022ForAsset: boolean = false
+  ): Promise<{ assetMint: Keypair; vaultAssetTokenAccount: PublicKey }> {
+    if (this.variant !== Variant.Jmi) {
+      throw new Error("setupJmiAsset is only available for JMI variant");
+    }
+
+    // Create asset mint
+    const assetMint = await this.createAssetMint(decimals, useToken2022ForAsset);
+
+    // Set asset cap (this also creates the vault ATA)
+    await this.setAssetCap(assetMint.publicKey, cap, undefined, useToken2022ForAsset);
+
+    // Get the vault ATA
+    const vaultAssetTokenAccount = await this.getATA(
+      assetMint.publicKey,
+      this.getMVault(),
+      useToken2022ForAsset
+    );
+
+    return { assetMint, vaultAssetTokenAccount };
+  }
+
+  public async expectAssetConfigState(
+    assetMint: PublicKey,
+    expected: AssetConfig
+  ): Promise<void> {
+    if (this.variant !== Variant.Jmi) {
+      throw new Error(
+        "expectAssetConfigState is only available for JMI variant"
+      );
+    }
+
+    const assetConfigAccount = this.getAssetConfigAccount(assetMint);
+    const assetConfig = await this.ext.account.assetConfig.fetch(
+      assetConfigAccount
+    );
+
+    if (expected.cap !== undefined) {
+      expect(assetConfig.cap.toString()).toBe(expected.cap.toString());
+    }
+    if (expected.bump !== undefined) {
+      expect(assetConfig.bump).toBe(expected.bump);
+    }
+  }
+
+  // ============================================
+  // End JMI-specific helper methods
+  // ============================================
+
   public async sync(): Promise<PublicKey> {
     switch (this.variant) {
-      case Variant.NoYield:
-        throw new Error("sync is not supported for No Yield variant");
+      case Variant.Jmi:
+        throw new Error("sync is not supported for JMI variant");
         break;
       case Variant.ScaledUi:
         // Sync is open to any address
@@ -2042,7 +2345,7 @@ export class ExtensionSwapTest extends ExtensionTestBase {
     super(addresses);
 
     // Load and add extension programs
-    const NO_YIELD_IDL = require("../../target/idl/no_yield.json");
+    const JMI_IDL = require("../../target/idl/jmi.json");
     const SCALED_UI_IDL = require("../../target/idl/scaled_ui.json");
 
     // Add the test extension programs to SVM
@@ -2059,9 +2362,9 @@ export class ExtensionSwapTest extends ExtensionTestBase {
       "tests/programs/ext_c.so"
     );
 
-    // Create program instances
+    // Create program instances (using JMI IDL for no-yield variants since JMI is a superset)
     this.extensionPrograms.extA = new Program<MExt>(
-      { ...NO_YIELD_IDL, address: ExtensionSwapTest.EXT_PROGRAM_IDS.extA },
+      { ...JMI_IDL, address: ExtensionSwapTest.EXT_PROGRAM_IDS.extA },
       this.provider
     );
     this.extensionPrograms.extB = new Program<MExt>(
@@ -2069,7 +2372,7 @@ export class ExtensionSwapTest extends ExtensionTestBase {
       this.provider
     );
     this.extensionPrograms.extC = new Program<MExt>(
-      { ...NO_YIELD_IDL, address: ExtensionSwapTest.EXT_PROGRAM_IDS.extC },
+      { ...JMI_IDL, address: ExtensionSwapTest.EXT_PROGRAM_IDS.extC },
       this.provider
     );
 

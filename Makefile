@@ -4,15 +4,15 @@ build-programs:
 	@mv target/deploy/m_ext.so target/deploy/scaled_ui.so
 	@mv target/idl/m_ext.json target/idl/scaled_ui.json
 	@mv target/types/m_ext.ts target/types/scaled_ui.ts
-	anchor build -p m_ext -- --features no-yield --no-default-features
-	@mv target/deploy/m_ext.so target/deploy/no_yield.so
-	@mv target/idl/m_ext.json target/idl/no_yield.json
-	@mv target/types/m_ext.ts target/types/no_yield.ts
+	anchor build -p m_ext -- --features jmi --no-default-features
+	@mv target/deploy/m_ext.so target/deploy/jmi.so
+	@mv target/idl/m_ext.json target/idl/jmi.json
+	@mv target/types/m_ext.ts target/types/jmi.ts
 	anchor build -p m_ext -- --features crank --no-default-features
 	@mv target/deploy/m_ext.so target/deploy/crank.so
 	@mv target/idl/m_ext.json target/idl/crank.json
 	@mv target/types/m_ext.ts target/types/crank.ts
-	anchor build -p m_ext -- --features no-yield,migrate --no-default-features
+	anchor build -p m_ext -- --features no-yield,jmi,migrate --no-default-features
 	@mv target/idl/m_ext.json target/idl/migrate.json
 	@mv target/types/m_ext.ts target/types/migrate.ts
 

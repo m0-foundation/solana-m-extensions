@@ -27,7 +27,7 @@ declare_id!("3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da");
 const _: () = {
     let yield_features = {
         cfg!(feature = "scaled-ui") as u32
-            + cfg!(feature = "no-yield") as u32
+            + cfg!(feature = "jmi") as u32
             + cfg!(feature = "crank") as u32
     };
 
@@ -98,7 +98,7 @@ pub mod m_ext {
         RemoveWrapAuthority::handler(ctx, wrap_authority)
     }
 
-    #[cfg(any(feature = "scaled-ui", feature = "no-yield"))]
+    #[cfg(any(feature = "scaled-ui", feature = "no-yield", feature = "jmi"))]
     pub fn claim_fees(ctx: Context<ClaimFees>) -> Result<()> {
         ClaimFees::handler(ctx)
     }

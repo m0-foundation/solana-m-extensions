@@ -12,8 +12,7 @@ use crate::{
 pub struct UnwrapAsset<'info> {
     pub signer: Signer<'info>,
 
-    // Required if the swap program is not whitelisted on the extension
-    pub unwrap_authority: Option<Signer<'info>>,
+    // Required if the fallback_replace_authority is not whitelisted on the extension
     pub replace_authority: Option<Signer<'info>>,
 
     /// CHECK: PDA used as replace authority for JMI extensions
@@ -180,10 +179,10 @@ impl<'info> UnwrapAsset<'info> {
     pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, from_principal: u64) -> Result<()> {
         let m_pre_balance = ctx.accounts.swap_m_account.amount;
 
-        // Set swap program as authority if none provided
-        let unwrap_authority = match &ctx.accounts.unwrap_authority {
+        // Set replace authority as authority if none provided
+        let replace_authority = match &ctx.accounts.replace_authority {
             Some(auth) => auth.to_account_info(),
-            None => ctx.accounts.swap_global.to_account_info(),
+            None => ctx.accounts.fallback_replace_authority.to_account_info(),
         };
 
         // 1. Unwrap source extension → M (to swap_m_account)
@@ -192,7 +191,7 @@ impl<'info> UnwrapAsset<'info> {
                 ctx.accounts.from_ext_program.to_account_info(),
                 Unwrap {
                     token_authority: ctx.accounts.signer.to_account_info(),
-                    unwrap_authority: Some(unwrap_authority),
+                    unwrap_authority: Some(replace_authority.clone()),
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.from_mint.to_account_info(),
                     global_account: ctx.accounts.from_global.to_account_info(),
@@ -204,7 +203,10 @@ impl<'info> UnwrapAsset<'info> {
                     m_token_program: ctx.accounts.m_token_program.to_account_info(),
                     ext_token_program: ctx.accounts.from_token_program.to_account_info(),
                 },
-                &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
+                &[&[
+                    REPLACE_AUTHORITY_SEED,
+                    &[ctx.bumps.fallback_replace_authority],
+                ]],
             ),
             from_principal,
         )?;
@@ -212,12 +214,6 @@ impl<'info> UnwrapAsset<'info> {
         // 2. Calculate M received
         ctx.accounts.swap_m_account.reload()?;
         let m_amount = ctx.accounts.swap_m_account.amount - m_pre_balance;
-
-        // Set replace authority as authority if none provided
-        let replace_authority = match &ctx.accounts.replace_authority {
-            Some(auth) => auth.to_account_info(),
-            None => ctx.accounts.fallback_replace_authority.to_account_info(),
-        };
 
         // 3. Call JMI unwrap_asset (signed by replace_authority_pda)
         m_ext::cpi::unwrap_asset(

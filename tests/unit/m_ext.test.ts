@@ -24,11 +24,11 @@ const initialIndex = new BN(1_100_000_000_000); // 1.1 with 12 decimals
 const ONE = new BN(1_000_000_000_000); // 1.0 with 12 decimals
 
 const VARIANTS = [
-  [Variant.NoYield, TOKEN_2022_PROGRAM_ID],
-  [Variant.NoYield, TOKEN_PROGRAM_ID],
   [Variant.ScaledUi, TOKEN_2022_PROGRAM_ID],
   [Variant.Crank, TOKEN_PROGRAM_ID],
   [Variant.Crank, TOKEN_2022_PROGRAM_ID],
+  [Variant.Jmi, TOKEN_2022_PROGRAM_ID],
+  [Variant.Jmi, TOKEN_PROGRAM_ID],
 ];
 
 // Implement test cases for all variants
@@ -90,7 +90,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
           // Attempt to send the transaction
           await $.expectSystemError(
-            (variant === Variant.NoYield
+            (variant === Variant.Jmi
               ? $.ext.methods.initialize([])
               : variant === Variant.ScaledUi
               ? $.ext.methods.initialize([], new BN(0))
@@ -122,7 +122,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
           // Attempt to send the transaction
           await $.expectAnchorError(
-            (variant === Variant.NoYield
+            (variant === Variant.Jmi
               ? $.ext.methods.initialize([])
               : variant === Variant.ScaledUi
               ? $.ext.methods.initialize([], new BN(0))
@@ -155,7 +155,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
           // Attempt to send the transaction
           await $.expectAnchorError(
-            (variant === Variant.NoYield
+            (variant === Variant.Jmi
               ? $.ext.methods.initialize([])
               : variant === Variant.ScaledUi
               ? $.ext.methods.initialize([], new BN(0))
@@ -183,7 +183,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // Attempt to send transaction
           // Expect error (could be one of several "SeedsConstraint", "AccountOwnedByWrongProgram", "AccountNotInitialized")
           await $.expectSystemError(
-            (variant === Variant.NoYield
+            (variant === Variant.Jmi
               ? $.ext.methods.initialize([])
               : variant === Variant.ScaledUi
               ? $.ext.methods.initialize([], new BN(0))
@@ -211,7 +211,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // Attempt to send transaction
           // Expect error (could be one of several "SeedsConstraint", "AccountOwnedByWrongProgram", "AccountNotInitialized")
           await $.expectSystemError(
-            (variant === Variant.NoYield
+            (variant === Variant.Jmi
               ? $.ext.methods.initialize([])
               : variant === Variant.ScaledUi
               ? $.ext.methods.initialize([], new BN(0))
@@ -244,7 +244,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
           // Attempt to send the transaction
           await $.expectAnchorError(
-            (variant === Variant.NoYield
+            (variant === Variant.Jmi
               ? $.ext.methods.initialize([])
               : variant === Variant.ScaledUi
               ? $.ext.methods.initialize([], new BN(0))
@@ -271,7 +271,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
           // Attempt to send transaction
           await $.expectAnchorError(
-            (variant === Variant.NoYield
+            (variant === Variant.Jmi
               ? $.ext.methods.initialize(wrapAuthorities)
               : variant === Variant.ScaledUi
               ? $.ext.methods.initialize(wrapAuthorities, new BN(0))
@@ -302,7 +302,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
         //   [X] the bumps are set correctly
         //   [X] the wrap authorities are set correctly
 
-        if (variant === Variant.NoYield) {
+        if (variant === Variant.Jmi) {
           // given accounts and params are correct
           // it creates the global account
           // it sets the admin to the signer
@@ -542,7 +542,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
 
           const feeBps =
-            variant === Variant.NoYield ? new BN(0) : new BN(randomInt(10000));
+            variant === Variant.Jmi ? new BN(0) : new BN(randomInt(10000));
           // Initialize the extension program
           await $.initializeExt(wrapAuthorities, feeBps);
 
@@ -725,7 +725,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
 
           const feeBps =
-            variant === Variant.NoYield ? new BN(0) : new BN(randomInt(10000));
+            variant === Variant.Jmi ? new BN(0) : new BN(randomInt(10000));
           // Initialize the extension program
           await $.initializeExt(wrapAuthorities, feeBps);
         });
@@ -813,7 +813,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
 
           const feeBps =
-            variant === Variant.NoYield ? new BN(0) : new BN(randomInt(10000));
+            variant === Variant.Jmi ? new BN(0) : new BN(randomInt(10000));
           // Initialize the extension program
           await $.initializeExt(wrapAuthorities, feeBps);
         });
@@ -1378,7 +1378,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           //       [X] it transfers the excess collateral to the recipient token account
           //     [X] given the m vault does not have excess collateral
           //       [X] it completes but doesn't transfer any tokens
-          if (variant === Variant.NoYield) {
+          if (variant === Variant.Jmi) {
             // given all accounts are correct
             // given the m vault has excess collateral
             // it transfers the excess collateral to the recipient token account
@@ -7735,5 +7735,851 @@ for (const [variant, tokenProgramId] of VARIANTS) {
         });
       });
     }
-  });
+
+    // JMI-specific tests (JMI variant only)
+    if (variant === Variant.Jmi) {
+      describe("JMI instruction tests", () => {
+        let wrapAuthorities: PublicKey[];
+
+        beforeEach(async () => {
+          wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
+          await $.initializeExt(wrapAuthorities);
+        });
+
+        describe("set_asset_cap unit tests", () => {
+          // set_asset_cap test cases
+          // [ ] given the admin does not sign the transaction
+          //   [ ] it reverts with a NotAuthorized error
+          // [ ] given the admin signs the transaction
+          //   [ ] given the global account is not the global PDA
+          //     [ ] it reverts with a ConstraintSeeds error
+          //   [ ] given the vault authority is not the m_vault PDA
+          //     [ ] it reverts with a ConstraintSeeds error
+          //   [ ] given the asset mint is the M token
+          //     [ ] it reverts with a CannotCapMToken error
+          //   [ ] given the asset mint does not have 6 decimals
+          //     [ ] it reverts with an InvalidDecimals error
+          //   [ ] given valid inputs
+          //     [ ] it creates the asset_config account if it doesn't exist
+          //     [ ] it creates the vault asset ATA if it doesn't exist
+          //     [ ] it sets the cap on the asset_config
+          //     [ ] it can update an existing cap to a new value
+          //     [ ] it can set the cap to 0 to disable the asset
+
+          let assetMint: Keypair;
+
+          beforeEach(async () => {
+            assetMint = await $.createAssetMint(6);
+          });
+
+          // given the admin does not sign the transaction
+          // it reverts with a NotAuthorized error
+          test("Non-admin tries to set asset cap - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.nonAdmin.publicKey,
+                  assetMint: assetMint.publicKey,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the asset mint is the M token
+          // it reverts with a CannotCapMToken error
+          test("Asset mint is M token - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: $.mMint.publicKey,
+                  assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "CannotCapMToken"
+            );
+          });
+
+          // given the asset mint does not have 6 decimals
+          // it reverts with an InvalidDecimals error
+          test("Asset mint with wrong decimals - reverts", async () => {
+            const wrongDecimalsMint = await $.createAssetMint(9);
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: wrongDecimalsMint.publicKey,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "InvalidDecimals"
+            );
+          });
+
+          // given valid inputs
+          // it creates the asset_config account and sets the cap
+          test("Set asset cap - success", async () => {
+            const cap = new BN(1_000_000_000);
+            await $.setAssetCap(assetMint.publicKey, cap);
+
+            await $.expectAssetConfigState(assetMint.publicKey, {
+              cap: cap,
+            });
+          });
+
+          // it can update an existing cap to a new value
+          test("Update existing asset cap - success", async () => {
+            const initialCap = new BN(1_000_000_000);
+            await $.setAssetCap(assetMint.publicKey, initialCap);
+
+            const newCap = new BN(2_000_000_000);
+            await $.setAssetCap(assetMint.publicKey, newCap);
+
+            await $.expectAssetConfigState(assetMint.publicKey, {
+              cap: newCap,
+            });
+          });
+
+          // it can set the cap to 0 to disable the asset
+          test("Set cap to zero to disable asset - success", async () => {
+            const cap = new BN(1_000_000_000);
+            await $.setAssetCap(assetMint.publicKey, cap);
+
+            await $.setAssetCap(assetMint.publicKey, new BN(0));
+
+            await $.expectAssetConfigState(assetMint.publicKey, {
+              cap: new BN(0),
+            });
+          });
+        });
+
+        describe("pause unit tests", () => {
+          // pause test cases
+          // [ ] given the admin does not sign the transaction
+          //   [ ] it reverts with a NotAuthorized error
+          // [ ] given the admin signs the transaction
+          //   [ ] given the global account is not the global PDA
+          //     [ ] it reverts with a ConstraintSeeds error
+          //   [ ] given valid inputs
+          //     [ ] it sets is_paused to true on the global account
+
+          // given the admin does not sign the transaction
+          // it reverts with a NotAuthorized error
+          test("Non-admin tries to pause - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .pause()
+                .accounts({
+                  admin: $.nonAdmin.publicKey,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given valid inputs
+          // it sets is_paused to true on the global account
+          test("Admin pauses contract - success", async () => {
+            await $.pause();
+
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                isPaused: true,
+              },
+            });
+          });
+        });
+
+        describe("unpause unit tests", () => {
+          // unpause test cases
+          // [ ] given the admin does not sign the transaction
+          //   [ ] it reverts with a NotAuthorized error
+          // [ ] given the admin signs the transaction
+          //   [ ] given the global account is not the global PDA
+          //     [ ] it reverts with a ConstraintSeeds error
+          //   [ ] given valid inputs
+          //     [ ] it sets is_paused to false on the global account
+          //     [ ] it can be called when already unpaused (idempotent)
+
+          // given the admin does not sign the transaction
+          // it reverts with a NotAuthorized error
+          test("Non-admin tries to unpause - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .unpause()
+                .accounts({
+                  admin: $.nonAdmin.publicKey,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given valid inputs
+          // it sets is_paused to false on the global account
+          test("Admin unpauses contract - success", async () => {
+            await $.pause();
+
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                isPaused: true,
+              },
+            });
+
+            await $.unpause();
+
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                isPaused: false,
+              },
+            });
+          });
+
+          // it can be called when already unpaused (idempotent)
+          test("Unpause when already unpaused - success (idempotent)", async () => {
+            await $.unpause();
+
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                isPaused: false,
+              },
+            });
+          });
+        });
+
+        describe("wrap_asset unit tests", () => {
+          // wrap_asset test cases
+          // [ ] given the caller is not authorized (not in wrap_authorities)
+          //   [ ] it reverts with a NotAuthorized error
+          // [ ] given an authorized caller signs the transaction
+          //   [ ] given the amount is 0
+          //     [ ] it reverts with an InvalidAmount error
+          //   [ ] given the contract is paused
+          //     [ ] it reverts with a Paused error
+          //   [ ] given the asset mint is the M token
+          //     [ ] it reverts with an AssetNotAllowed error
+          //   [ ] given the asset config cap is 0 (disabled)
+          //     [ ] it reverts with an AssetNotAllowed error
+          //   [ ] given the asset config does not exist for this asset
+          //     [ ] it reverts with a ConstraintSeeds error
+          //   [ ] given the wrap would exceed the asset cap
+          //     [ ] it reverts with an AssetCapExceeded error
+          //   [ ] given valid inputs
+          //     [ ] it transfers assets from user to vault
+          //     [ ] it mints ext tokens 1:1 to the user
+          //     [ ] it increments total_assets on the global account
+
+          let assetMint: Keypair;
+          let fromAssetTokenAccount: PublicKey;
+          let toExtTokenAccount: PublicKey;
+
+          const assetCap = new BN(1_000_000_000); // 1000 tokens
+          const mintAmount = new BN(100_000_000); // 100 tokens
+
+          beforeEach(async () => {
+            // Setup asset with cap
+            const setup = await $.setupJmiAsset(assetCap);
+            assetMint = setup.assetMint;
+
+            // Mint assets to wrap authority
+            await $.mintAssetTokens(assetMint, $.wrapAuthority.publicKey, mintAmount);
+
+            // fromAssetTokenAccount = await $.getATA(
+            //   assetMint.publicKey,
+            //   $.wrapAuthority.publicKey,
+            //   false
+            // );
+
+            // toExtTokenAccount = await $.getATA(
+            //   $.extMint.publicKey,
+            //   $.wrapAuthority.publicKey,
+            //   $.useToken2022ForExt
+            // );
+
+            fromAssetTokenAccount = await $.getATA(
+              assetMint.publicKey,
+              $.nonWrapAuthority.publicKey,
+              false
+            );
+
+            toExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.nonWrapAuthority.publicKey,
+              $.useToken2022ForExt
+            );
+
+          });
+
+          // given the caller is not authorized (not in wrap_authorities)
+          // it reverts with a NotAuthorized error
+          test("Non-authorized caller tries to wrap asset - reverts", async () => {
+
+
+            // Mint some assets to the non-wrap authority
+            await $.mintAssetTokens(assetMint, $.nonWrapAuthority.publicKey, mintAmount);
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrapAsset(new BN(10_000_000))
+                .accountsPartial({
+                  tokenAuthority: $.nonWrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromAssetTokenAccount,
+                  toExtTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.nonWrapAuthority])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the amount is 0
+          // it reverts with an InvalidAmount error
+          test("Wrap asset with zero amount - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrapAsset(new BN(0))
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromAssetTokenAccount,
+                  toExtTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "InvalidAmount"
+            );
+          });
+
+          // given the contract is paused
+          // it reverts with a Paused error
+          test("Wrap asset when paused - reverts", async () => {
+            await $.pause();
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrapAsset(new BN(10_000_000))
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromAssetTokenAccount,
+                  toExtTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "Paused"
+            );
+          });
+
+          // given the asset config cap is 0 (disabled)
+          // it reverts with an AssetNotAllowed error
+          test("Wrap asset with zero cap - reverts", async () => {
+            // Disable the asset
+            await $.setAssetCap(assetMint.publicKey, new BN(0));
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrapAsset(new BN(10_000_000))
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromAssetTokenAccount,
+                  toExtTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "AssetNotAllowed"
+            );
+          });
+
+          // given the wrap would exceed the asset cap
+          // it reverts with an AssetCapExceeded error
+          test("Wrap asset exceeding cap - reverts", async () => {
+            // Set a small cap
+            await $.setAssetCap(assetMint.publicKey, new BN(10_000_000));
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrapAsset(new BN(20_000_000)) // Exceeds cap
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromAssetTokenAccount,
+                  toExtTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "AssetCapExceeded"
+            );
+          });
+
+          // given valid inputs
+          // it transfers assets from user to vault and mints ext tokens 1:1
+          test("Wrap asset - success", async () => {
+            const wrapAmount = new BN(10_000_000);
+
+            // Get initial balances
+            const userAssetAccount = await $.getATA(
+              assetMint.publicKey,
+              $.wrapAuthority.publicKey,
+              false
+            );
+            const userExtAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.wrapAuthority.publicKey,
+              $.useToken2022ForExt
+            );
+            const vaultAssetAccount = await $.getATA(
+              assetMint.publicKey,
+              $.getMVault(),
+              false
+            );
+
+            const initialUserAssetBalance = await $.getTokenBalance(userAssetAccount, false);
+            const initialUserExtBalance = await $.getTokenBalance(userExtAccount, $.useToken2022ForExt);
+            const initialVaultAssetBalance = await $.getTokenBalance(vaultAssetAccount, false);
+
+            // Wrap assets
+            await $.wrapAsset(assetMint.publicKey, wrapAmount, $.wrapAuthority);
+
+            // Verify balances
+            await $.expectTokenBalance(
+              userAssetAccount,
+              initialUserAssetBalance.sub(wrapAmount),
+              Comparison.Equal,
+              undefined,
+              false
+            );
+            await $.expectTokenBalance(
+              userExtAccount,
+              initialUserExtBalance.add(wrapAmount),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
+            );
+            await $.expectTokenBalance(
+              vaultAssetAccount,
+              initialVaultAssetBalance.add(wrapAmount),
+              Comparison.Equal,
+              undefined,
+              false
+            );
+
+            // Verify total_assets updated
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                totalAssets: wrapAmount,
+              },
+            });
+          });
+
+          // Multiple wraps accumulate total_assets
+          test("Multiple wrap assets - success", async () => {
+            const wrapAmount1 = new BN(10_000_000);
+            const wrapAmount2 = new BN(20_000_000);
+
+            await $.wrapAsset(assetMint.publicKey, wrapAmount1, $.wrapAuthority);
+            await $.wrapAsset(assetMint.publicKey, wrapAmount2, $.wrapAuthority);
+
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                totalAssets: wrapAmount1.add(wrapAmount2),
+              },
+            });
+          });
+        });
+
+        describe("unwrap_asset unit tests", () => {
+          // unwrap_asset test cases
+          // [ ] given the caller is not authorized (not in wrap_authorities)
+          //   [ ] it reverts with a NotAuthorized error
+          // [ ] given an authorized caller signs the transaction
+          //   [ ] given the m_amount is 0
+          //     [ ] it reverts with an InvalidAmount error
+          //   [ ] given the contract is paused
+          //     [ ] it reverts with a Paused error
+          //   [ ] given the vault has insufficient asset backing for the conversion
+          //     [ ] it reverts with an InsufficientAssetBacking error
+          //   [ ] given valid inputs
+          //     [ ] it converts M amount to asset amount using M index (rounds down)
+          //     [ ] it transfers M from user to vault
+          //     [ ] it transfers asset from vault to user
+          //     [ ] it decrements total_assets on the global account
+
+          let assetMint: Keypair;
+          const assetCap = new BN(1_000_000_000); // 1000 tokens
+          const mintAmount = new BN(100_000_000); // 100 tokens
+          const wrapAmount = new BN(50_000_000); // 50 tokens
+
+          beforeEach(async () => {
+            // Setup asset with cap
+            const setup = await $.setupJmiAsset(assetCap);
+            assetMint = setup.assetMint;
+
+            // Add the wrap authority and as M earners to have thawed token accounts
+            await $.addMEarner($.wrapAuthority.publicKey);
+            await $.addMEarner($.nonWrapAuthority.publicKey);
+
+            // Mint assets and wrap some to create initial state
+            await $.mintAssetTokens(assetMint, $.wrapAuthority.publicKey, mintAmount);
+            await $.wrapAsset(assetMint.publicKey, wrapAmount, $.wrapAuthority);
+
+            // Mint M to wrap authority for unwrap_asset
+            await $.mintM($.wrapAuthority.publicKey, mintAmount);
+          });
+
+          // given the caller is not authorized (not in wrap_authorities)
+          // it reverts with a NotAuthorized error
+          test("Non-authorized caller tries to unwrap asset - reverts", async () => {
+            // Mint M to non-wrap authority
+            await $.mintM($.nonWrapAuthority.publicKey, mintAmount);
+
+            // Create asset token account for non-wrap authority
+            await $.getATA(assetMint.publicKey, $.nonWrapAuthority.publicKey, false);
+
+            let fromMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.nonWrapAuthority.publicKey,
+            );
+
+            let toAssetTokenAccount = await $.getATA(
+              assetMint.publicKey,
+              $.nonWrapAuthority.publicKey,
+              false
+            );
+
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .unwrapAsset(new BN(10_000_000))
+                .accountsPartial({
+                  tokenAuthority: $.nonWrapAuthority.publicKey,
+                  replaceAuthority: $.ext.programId,
+                  mMint: $.mMint.publicKey,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromMTokenAccount,
+                  toAssetTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.nonWrapAuthority])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the m_amount is 0
+          // it reverts with an InvalidAmount error
+          test("Unwrap asset with zero M amount - reverts", async () => {
+
+            let fromMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.wrapAuthority.publicKey,
+            );
+
+            let toAssetTokenAccount = await $.getATA(
+              assetMint.publicKey,
+              $.wrapAuthority.publicKey,
+              false
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .unwrapAsset(new BN(0))
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  replaceAuthority: $.ext.programId,
+                  mMint: $.mMint.publicKey,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromMTokenAccount,
+                  toAssetTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "InvalidAmount"
+            );
+          });
+
+          // given the contract is paused
+          // it reverts with a Paused error
+          test("Unwrap asset when paused - reverts", async () => {
+            let fromMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.wrapAuthority.publicKey,
+            );
+
+            let toAssetTokenAccount = await $.getATA(
+              assetMint.publicKey,
+              $.wrapAuthority.publicKey,
+              false
+            );
+            
+            await $.pause();
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .unwrapAsset(new BN(10_000_000))
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  replaceAuthority: $.ext.programId,
+                  mMint: $.mMint.publicKey,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromMTokenAccount,
+                  toAssetTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "Paused"
+            );
+          });
+
+          // given the vault has insufficient asset backing for the conversion
+          // it reverts with an InsufficientAssetBacking error
+          test("Unwrap asset with insufficient backing - reverts", async () => {
+            // Try to unwrap more than the vault has
+            const largeAmount = wrapAmount.mul(new BN(10)); // Way more than vault has
+
+            let fromMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.wrapAuthority.publicKey,
+            );
+
+            let toAssetTokenAccount = await $.getATA(
+              assetMint.publicKey,
+              $.wrapAuthority.publicKey,
+              false
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .unwrapAsset(largeAmount)
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  replaceAuthority: $.ext.programId,
+                  mMint: $.mMint.publicKey,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromMTokenAccount,
+                  toAssetTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "InsufficientAssetBacking"
+            );
+          });
+
+          // given valid inputs - success
+          test("Unwrap asset - success", async () => {
+            // Use a smaller amount that fits within the vault's backing
+            // M index is ~1.1, so mAmount of 10M should give ~9M assets
+            const mAmount = new BN(10_000_000);
+
+            // Get initial balances
+            const userMAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.wrapAuthority.publicKey
+            );
+            const userAssetAccount = await $.getATA(
+              assetMint.publicKey,
+              $.wrapAuthority.publicKey,
+              false
+            );
+            const vaultMAccount = await $.getATA($.mMint.publicKey, $.getMVault());
+            const vaultAssetAccount = await $.getATA(
+              assetMint.publicKey,
+              $.getMVault(),
+              false
+            );
+
+            const initialUserMBalance = await $.getTokenBalance(userMAccount);
+            const initialUserAssetBalance = await $.getTokenBalance(userAssetAccount, false);
+            const initialVaultMBalance = await $.getTokenBalance(vaultMAccount);
+            const initialVaultAssetBalance = await $.getTokenBalance(vaultAssetAccount, false);
+            const globalAccount = await $.ext.account.extGlobalV2.fetch($.getExtGlobalAccount());
+            const initialTotalAssets = (globalAccount.yieldConfig as any).totalAssets as BN;
+
+            // Unwrap assets
+            await $.unwrapAsset(assetMint.publicKey, mAmount, $.wrapAuthority);
+
+            // Verify M transferred to vault
+            await $.expectTokenBalance(
+              userMAccount,
+              initialUserMBalance.sub(mAmount)
+            );
+            await $.expectTokenBalance(
+              vaultMAccount,
+              initialVaultMBalance.add(mAmount)
+            );
+
+            // Verify assets transferred from vault (amount depends on M index)
+            const userAssetBalanceAfter = await $.getTokenBalance(userAssetAccount, false);
+            const vaultAssetBalanceAfter = await $.getTokenBalance(vaultAssetAccount, false);
+            const assetTransferred = initialVaultAssetBalance.sub(vaultAssetBalanceAfter);
+
+            expect(assetTransferred.gt(new BN(0))).toBe(true);
+            expect(userAssetBalanceAfter.sub(initialUserAssetBalance).toString()).toBe(
+              assetTransferred.toString()
+            );
+
+            // Verify total_assets decremented
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                totalAssets: initialTotalAssets.sub(assetTransferred),
+              },
+            });
+          });
+
+        // describe("unwrap with JMI backing tests", () => {
+        //   // unwrap test cases (JMI-specific additions)
+        //   // [ ] given the JMI feature is enabled
+        //   //   [ ] given ext_principal exceeds M backing (ext_supply - total_assets)
+        //   //     [ ] it reverts with an InsufficientMBacking error
+        //   //   [ ] given ext_principal equals available M backing
+        //   //     [ ] it succeeds and unwraps the full M backing
+        //   //   [ ] given ext_principal is less than M backing
+        //   //     [ ] it succeeds normally
+
+        //   let assetMint: Keypair;
+        //   const assetCap = new BN(1_000_000_000);
+        //   const mWrapAmount = new BN(50_000_000); // 50 tokens wrapped via M
+        //   const assetWrapAmount = new BN(30_000_000); // 30 tokens wrapped via asset
+
+        //   let fromExtTokenAccount: PublicKey;
+        //   let toMTokenAccount: PublicKey;
+
+        //   beforeEach(async () => {
+        //     // Setup: wrap both M and assets to create mixed backing
+
+        //     // First wrap M tokens
+
+        //     const feeBps = new BN(randomInt(10000))
+
+        //     // Initialize the extension program
+        //     await $.initializeExt(wrapAuthorities, feeBps);
+
+        //     // Add the wrap authority and non-wrap authority as M earners to have thawed token accounts
+        //     await $.addMEarner($.wrapAuthority.publicKey);
+        //     await $.addMEarner($.nonWrapAuthority.publicKey);
+
+        //     await $.mintM($.wrapAuthority.publicKey, mWrapAmount.mul(new BN(2)));
+        //     await $.wrap($.wrapAuthority, mWrapAmount);
+
+        //     // Then setup and wrap assets
+        //     const setup = await $.setupJmiAsset(assetCap);
+        //     assetMint = setup.assetMint;
+        //     await $.mintAssetTokens(assetMint, $.wrapAuthority.publicKey, assetWrapAmount.mul(new BN(2)));
+        //     await $.wrapAsset(assetMint.publicKey, assetWrapAmount, $.wrapAuthority);
+
+        //     // Now we have:
+        //     // - ext_supply = mWrapAmount + assetWrapAmount (approx, depends on index)
+        //     // - total_assets = assetWrapAmount
+        //     // - M backing = ext_supply - total_assets = mWrapAmount (approx)
+
+        //     fromExtTokenAccount = await $.getATA(
+        //       $.extMint.publicKey,
+        //       $.wrapAuthority.publicKey,
+        //       $.useToken2022ForExt
+        //     );
+
+        //     toMTokenAccount = await $.getATA(
+        //       $.mMint.publicKey,
+        //       $.wrapAuthority.publicKey
+        //     );
+
+        //   });
+
+        //   // given ext_principal exceeds M backing
+        //   // it reverts with an InsufficientMBacking error
+        //   test("Unwrap exceeding M backing - reverts", async () => {
+        //     // Get current ext balance (should have mWrapAmount + assetWrapAmount worth)
+        //     const userExtAccount = await $.getATA(
+        //       $.extMint.publicKey,
+        //       $.wrapAuthority.publicKey,
+        //       $.useToken2022ForExt
+        //     );
+        //     const userExtBalance = await $.getTokenBalance(userExtAccount, $.useToken2022ForExt);
+
+        //     // Try to unwrap entire ext balance - but only mWrapAmount is backed by M
+        //     // This should fail because some of the ext is backed by assets, not M
+        //     await $.expectAnchorError(
+        //       $.ext.methods
+        //         .unwrap(userExtBalance)
+        //         .accounts({
+        //           tokenAuthority: $.wrapAuthority.publicKey,
+        //           unwrapAuthority: $.ext.programId,
+        //           fromExtTokenAccount,
+        //           toMTokenAccount,
+        //           extTokenProgram: $.extTokenProgram,
+        //         })
+        //         .signers([$.wrapAuthority])
+        //         .rpc(),
+        //       "InsufficientMBacking"
+        //     );
+        //   });
+
+        //   // given ext_principal is less than M backing
+        //   // it succeeds normally
+        //   test("Unwrap within M backing - success", async () => {
+        //     // Unwrap a small amount that's definitely within M backing
+        //     const smallUnwrapAmount = mWrapAmount.div(new BN(2));
+
+        //     const userMAccountBefore = await $.getATA(
+        //       $.mMint.publicKey,
+        //       $.wrapAuthority.publicKey
+        //     );
+        //     const mBalanceBefore = await $.getTokenBalance(userMAccountBefore);
+
+        //     // This should succeed
+        //     await $.unwrap($.wrapAuthority, smallUnwrapAmount);
+
+        //     // Verify M was received
+        //     const mBalanceAfter = await $.getTokenBalance(userMAccountBefore);
+        //     expect(mBalanceAfter.gt(mBalanceBefore)).toBe(true);
+        //   });
+        // });
+      });
+    });
+  };
+});
 }
+
