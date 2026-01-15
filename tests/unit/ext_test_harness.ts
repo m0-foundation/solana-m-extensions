@@ -1882,7 +1882,7 @@ export class ExtensionTest<
       .wrapAsset(amount)
       .accountsPartial({
         tokenAuthority: tokenAuthority.publicKey,
-        wrapAuthority: wrapAuthority
+        replaceAuthority: wrapAuthority
           ? wrapAuthority.publicKey
           : this.ext.programId,
         assetMint: assetMint,

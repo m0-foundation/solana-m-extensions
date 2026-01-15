@@ -15,7 +15,7 @@ pub struct WrapAsset<'info> {
     pub token_authority: Signer<'info>,
 
     /// Will be set if a whitelisted authority is signing for a user
-    pub wrap_authority: Option<Signer<'info>>,
+    pub replace_authority: Option<Signer<'info>>,
 
     /// Non-M asset mint (USDC, USDT, etc.) - CANNOT be M
     #[account(mint::token_program = asset_token_program)]
@@ -85,7 +85,7 @@ pub struct WrapAsset<'info> {
 
 impl WrapAsset<'_> {
     pub fn validate(&self, amount: u64) -> Result<()> {
-        let auth = match &self.wrap_authority {
+        let auth = match &self.replace_authority {
             Some(auth) => auth.key,
             None => self.token_authority.key,
         };

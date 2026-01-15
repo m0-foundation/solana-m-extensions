@@ -8034,7 +8034,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 .wrapAsset(new BN(10_000_000))
                 .accountsPartial({
                   tokenAuthority: $.nonWrapAuthority.publicKey,
-                  wrapAuthority: $.ext.programId,
+                  replaceAuthority: $.ext.programId,
                   assetMint: assetMint.publicKey,
                   assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
                   fromAssetTokenAccount,
@@ -8056,7 +8056,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 .wrapAsset(new BN(0))
                 .accountsPartial({
                   tokenAuthority: $.wrapAuthority.publicKey,
-                  wrapAuthority: $.ext.programId,
+                  replaceAuthority: $.ext.programId,
                   assetMint: assetMint.publicKey,
                   assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
                   fromAssetTokenAccount,
@@ -8080,7 +8080,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 .wrapAsset(new BN(10_000_000))
                 .accountsPartial({
                   tokenAuthority: $.wrapAuthority.publicKey,
-                  wrapAuthority: $.ext.programId,
+                  replaceAuthority: $.ext.programId,
                   assetMint: assetMint.publicKey,
                   assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
                   fromAssetTokenAccount,
@@ -8105,7 +8105,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 .wrapAsset(new BN(10_000_000))
                 .accountsPartial({
                   tokenAuthority: $.wrapAuthority.publicKey,
-                  wrapAuthority: $.ext.programId,
+                  replaceAuthority: $.ext.programId,
                   assetMint: assetMint.publicKey,
                   assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
                   fromAssetTokenAccount,
@@ -8130,7 +8130,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 .wrapAsset(new BN(20_000_000)) // Exceeds cap
                 .accountsPartial({
                   tokenAuthority: $.wrapAuthority.publicKey,
-                  wrapAuthority: $.ext.programId,
+                  replaceAuthority: $.ext.programId,
                   assetMint: assetMint.publicKey,
                   assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
                   fromAssetTokenAccount,
@@ -8469,114 +8469,106 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             });
           });
 
-        // describe("unwrap with JMI backing tests", () => {
-        //   // unwrap test cases (JMI-specific additions)
-        //   // [ ] given the JMI feature is enabled
-        //   //   [ ] given ext_principal exceeds M backing (ext_supply - total_assets)
-        //   //     [ ] it reverts with an InsufficientMBacking error
-        //   //   [ ] given ext_principal equals available M backing
-        //   //     [ ] it succeeds and unwraps the full M backing
-        //   //   [ ] given ext_principal is less than M backing
-        //   //     [ ] it succeeds normally
+        describe("unwrap with JMI backing tests", () => {
+          // unwrap test cases (JMI-specific additions)
+          // [ ] given the JMI feature is enabled
+          //   [ ] given ext_principal exceeds M backing (ext_supply - total_assets)
+          //     [ ] it reverts with an InsufficientMBacking error
+          //   [ ] given ext_principal equals available M backing
+          //     [ ] it succeeds and unwraps the full M backing
+          //   [ ] given ext_principal is less than M backing
+          //     [ ] it succeeds normally
 
-        //   let assetMint: Keypair;
-        //   const assetCap = new BN(1_000_000_000);
-        //   const mWrapAmount = new BN(50_000_000); // 50 tokens wrapped via M
-        //   const assetWrapAmount = new BN(30_000_000); // 30 tokens wrapped via asset
+          let assetMint: Keypair;
+          const assetCap = new BN(1_000_000_000);
+          const mWrapAmount = new BN(50_000_000); // 50 tokens wrapped via M
+          const assetWrapAmount = new BN(30_000_000); // 30 tokens wrapped via asset
 
-        //   let fromExtTokenAccount: PublicKey;
-        //   let toMTokenAccount: PublicKey;
+          let fromExtTokenAccount: PublicKey;
+          let toMTokenAccount: PublicKey;
 
-        //   beforeEach(async () => {
-        //     // Setup: wrap both M and assets to create mixed backing
+          beforeEach(async () => {
+            // Setup asset with cap
+            const setup = await $.setupJmiAsset(assetCap);
+            assetMint = setup.assetMint;
 
-        //     // First wrap M tokens
+            // Then setup and wrap assets
+            await $.expectAssetConfigState(assetMint.publicKey, {
+              cap: assetCap,
+            });
 
-        //     const feeBps = new BN(randomInt(10000))
+            // First wrap M tokens
+            const feeBps = new BN(randomInt(10000))
 
-        //     // Initialize the extension program
-        //     await $.initializeExt(wrapAuthorities, feeBps);
+            await $.mintM($.wrapAuthority.publicKey, mWrapAmount);
+            await $.wrap($.wrapAuthority, mWrapAmount);
 
-        //     // Add the wrap authority and non-wrap authority as M earners to have thawed token accounts
-        //     await $.addMEarner($.wrapAuthority.publicKey);
-        //     await $.addMEarner($.nonWrapAuthority.publicKey);
+            
+            await $.mintAssetTokens(assetMint, $.wrapAuthority.publicKey, assetWrapAmount.mul(new BN(2)));
+            await $.wrapAsset(assetMint.publicKey, assetWrapAmount, $.wrapAuthority);
 
-        //     await $.mintM($.wrapAuthority.publicKey, mWrapAmount.mul(new BN(2)));
-        //     await $.wrap($.wrapAuthority, mWrapAmount);
+            fromExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.wrapAuthority.publicKey,
+              $.useToken2022ForExt
+            );
 
-        //     // Then setup and wrap assets
-        //     const setup = await $.setupJmiAsset(assetCap);
-        //     assetMint = setup.assetMint;
-        //     await $.mintAssetTokens(assetMint, $.wrapAuthority.publicKey, assetWrapAmount.mul(new BN(2)));
-        //     await $.wrapAsset(assetMint.publicKey, assetWrapAmount, $.wrapAuthority);
+            toMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.wrapAuthority.publicKey
+            );
 
-        //     // Now we have:
-        //     // - ext_supply = mWrapAmount + assetWrapAmount (approx, depends on index)
-        //     // - total_assets = assetWrapAmount
-        //     // - M backing = ext_supply - total_assets = mWrapAmount (approx)
+          });
 
-        //     fromExtTokenAccount = await $.getATA(
-        //       $.extMint.publicKey,
-        //       $.wrapAuthority.publicKey,
-        //       $.useToken2022ForExt
-        //     );
+          // given ext_principal exceeds M backing
+          // it reverts with an InsufficientMBacking error
+          test("Unwrap exceeding M backing - reverts", async () => {
+            // Get current ext balance (should have mWrapAmount + assetWrapAmount worth)
+            const userExtAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.wrapAuthority.publicKey,
+              $.useToken2022ForExt
+            );
+            const userExtBalance = await $.getTokenBalance(userExtAccount, $.useToken2022ForExt);
 
-        //     toMTokenAccount = await $.getATA(
-        //       $.mMint.publicKey,
-        //       $.wrapAuthority.publicKey
-        //     );
+            // Try to unwrap entire ext balance - but only mWrapAmount is backed by M
+            // This should fail because some of the ext is backed by assets, not M
+            await $.expectAnchorError(
+              $.ext.methods
+                .unwrap(userExtBalance)
+                .accounts({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  unwrapAuthority: $.ext.programId,
+                  fromExtTokenAccount,
+                  toMTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "InsufficientMBacking"
+            );
+          });
 
-        //   });
+          // given ext_principal is less than M backing
+          // it succeeds normally
+          test("Unwrap within M backing - success", async () => {
+            // Unwrap a small amount that's definitely within M backing
+            const smallUnwrapAmount = mWrapAmount.div(new BN(2));
 
-        //   // given ext_principal exceeds M backing
-        //   // it reverts with an InsufficientMBacking error
-        //   test("Unwrap exceeding M backing - reverts", async () => {
-        //     // Get current ext balance (should have mWrapAmount + assetWrapAmount worth)
-        //     const userExtAccount = await $.getATA(
-        //       $.extMint.publicKey,
-        //       $.wrapAuthority.publicKey,
-        //       $.useToken2022ForExt
-        //     );
-        //     const userExtBalance = await $.getTokenBalance(userExtAccount, $.useToken2022ForExt);
+            const userMAccountBefore = await $.getATA(
+              $.mMint.publicKey,
+              $.wrapAuthority.publicKey
+            );
+            const mBalanceBefore = await $.getTokenBalance(userMAccountBefore);
 
-        //     // Try to unwrap entire ext balance - but only mWrapAmount is backed by M
-        //     // This should fail because some of the ext is backed by assets, not M
-        //     await $.expectAnchorError(
-        //       $.ext.methods
-        //         .unwrap(userExtBalance)
-        //         .accounts({
-        //           tokenAuthority: $.wrapAuthority.publicKey,
-        //           unwrapAuthority: $.ext.programId,
-        //           fromExtTokenAccount,
-        //           toMTokenAccount,
-        //           extTokenProgram: $.extTokenProgram,
-        //         })
-        //         .signers([$.wrapAuthority])
-        //         .rpc(),
-        //       "InsufficientMBacking"
-        //     );
-        //   });
+            // This should succeed
+            await $.unwrap($.wrapAuthority, smallUnwrapAmount);
 
-        //   // given ext_principal is less than M backing
-        //   // it succeeds normally
-        //   test("Unwrap within M backing - success", async () => {
-        //     // Unwrap a small amount that's definitely within M backing
-        //     const smallUnwrapAmount = mWrapAmount.div(new BN(2));
-
-        //     const userMAccountBefore = await $.getATA(
-        //       $.mMint.publicKey,
-        //       $.wrapAuthority.publicKey
-        //     );
-        //     const mBalanceBefore = await $.getTokenBalance(userMAccountBefore);
-
-        //     // This should succeed
-        //     await $.unwrap($.wrapAuthority, smallUnwrapAmount);
-
-        //     // Verify M was received
-        //     const mBalanceAfter = await $.getTokenBalance(userMAccountBefore);
-        //     expect(mBalanceAfter.gt(mBalanceBefore)).toBe(true);
-        //   });
-        // });
+            // Verify M was received
+            const mBalanceAfter = await $.getTokenBalance(userMAccountBefore);
+            expect(mBalanceAfter.gt(mBalanceBefore)).toBe(true);
+          });
+        });
       });
     });
   };

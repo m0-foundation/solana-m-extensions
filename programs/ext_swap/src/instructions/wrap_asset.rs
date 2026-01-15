@@ -4,14 +4,21 @@ use m_ext::cpi::accounts::WrapAsset as ExtWrapAsset;
 use m_ext::state::{EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
 
 use crate::errors::SwapError;
-use crate::state::{SwapGlobal, GLOBAL_SEED};
+use crate::state::{SwapGlobal, GLOBAL_SEED, REPLACE_AUTHORITY_SEED};
 
 #[derive(Accounts)]
 pub struct WrapAsset<'info> {
     pub signer: Signer<'info>,
 
-    // Required if the swap program is not whitelisted on the extension
-    pub wrap_authority: Option<Signer<'info>>,
+    // Required if the fallback_replace_authority is not whitelisted on the extension
+    pub replace_authority: Option<Signer<'info>>,
+
+    /// CHECK: PDA used as replace authority for extensions
+    #[account(
+        seeds = [REPLACE_AUTHORITY_SEED],
+        bump,
+    )]
+    pub fallback_replace_authority: AccountInfo<'info>,
 
     /*
      * Program globals
@@ -123,10 +130,10 @@ impl<'info> WrapAsset<'info> {
 
     #[access_control(ctx.accounts.validate(amount))]
     pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, amount: u64) -> Result<()> {
-        // Set swap program as authority if none provided
-        let wrap_authority = match &ctx.accounts.wrap_authority {
+        // Set replace authority PDA as authority if none provided
+        let replace_authority = match &ctx.accounts.replace_authority {
             Some(auth) => auth.to_account_info(),
-            None => ctx.accounts.swap_global.to_account_info(),
+            None => ctx.accounts.fallback_replace_authority.to_account_info(),
         };
 
         m_ext::cpi::wrap_asset(
@@ -134,7 +141,7 @@ impl<'info> WrapAsset<'info> {
                 ctx.accounts.to_ext_program.to_account_info(),
                 ExtWrapAsset {
                     token_authority: ctx.accounts.signer.to_account_info(),
-                    wrap_authority: Some(wrap_authority),
+                    replace_authority: Some(replace_authority),
                     asset_mint: ctx.accounts.asset_mint.to_account_info(),
                     ext_mint: ctx.accounts.to_mint.to_account_info(),
                     global_account: ctx.accounts.to_global.to_account_info(),
@@ -147,9 +154,8 @@ impl<'info> WrapAsset<'info> {
                     asset_token_program: ctx.accounts.asset_token_program.to_account_info(),
                     ext_token_program: ctx.accounts.to_token_program.to_account_info(),
                 },
-                &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
-            )
-            .with_remaining_accounts(ctx.remaining_accounts.to_vec()),
+                &[&[REPLACE_AUTHORITY_SEED, &[ctx.bumps.fallback_replace_authority]]],
+            ),
             amount,
         )
     }

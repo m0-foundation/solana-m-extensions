@@ -75,10 +75,13 @@ impl SetAssetCap<'_> {
 
         // If first initialization (all fields are zero), set bump
         if asset_config.cap == 0 && asset_config.bump == 0 {
-            asset_config.bump = ctx.bumps.asset_config;
+            ctx.accounts.asset_config.set_inner(AssetConfig {
+                cap: cap,
+                bump: ctx.bumps.asset_config,
+            });
+        } else {
+            asset_config.cap = cap;
         }
-
-        asset_config.cap = cap;
 
         Ok(())
     }
