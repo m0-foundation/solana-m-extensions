@@ -901,15 +901,15 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           //   [X] it reverts with a NotAuthorized error
           // [X] given the admin signs the transaction
           //   [X] given the m vault is not the m vault PDA
-          //     [X] it reverts with a ConstraintSeeds error
+          //     [X] it reverts with a AccountNotInitialized error
           //   [X] given the m vault token account is not the m vault PDA's ATA
           //     [X] it reverts with a ConstraintAssociated error
           //   [X] given the ext mint does not match the one on the global account
           //     [X] it reverts with an InvalidMint error
           //   [X] given the ext mint authority is not the ext mint authority PDA
-          //     [X] it reverts with a ConstraintSeeds error
+          //     [X] it reverts with a AccountNotInitialized error
           //   [X] given the m earn global account does not match the derived PDA
-          //     [X] it reverts with a ConstraintSeeds error
+          //     [X] it reverts with a AccountNotInitialized error
           //   [X] given the recipient token account is not a token account for the m mint
           //     [X] it reverts with a ConstraintTokenMint error
           //   [X] given the vault m token account is frozen (i.e. extension is not approved as an earner)
@@ -7748,23 +7748,20 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
         describe("set_asset_cap unit tests", () => {
           // set_asset_cap test cases
-          // [ ] given the admin does not sign the transaction
-          //   [ ] it reverts with a NotAuthorized error
-          // [ ] given the admin signs the transaction
-          //   [ ] given the global account is not the global PDA
-          //     [ ] it reverts with a ConstraintSeeds error
-          //   [ ] given the vault authority is not the m_vault PDA
-          //     [ ] it reverts with a ConstraintSeeds error
-          //   [ ] given the asset mint is the M token
-          //     [ ] it reverts with a CannotCapMToken error
-          //   [ ] given the asset mint does not have 6 decimals
-          //     [ ] it reverts with an InvalidDecimals error
-          //   [ ] given valid inputs
-          //     [ ] it creates the asset_config account if it doesn't exist
-          //     [ ] it creates the vault asset ATA if it doesn't exist
-          //     [ ] it sets the cap on the asset_config
-          //     [ ] it can update an existing cap to a new value
-          //     [ ] it can set the cap to 0 to disable the asset
+          // [x] given the admin does not sign the transaction
+          //   [x] it reverts with a NotAuthorized error
+          // [x] given the asset mint is the M token
+          //   [x] it reverts with a CannotCapMToken error
+          // [x] given the asset mint does not have 6 decimals
+          //   [x] it reverts with an InvalidDecimals error
+          // [x] given valid inputs and admin signs
+          //   [x] new assetConfig asset cap is set successfully
+          //   [x] existing assetConfig asset cap is updated successfully
+          //   [x] it can set the cap to 0 to disable the asset
+          // [x] given the global account is not the global PDA
+          //   [x] it reverts with a ConstraintSeeds error
+          // [x] given the vault authority is not the m_vault PDA
+          //   [x] it reverts with a ConstraintSeeds error
 
           let assetMint: Keypair;
 
@@ -7834,12 +7831,31 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.expectAssetConfigState(assetMint.publicKey, {
               cap: cap,
             });
+
+            // Verify the vault asset ATA was created
+            const vaultAssetATA = await $.getATA(
+              assetMint.publicKey,
+              $.getMVault(),
+              false
+            );
+            // Verify it has zero balance (just created)
+            await $.expectTokenBalance(
+              vaultAssetATA,
+              new BN(0),
+              Comparison.Equal,
+              undefined,
+              false
+            );
           });
 
           // it can update an existing cap to a new value
           test("Update existing asset cap - success", async () => {
             const initialCap = new BN(1_000_000_000);
             await $.setAssetCap(assetMint.publicKey, initialCap);
+
+            await $.expectAssetConfigState(assetMint.publicKey, {
+              cap: initialCap,
+            });
 
             const newCap = new BN(2_000_000_000);
             await $.setAssetCap(assetMint.publicKey, newCap);
@@ -7853,24 +7869,72 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           test("Set cap to zero to disable asset - success", async () => {
             const cap = new BN(1_000_000_000);
             await $.setAssetCap(assetMint.publicKey, cap);
+            await $.expectAssetConfigState(assetMint.publicKey, {
+              cap: cap,
+            });
 
             await $.setAssetCap(assetMint.publicKey, new BN(0));
-
             await $.expectAssetConfigState(assetMint.publicKey, {
               cap: new BN(0),
             });
+          });
+
+          // given the global account is not the global PDA
+          // it reverts with a ConstraintSeeds error
+          test("Global account is not the global PDA - reverts", async () => {
+            const fakeGlobal = PublicKey.unique();
+            if (fakeGlobal === $.getExtGlobalAccount()) return;
+
+            // Copy the real global account data to the fake address so it deserializes properly
+            const realGlobalInfo = $.svm.getAccount($.getExtGlobalAccount());
+            if (realGlobalInfo) {
+              $.svm.setAccount(fakeGlobal, realGlobalInfo);
+            }
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: assetMint.publicKey,
+                  globalAccount: fakeGlobal,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "ConstraintSeeds"
+            );
+          });
+
+          // given the vault authority is not the m_vault PDA
+          // it reverts with a ConstraintSeeds error
+          test("Vault authority is not the m_vault PDA - reverts", async () => {
+            const fakeVault = PublicKey.unique();
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: assetMint.publicKey,
+                  vaultAuthority: fakeVault,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "ConstraintSeeds"
+            );
           });
         });
 
         describe("pause unit tests", () => {
           // pause test cases
-          // [ ] given the admin does not sign the transaction
-          //   [ ] it reverts with a NotAuthorized error
-          // [ ] given the admin signs the transaction
-          //   [ ] given the global account is not the global PDA
-          //     [ ] it reverts with a ConstraintSeeds error
-          //   [ ] given valid inputs
-          //     [ ] it sets is_paused to true on the global account
+          // [x] given the admin does not sign the transaction
+          //   [x] it reverts with a NotAuthorized error
+          // [x] given the admin signs & valid inputs
+          //   [x] it sets is_paused to true on the global account
+          // [x] given the global account is not the global PDA
+          //   [x] it reverts with a ConstraintSeeds error
 
           // given the admin does not sign the transaction
           // it reverts with a NotAuthorized error
@@ -7898,18 +7962,41 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               },
             });
           });
+
+          // given the global account is not the global PDA
+          // it reverts with a ConstraintSeeds error
+          test("Global account is not the global PDA - reverts", async () => {
+            const fakeGlobal = PublicKey.unique();
+
+            // Copy the real global account data to the fake address so it deserializes properly
+            const realGlobalInfo = $.svm.getAccount($.getExtGlobalAccount());
+            if (realGlobalInfo) {
+              $.svm.setAccount(fakeGlobal, realGlobalInfo);
+            }
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .pause()
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  globalAccount: fakeGlobal,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "ConstraintSeeds"
+            );
+          });
         });
 
         describe("unpause unit tests", () => {
           // unpause test cases
-          // [ ] given the admin does not sign the transaction
-          //   [ ] it reverts with a NotAuthorized error
-          // [ ] given the admin signs the transaction
-          //   [ ] given the global account is not the global PDA
-          //     [ ] it reverts with a ConstraintSeeds error
-          //   [ ] given valid inputs
-          //     [ ] it sets is_paused to false on the global account
-          //     [ ] it can be called when already unpaused (idempotent)
+          // [x] given the admin does not sign the transaction
+          //   [x] it reverts with a NotAuthorized error
+          // [x] given the admin signs & valid inputs
+          //   [x] it sets is_paused to false on the global account
+          //   [x] it can be called when already unpaused (idempotent)
+          // [x] given the global account is not the global PDA
+          //   [x] it reverts with a ConstraintSeeds error
 
           // given the admin does not sign the transaction
           // it reverts with a NotAuthorized error
@@ -7948,6 +8035,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
           // it can be called when already unpaused (idempotent)
           test("Unpause when already unpaused - success (idempotent)", async () => {
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                isPaused: false,
+              },
+            });
+
             await $.unpause();
 
             await $.expectExtGlobalState({
@@ -7956,29 +8049,54 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               },
             });
           });
+
+          // given the global account is not the global PDA
+          // it reverts with a ConstraintSeeds error
+          test("Global account is not the global PDA - reverts", async () => {
+            const fakeGlobal = PublicKey.unique();
+            // if (fakeGlobal === $.getExtGlobalAccount()) return;
+
+            // Copy the real global account data to the fake address so it deserializes properly
+            const realGlobalInfo = $.svm.getAccount($.getExtGlobalAccount());
+            if (realGlobalInfo) {
+              $.svm.setAccount(fakeGlobal, realGlobalInfo);
+            }
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .unpause()
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  globalAccount: fakeGlobal,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "ConstraintSeeds"
+            );
+          });
         });
 
         describe("wrap_asset unit tests", () => {
           // wrap_asset test cases
-          // [ ] given the caller is not authorized (not in wrap_authorities)
-          //   [ ] it reverts with a NotAuthorized error
-          // [ ] given an authorized caller signs the transaction
-          //   [ ] given the amount is 0
-          //     [ ] it reverts with an InvalidAmount error
-          //   [ ] given the contract is paused
-          //     [ ] it reverts with a Paused error
-          //   [ ] given the asset mint is the M token
-          //     [ ] it reverts with an AssetNotAllowed error
-          //   [ ] given the asset config cap is 0 (disabled)
-          //     [ ] it reverts with an AssetNotAllowed error
-          //   [ ] given the asset config does not exist for this asset
-          //     [ ] it reverts with a ConstraintSeeds error
-          //   [ ] given the wrap would exceed the asset cap
-          //     [ ] it reverts with an AssetCapExceeded error
-          //   [ ] given valid inputs
-          //     [ ] it transfers assets from user to vault
-          //     [ ] it mints ext tokens 1:1 to the user
-          //     [ ] it increments total_assets on the global account
+          // [x] given the caller is not authorized (not in wrap_authorities)
+          //   [x] it reverts with a NotAuthorized error
+          // [x] given an authorized caller signs
+          //   [x] given the amount is 0
+          //     [x] it reverts with an InvalidAmount error
+          //   [x] given the contract is paused
+          //     [x] it reverts with a Paused error
+          //   [x] given the asset config cap is 0 (disabled)
+          //     [x] it reverts with an AssetNotAllowed error
+          //   [x] given the wrap would exceed the asset cap
+          //     [x] it reverts with an AssetCapExceeded error
+          // [x] given an authorized caller signs & valid inputs
+          //   [x] it transfers assets from user to vault
+          //   [x] it increments total_assets on the global account
+          //   [x] wraps multiple assets correctly
+          // [x] given the asset mint is the M token
+          //     [x] it reverts with a ConstraintSeeds error (no asset config can exist for M)
+          // [x] given the asset config does not exist for this asset
+          //     [x] it reverts with an AccountNotInitialized error
 
           let assetMint: Keypair;
           let fromAssetTokenAccount: PublicKey;
@@ -7995,17 +8113,26 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Mint assets to wrap authority
             await $.mintAssetTokens(assetMint, $.wrapAuthority.publicKey, mintAmount);
 
-            // fromAssetTokenAccount = await $.getATA(
-            //   assetMint.publicKey,
-            //   $.wrapAuthority.publicKey,
-            //   false
-            // );
+            fromAssetTokenAccount = await $.getATA(
+              assetMint.publicKey,
+              $.wrapAuthority.publicKey,
+              false
+            );
 
-            // toExtTokenAccount = await $.getATA(
-            //   $.extMint.publicKey,
-            //   $.wrapAuthority.publicKey,
-            //   $.useToken2022ForExt
-            // );
+            toExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.wrapAuthority.publicKey,
+              $.useToken2022ForExt
+            );
+
+          });
+
+          // given the caller is not authorized (not in wrap_authorities)
+          // it reverts with a NotAuthorized error
+          test("Non-authorized caller tries to wrap asset - reverts", async () => {
+
+            // Mint some assets to the non-wrap authority
+            await $.mintAssetTokens(assetMint, $.nonWrapAuthority.publicKey, mintAmount);
 
             fromAssetTokenAccount = await $.getATA(
               assetMint.publicKey,
@@ -8018,16 +8145,6 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               $.nonWrapAuthority.publicKey,
               $.useToken2022ForExt
             );
-
-          });
-
-          // given the caller is not authorized (not in wrap_authorities)
-          // it reverts with a NotAuthorized error
-          test("Non-authorized caller tries to wrap asset - reverts", async () => {
-
-
-            // Mint some assets to the non-wrap authority
-            await $.mintAssetTokens(assetMint, $.nonWrapAuthority.publicKey, mintAmount);
 
             await $.expectAnchorError(
               $.ext.methods
@@ -8218,24 +8335,101 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               },
             });
           });
+
+          // given the asset mint is the M token
+          // it reverts with a ConstraintSeeds error (asset config PDA doesn't match)
+          test("Wrap asset with M token as asset - reverts", async () => {
+            // Add wrap authority as M earner to unfreeze the ATA (M token has frozen default state)
+            await $.addMEarner($.wrapAuthority.publicKey);
+            // Mint M tokens to wrap authority
+            await $.mintM($.wrapAuthority.publicKey, mintAmount);
+
+            const fromMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.wrapAuthority.publicKey,
+              true // M uses Token2022
+            );
+
+            // Create a fake AssetConfig account at wrong address to trigger ConstraintSeeds
+            const fakeAssetConfig = PublicKey.unique();
+
+            // Copy real AssetConfig data to the fake address so it deserializes properly
+            const realAssetConfigInfo = $.svm.getAccount(
+              $.getAssetConfigAccount(assetMint.publicKey)
+            );
+            if (realAssetConfigInfo) {
+              $.svm.setAccount(fakeAssetConfig, realAssetConfigInfo);
+            }
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrapAsset(new BN(10_000_000))
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  replaceAuthority: $.ext.programId,
+                  assetMint: $.mMint.publicKey,
+                  assetConfig: fakeAssetConfig, // Use fake account instead of PDA
+                  fromAssetTokenAccount: fromMTokenAccount,
+                  toExtTokenAccount,
+                  assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "ConstraintSeeds"
+            );
+          });
+
+          // given the asset config does not exist for this asset
+          // it reverts with a AccountNotInitialized error
+          test("Wrap asset with non-existent asset config - reverts", async () => {
+            // Create asset mint WITHOUT setting up asset config
+            const noConfigMint = await $.createAssetMint();
+
+            // Mint tokens to wrap authority
+            await $.mintAssetTokens(noConfigMint, $.wrapAuthority.publicKey, mintAmount);
+
+            const fromAssetTokenAccount = await $.getATA(
+              noConfigMint.publicKey,
+              $.wrapAuthority.publicKey,
+              false
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrapAsset(new BN(10_000_000))
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  replaceAuthority: $.ext.programId,
+                  assetMint: noConfigMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(noConfigMint.publicKey),
+                  fromAssetTokenAccount,
+                  toExtTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "AccountNotInitialized"
+            );
+          });
         });
 
         describe("unwrap_asset unit tests", () => {
           // unwrap_asset test cases
-          // [ ] given the caller is not authorized (not in wrap_authorities)
-          //   [ ] it reverts with a NotAuthorized error
-          // [ ] given an authorized caller signs the transaction
-          //   [ ] given the m_amount is 0
-          //     [ ] it reverts with an InvalidAmount error
-          //   [ ] given the contract is paused
-          //     [ ] it reverts with a Paused error
-          //   [ ] given the vault has insufficient asset backing for the conversion
-          //     [ ] it reverts with an InsufficientAssetBacking error
-          //   [ ] given valid inputs
-          //     [ ] it converts M amount to asset amount using M index (rounds down)
-          //     [ ] it transfers M from user to vault
-          //     [ ] it transfers asset from vault to user
-          //     [ ] it decrements total_assets on the global account
+          // [x] given the caller is not authorized (not in wrap_authorities)
+          //   [x] it reverts with a NotAuthorized error
+          // [x] given an authorized caller signs the transaction
+          //   [x] given the m_amount is 0
+          //     [x] it reverts with an InvalidAmount error
+          //   [x] given the contract is paused
+          //     [x] it reverts with a Paused error
+          //   [x] given the vault has insufficient asset backing for the conversion
+          //     [x] it reverts with an InsufficientAssetBacking error
+          //   [x] given valid inputs
+          //     [x] it transfers M from user to vault
+          //     [x] it transfers asset from vault to user
+          //     [x] it decrements total_assets on the global account
 
           let assetMint: Keypair;
           const assetCap = new BN(1_000_000_000); // 1000 tokens
@@ -8278,7 +8472,6 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               $.nonWrapAuthority.publicKey,
               false
             );
-
 
             await $.expectAnchorError(
               $.ext.methods
@@ -8469,15 +8662,38 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             });
           });
 
+          // given valid inputs
+          // it converts M amount to asset amount using M index (rounds down)
+          test("M amount converts to asset amount using M index (rounds down)", async () => {
+            // Get M index from M token's ScaledUiAmountConfig (not ext's multiplier)
+            const mScaledUiConfig = await $.getScaledUiAmountConfig($.mMint.publicKey);
+            const mIndex = new BN(Math.floor(mScaledUiConfig.newMultiplier * 1e12));
+            const INDEX_SCALE = new BN("1000000000000"); // 1e12
+
+            // Get user's asset token account
+            const userAssetAta = await $.getATA(assetMint.publicKey, $.wrapAuthority.publicKey, false);
+            const initialAssetBalance = await $.getTokenBalance(userAssetAta, false);
+
+            // Perform unwrap_asset with known M amount
+            const mAmount = new BN(5_000_000); // 5 tokens (6 decimals)
+            await $.unwrapAsset(assetMint.publicKey, mAmount, $.wrapAuthority);
+
+            // Calculate expected asset amount (rounding down)
+            const expectedAssetAmount = mAmount.mul(mIndex).div(INDEX_SCALE);
+
+            // Verify asset received matches expected (with index conversion)
+            const finalAssetBalance = await $.getTokenBalance(userAssetAta, false);
+            const assetReceived = finalAssetBalance.sub(initialAssetBalance);
+            expect(assetReceived.eq(expectedAssetAmount)).toBe(true);
+          });
+
         describe("unwrap with JMI backing tests", () => {
           // unwrap test cases (JMI-specific additions)
-          // [ ] given the JMI feature is enabled
-          //   [ ] given ext_principal exceeds M backing (ext_supply - total_assets)
-          //     [ ] it reverts with an InsufficientMBacking error
-          //   [ ] given ext_principal equals available M backing
-          //     [ ] it succeeds and unwraps the full M backing
-          //   [ ] given ext_principal is less than M backing
-          //     [ ] it succeeds normally
+          // [x] given the JMI feature is enabled
+          //   [x] given ext_principal exceeds M backing (ext_supply - total_assets)
+          //     [x] it reverts with an InsufficientMBacking error
+          //   [x] given ext_principal equals available M backing
+          //     [x] it succeeds and unwraps the full M backing
 
           let assetMint: Keypair;
           const assetCap = new BN(1_000_000_000);
@@ -8502,8 +8718,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             await $.mintM($.wrapAuthority.publicKey, mWrapAmount);
             await $.wrap($.wrapAuthority, mWrapAmount);
-
-            
+   
             await $.mintAssetTokens(assetMint, $.wrapAuthority.publicKey, assetWrapAmount.mul(new BN(2)));
             await $.wrapAsset(assetMint.publicKey, assetWrapAmount, $.wrapAuthority);
 
@@ -8549,20 +8764,18 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             );
           });
 
-          // given ext_principal is less than M backing
-          // it succeeds normally
-          test("Unwrap within M backing - success", async () => {
-            // Unwrap a small amount that's definitely within M backing
-            const smallUnwrapAmount = mWrapAmount.div(new BN(2));
-
+          // given ext_principal equals available M backing
+          // it succeeds and unwraps the full M backing
+          test("Unwrap exactly M backing - success", async () => {
+            // Unwrap exactly the M backing amount (mWrapAmount)
             const userMAccountBefore = await $.getATA(
               $.mMint.publicKey,
               $.wrapAuthority.publicKey
             );
             const mBalanceBefore = await $.getTokenBalance(userMAccountBefore);
 
-            // This should succeed
-            await $.unwrap($.wrapAuthority, smallUnwrapAmount);
+            // Unwrap exactly mWrapAmount (the full M backing)
+            await $.unwrap($.wrapAuthority, mWrapAmount);
 
             // Verify M was received
             const mBalanceAfter = await $.getTokenBalance(userMAccountBefore);

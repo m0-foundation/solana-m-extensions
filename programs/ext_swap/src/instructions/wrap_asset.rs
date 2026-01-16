@@ -154,7 +154,10 @@ impl<'info> WrapAsset<'info> {
                     asset_token_program: ctx.accounts.asset_token_program.to_account_info(),
                     ext_token_program: ctx.accounts.to_token_program.to_account_info(),
                 },
-                &[&[REPLACE_AUTHORITY_SEED, &[ctx.bumps.fallback_replace_authority]]],
+                &[&[
+                    REPLACE_AUTHORITY_SEED,
+                    &[ctx.bumps.fallback_replace_authority],
+                ]],
             ),
             amount,
         )

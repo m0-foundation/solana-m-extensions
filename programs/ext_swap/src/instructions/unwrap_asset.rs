@@ -215,12 +215,12 @@ impl<'info> UnwrapAsset<'info> {
         ctx.accounts.swap_m_account.reload()?;
         let m_amount = ctx.accounts.swap_m_account.amount - m_pre_balance;
 
-        // 3. Call JMI unwrap_asset (signed by replace_authority_pda)
+        // 3. Call JMI unwrap_asset (swap_global signs for token transfer, replace_authority for authorization)
         m_ext::cpi::unwrap_asset(
             CpiContext::new_with_signer(
                 ctx.accounts.jmi_ext_program.to_account_info(),
                 ExtUnwrapAsset {
-                    token_authority: ctx.accounts.fallback_replace_authority.to_account_info(),
+                    token_authority: ctx.accounts.swap_global.to_account_info(),
                     replace_authority: Some(replace_authority),
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     asset_mint: ctx.accounts.asset_mint.to_account_info(),
@@ -234,10 +234,13 @@ impl<'info> UnwrapAsset<'info> {
                     m_token_program: ctx.accounts.m_token_program.to_account_info(),
                     asset_token_program: ctx.accounts.asset_token_program.to_account_info(),
                 },
-                &[&[
-                    REPLACE_AUTHORITY_SEED,
-                    &[ctx.bumps.fallback_replace_authority],
-                ]],
+                &[
+                    &[
+                        REPLACE_AUTHORITY_SEED,
+                        &[ctx.bumps.fallback_replace_authority],
+                    ],
+                    &[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]],
+                ],
             ),
             m_amount,
         )?;

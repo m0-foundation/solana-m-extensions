@@ -27,7 +27,7 @@ endef
 
 build-test-programs:
 	$(call update-program-id,3joDhmLtHLrSBGfeAe1xQiv3gjikes3x8S4N3o6Ld8zB)
-	anchor build -p m_ext
+	anchor build -p m_ext -- --features jmi --no-default-features
 	@mv target/deploy/m_ext.so tests/programs/ext_a.so
 	$(call update-program-id,HSMnbWEkB7sEQAGSzBPeACNUCXC9FgNeeESLnHtKfoy3)
 	anchor build -p m_ext -- --features scaled-ui --no-default-features
