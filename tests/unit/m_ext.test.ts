@@ -8665,10 +8665,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // given valid inputs
           // it converts M amount to asset amount using M index (rounds down)
           test("M amount converts to asset amount using M index (rounds down)", async () => {
+
             // Get M index from M token's ScaledUiAmountConfig (not ext's multiplier)
             const mScaledUiConfig = await $.getScaledUiAmountConfig($.mMint.publicKey);
             const mIndex = new BN(Math.floor(mScaledUiConfig.newMultiplier * 1e12));
-            const INDEX_SCALE = new BN("1000000000000"); // 1e12
+            expect(mIndex.toString()).toBe(new BN("1100000000000").toString()); // Sanity check mIndex not 1
+            const INDEX_SCALE = new BN("1000000000000"); // 1e12 -> taken from constants
 
             // Get user's asset token account
             const userAssetAta = await $.getATA(assetMint.publicKey, $.wrapAuthority.publicKey, false);
