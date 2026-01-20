@@ -102,7 +102,7 @@ impl Unwrap<'_> {
                 .ext_mint
                 .supply
                 .checked_sub(self.global_account.yield_config.total_assets)
-                .ok_or(ExtError::MathOverflow)?;
+                .ok_or(ExtError::MathUnderflow)?;
             if ext_principal > m_backing {
                 return err!(ExtError::InsufficientMBacking);
             }
