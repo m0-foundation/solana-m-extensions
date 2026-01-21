@@ -1901,7 +1901,7 @@ export class ExtensionTest<
     return { fromAssetTokenAccount, toExtTokenAccount, vaultAssetTokenAccount };
   }
 
-  public async unwrapAsset(
+  public async replaceAssetWithM(
     assetMint: PublicKey,
     mAmount: BN,
     tokenAuthority: Keypair,
@@ -1914,7 +1914,7 @@ export class ExtensionTest<
     vaultAssetTokenAccount: PublicKey;
   }> {
     if (this.variant !== Variant.Jmi) {
-      throw new Error("unwrapAsset is only available for JMI variant");
+      throw new Error("replaceAssetWithM is only available for JMI variant");
     }
 
     const mVault = this.getMVault();
@@ -1939,7 +1939,7 @@ export class ExtensionTest<
     );
 
     await this.ext.methods
-      .unwrapAsset(mAmount)
+      .replaceAssetWithM(mAmount)
       .accountsPartial({
         tokenAuthority: tokenAuthority.publicKey,
         replaceAuthority: replaceAuthority
@@ -2794,7 +2794,7 @@ export class ExtensionSwapTest extends ExtensionTestBase {
       .rpc();
   }
 
-  public async unwrapAssetViaSwap(
+  public async replaceAssetWithMViaSwap(
     fromExtKey: string,
     jmiExtKey: string,
     assetMint: PublicKey,
@@ -2838,7 +2838,7 @@ export class ExtensionSwapTest extends ExtensionTestBase {
       : [signer];
 
     return this.swapProgram.methods
-      .unwrapAsset(fromPrincipal)
+      .replaceAssetWithM(fromPrincipal)
       .accountsPartial({
         signer: signer.publicKey,
         replaceAuthority: replaceAuthority

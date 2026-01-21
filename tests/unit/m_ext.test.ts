@@ -8415,8 +8415,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           });
         });
 
-        describe("unwrap_asset unit tests", () => {
-          // unwrap_asset test cases
+        describe("replace_asset_with_m unit tests", () => {
+          // replace_asset_with_m test cases
           // [x] given the caller is not authorized (not in wrap_authorities)
           //   [x] it reverts with a NotAuthorized error
           // [x] given an authorized caller signs the transaction
@@ -8449,7 +8449,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             await $.mintAssetTokens(assetMint, $.wrapAuthority.publicKey, mintAmount);
             await $.wrapAsset(assetMint.publicKey, wrapAmount, $.wrapAuthority);
 
-            // Mint M to wrap authority for unwrap_asset
+            // Mint M to wrap authority for replace_asset_with_m
             await $.mintM($.wrapAuthority.publicKey, mintAmount);
           });
 
@@ -8475,7 +8475,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             await $.expectAnchorError(
               $.ext.methods
-                .unwrapAsset(new BN(10_000_000))
+                .replaceAssetWithM(new BN(10_000_000))
                 .accountsPartial({
                   tokenAuthority: $.nonWrapAuthority.publicKey,
                   replaceAuthority: $.ext.programId,
@@ -8510,7 +8510,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             await $.expectAnchorError(
               $.ext.methods
-                .unwrapAsset(new BN(0))
+                .replaceAssetWithM(new BN(0))
                 .accountsPartial({
                   tokenAuthority: $.wrapAuthority.publicKey,
                   replaceAuthority: $.ext.programId,
@@ -8546,7 +8546,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             await $.expectAnchorError(
               $.ext.methods
-                .unwrapAsset(new BN(10_000_000))
+                .replaceAssetWithM(new BN(10_000_000))
                 .accountsPartial({
                   tokenAuthority: $.wrapAuthority.publicKey,
                   replaceAuthority: $.ext.programId,
@@ -8583,7 +8583,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             await $.expectAnchorError(
               $.ext.methods
-                .unwrapAsset(largeAmount)
+                .replaceAssetWithM(largeAmount)
                 .accountsPartial({
                   tokenAuthority: $.wrapAuthority.publicKey,
                   replaceAuthority: $.ext.programId,
@@ -8632,7 +8632,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             const initialTotalAssets = (globalAccount.yieldConfig as any).totalAssets as BN;
 
             // Unwrap assets
-            await $.unwrapAsset(assetMint.publicKey, mAmount, $.wrapAuthority);
+            await $.replaceAssetWithM(assetMint.publicKey, mAmount, $.wrapAuthority);
 
             // Verify M transferred to vault
             await $.expectTokenBalance(
@@ -8676,9 +8676,9 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             const userAssetAta = await $.getATA(assetMint.publicKey, $.wrapAuthority.publicKey, false);
             const initialAssetBalance = await $.getTokenBalance(userAssetAta, false);
 
-            // Perform unwrap_asset with known M amount
+            // Perform replace_asset_with_m with known M amount
             const mAmount = new BN(5_000_000); // 5 tokens (6 decimals)
-            await $.unwrapAsset(assetMint.publicKey, mAmount, $.wrapAuthority);
+            await $.replaceAssetWithM(assetMint.publicKey, mAmount, $.wrapAuthority);
 
             // Calculate expected asset amount (rounding down)
             const expectedAssetAmount = mAmount.mul(mIndex).div(INDEX_SCALE);

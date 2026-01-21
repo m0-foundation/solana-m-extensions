@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
-use m_ext::cpi::accounts::{Unwrap, UnwrapAsset as ExtUnwrapAsset};
+use m_ext::cpi::accounts::{ReplaceAssetWithM as ExtReplaceAssetWithM, Unwrap};
 use m_ext::state::{EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED};
 
 use crate::{
@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[derive(Accounts)]
-pub struct UnwrapAsset<'info> {
+pub struct ReplaceAssetWithM<'info> {
     pub signer: Signer<'info>,
 
     // Required if the fallback_replace_authority is not whitelisted on the extension
@@ -41,7 +41,7 @@ pub struct UnwrapAsset<'info> {
     /// CHECK: CPI will validate the global account
     pub from_global: AccountInfo<'info>,
 
-    /// JMI extension global (for unwrap_asset)
+    /// JMI extension global (for replace_asset_with_m)
     #[account(
         mut,
         seeds = [EXT_GLOBAL_SEED],
@@ -118,7 +118,7 @@ pub struct UnwrapAsset<'info> {
     pub from_m_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /*
-     * Vaults for JMI extension (unwrap_asset)
+     * Vaults for JMI extension (replace_asset_with_m)
      */
     #[account(
         seeds = [M_VAULT_SEED],
@@ -159,7 +159,7 @@ pub struct UnwrapAsset<'info> {
     pub system_program: Program<'info, System>,
 }
 
-impl<'info> UnwrapAsset<'info> {
+impl<'info> ReplaceAssetWithM<'info> {
     fn validate(&self, from_principal: u64) -> Result<()> {
         // Validate both extensions are whitelisted
         for ext_program in [&self.from_ext_program, &self.jmi_ext_program] {
@@ -215,11 +215,11 @@ impl<'info> UnwrapAsset<'info> {
         ctx.accounts.swap_m_account.reload()?;
         let m_amount = ctx.accounts.swap_m_account.amount - m_pre_balance;
 
-        // 3. Call JMI unwrap_asset (swap_global signs for token transfer, replace_authority for authorization)
-        m_ext::cpi::unwrap_asset(
+        // 3. Call JMI replace_asset_with_m (swap_global signs for token transfer, replace_authority for authorization)
+        m_ext::cpi::replace_asset_with_m(
             CpiContext::new_with_signer(
                 ctx.accounts.jmi_ext_program.to_account_info(),
-                ExtUnwrapAsset {
+                ExtReplaceAssetWithM {
                     token_authority: ctx.accounts.swap_global.to_account_info(),
                     replace_authority: Some(replace_authority),
                     m_mint: ctx.accounts.m_mint.to_account_info(),

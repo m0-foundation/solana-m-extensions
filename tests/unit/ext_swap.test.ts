@@ -1101,7 +1101,7 @@ describe("extension swap tests (new)", () => {
     });
   });
 
-  describe("unwrap_asset operations", () => {
+  describe("replace_asset_with_m operations", () => {
     // ext_swap level validation
     // [x] given the source extension (from_ext) is not whitelisted
     //   [x] it reverts with an InvalidExtension error
@@ -1129,7 +1129,7 @@ describe("extension swap tests (new)", () => {
     const unwrapAssetAmount = new BN(50_000);
 
     beforeAll(async () => {
-      // Setup for unwrap_asset tests:
+      // Setup for replace_asset_with_m tests:
       // 1. Create and configure asset on JMI extension (extA)
       unwrapAssetMint = await $.createAssetMint();
       await $.setAssetCapOnExtension("extA", unwrapAssetMint.publicKey, unwrapAssetCap);
@@ -1156,7 +1156,7 @@ describe("extension swap tests (new)", () => {
         .signers([$.swapperKeypair])
         .rpc();
 
-      // 4. Add replace authority to extB for unwrap_asset tests
+      // 4. Add replace authority to extB for replace_asset_with_m tests
       await $.addWrapAuthorityToExtension("extB", $.getReplaceAuthorityPda());
     });
 
@@ -1169,7 +1169,7 @@ describe("extension swap tests (new)", () => {
         .rpc();
 
       await $.expectAnchorError(
-        $.unwrapAssetViaSwap("extB", "extA", unwrapAssetMint.publicKey, unwrapAssetAmount, $.swapperKeypair),
+        $.replaceAssetWithMViaSwap("extB", "extA", unwrapAssetMint.publicKey, unwrapAssetAmount, $.swapperKeypair),
         "InvalidExtension"
       );
 
@@ -1187,7 +1187,7 @@ describe("extension swap tests (new)", () => {
         .rpc();
 
       await $.expectAnchorError(
-        $.unwrapAssetViaSwap("extB", "extA", unwrapAssetMint.publicKey, unwrapAssetAmount, $.swapperKeypair),
+        $.replaceAssetWithMViaSwap("extB", "extA", unwrapAssetMint.publicKey, unwrapAssetAmount, $.swapperKeypair),
         "InvalidExtension"
       );
 
@@ -1198,7 +1198,7 @@ describe("extension swap tests (new)", () => {
 
     it("should fail when from_principal is zero", async () => {
       await $.expectAnchorError(
-        $.unwrapAssetViaSwap("extB", "extA", unwrapAssetMint.publicKey, new BN(0), $.swapperKeypair),
+        $.replaceAssetWithMViaSwap("extB", "extA", unwrapAssetMint.publicKey, new BN(0), $.swapperKeypair),
         "InvalidAmount"
       );
     });
@@ -1212,7 +1212,7 @@ describe("extension swap tests (new)", () => {
         .rpc();
 
       await $.expectAnchorError(
-        $.unwrapAssetViaSwap("extB", "extA", unwrapAssetMint.publicKey, unwrapAssetAmount, $.swapperKeypair),
+        $.replaceAssetWithMViaSwap("extB", "extA", unwrapAssetMint.publicKey, unwrapAssetAmount, $.swapperKeypair),
         "NotAuthorized"
       );
 
@@ -1230,7 +1230,7 @@ describe("extension swap tests (new)", () => {
         .rpc();
 
       await $.expectAnchorError(
-        $.unwrapAssetViaSwap("extB", "extA", unwrapAssetMint.publicKey, unwrapAssetAmount, $.swapperKeypair),
+        $.replaceAssetWithMViaSwap("extB", "extA", unwrapAssetMint.publicKey, unwrapAssetAmount, $.swapperKeypair),
         "NotAuthorized"
       );
 
@@ -1243,7 +1243,7 @@ describe("extension swap tests (new)", () => {
       await $.pauseExtension("extA");
 
       await $.expectAnchorError(
-        $.unwrapAssetViaSwap("extB", "extA", unwrapAssetMint.publicKey, unwrapAssetAmount, $.swapperKeypair),
+        $.replaceAssetWithMViaSwap("extB", "extA", unwrapAssetMint.publicKey, unwrapAssetAmount, $.swapperKeypair),
         "Paused"
       );
 
@@ -1262,7 +1262,7 @@ describe("extension swap tests (new)", () => {
 
       // Try to unwrap more than what's backed (vault only has 50 assets)
       await $.expectAnchorError(
-        $.unwrapAssetViaSwap("extB", "extA", lowBackingAsset.publicKey, unwrapAssetAmount, $.swapperKeypair),
+        $.replaceAssetWithMViaSwap("extB", "extA", lowBackingAsset.publicKey, unwrapAssetAmount, $.swapperKeypair),
         "InsufficientAssetBacking"
       );
     });
@@ -1278,7 +1278,7 @@ describe("extension swap tests (new)", () => {
       const initialVaultAssetBalance = await $.getTokenBalance(jmiAssetVault, false);
 
       const unwrapAmount = new BN(1_000);
-      await $.unwrapAssetViaSwap("extB", "extA", unwrapAssetMint.publicKey, unwrapAmount, $.swapperKeypair);
+      await $.replaceAssetWithMViaSwap("extB", "extA", unwrapAssetMint.publicKey, unwrapAmount, $.swapperKeypair);
 
       // Verify ext tokens burned from user
       const finalUserExtBBalance = await $.getTokenBalance(userExtBAta);
@@ -1301,9 +1301,9 @@ describe("extension swap tests (new)", () => {
       // Get initial balance
       const initialJmiMVaultBalance = await $.getTokenBalance(jmiMVaultAta);
 
-      // Perform unwrap_asset (extB → asset via extA's JMI)
+      // Perform replace_asset_with_m (extB → asset via extA's JMI)
       const unwrapAmount = new BN(500);
-      await $.unwrapAssetViaSwap("extB", "extA", unwrapAssetMint.publicKey, unwrapAmount, $.swapperKeypair);
+      await $.replaceAssetWithMViaSwap("extB", "extA", unwrapAssetMint.publicKey, unwrapAmount, $.swapperKeypair);
 
       // Verify M transferred to JMI vault
       const finalJmiMVaultBalance = await $.getTokenBalance(jmiMVaultAta);
@@ -1311,7 +1311,7 @@ describe("extension swap tests (new)", () => {
     });
   });
 
-  describe("wrap_asset and unwrap_asset integration", () => {
+  describe("wrap_asset and replace_asset_with_m integration", () => {
     // [x] given M backing is insufficient on source extension
     //    [x] it reverts with an InsufficientMBacking error
     // [x] given valid signer and inputs and sufficent backing
@@ -1335,7 +1335,7 @@ describe("extension swap tests (new)", () => {
       await $.mintAssetTokensTo(integrationAssetMint, $.swapperKeypair.publicKey, integrationAmount.mul(new BN(10)));
     });
 
-    it("should revert unwrap_asset when M backing is insufficient (same-extension)", async () => {
+    it("should revert replace_asset_with_m when M backing is insufficient (same-extension)", async () => {
       const userAssetAta = await $.getATA(integrationAssetMint.publicKey, $.swapperKeypair.publicKey, false);
       const userExtAAta = await $.getATA($.getExtensionMint("mintA"), $.swapperKeypair.publicKey);
 
@@ -1346,13 +1346,13 @@ describe("extension swap tests (new)", () => {
       const extABalance = await $.getTokenBalance(userExtAAta);
       expect(extABalance.gte(integrationAmount)).toBe(true);
 
-      // Attempt to unwrap_asset with same extension (extA → extA)
+      // Attempt to replace_asset_with_m with same extension (extA → extA)
       // Should fail because asset-backed tokens have no M backing
       // This matches EVM behavior where totalAssets == totalSupply means M backing = 0
       const unwrapAmount = integrationAmount.div(new BN(2));
 
       await $.expectAnchorError(
-        $.unwrapAssetViaSwap(
+        $.replaceAssetWithMViaSwap(
           "extA",  // from extension
           "extA",  // JMI extension (same)
           integrationAssetMint.publicKey,
@@ -1363,7 +1363,7 @@ describe("extension swap tests (new)", () => {
       );
     });
 
-    it("should unwrap_asset when source extension has sufficient M backing", async () => {
+    it("should replace_asset_with_m when source extension has sufficient M backing", async () => {
       // Setup: Give swapper M-backed extB tokens (wrap M → extB)
       const accounts = await getTokenAccounts();
       const wrapMAmount = new BN(50_000);
@@ -1391,7 +1391,7 @@ describe("extension swap tests (new)", () => {
 
       const unwrapAmount = wrapMAmount.div(new BN(2));
 
-      await $.unwrapAssetViaSwap(
+      await $.replaceAssetWithMViaSwap(
         "extB",  // from extension (has M backing)
         "extA",  // JMI extension (has assets in vault from previous wrap_asset)
         integrationAssetMint.publicKey,
@@ -1445,14 +1445,14 @@ describe("extension swap tests (new)", () => {
       const totalAssetsIncrease = afterWrapsTotalAssets.sub(initialTotalAssets);
       expect(totalAssetsIncrease.eq(vaultBalanceIncrease)).toBe(true);
 
-      // Now unwrap some via unwrap_asset (need extB tokens first)
+      // Now unwrap some via replace_asset_with_m (need extB tokens first)
       const accounts = await getTokenAccounts();
       const userExtBAta = accounts.ataB;
       const extBBalance = await $.getTokenBalance(userExtBAta);
 
       if (extBBalance.gt(new BN(0))) {
         const unwrapAmount = BN.min(extBBalance, new BN(5_000));
-        await $.unwrapAssetViaSwap("extB", "extA", trackingAsset.publicKey, unwrapAmount, $.swapperKeypair);
+        await $.replaceAssetWithMViaSwap("extB", "extA", trackingAsset.publicKey, unwrapAmount, $.swapperKeypair);
 
         // Verify vault balance decreased
         const finalVaultBalance = await $.getTokenBalance(vaultAssetAta, false);

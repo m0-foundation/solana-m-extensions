@@ -80,11 +80,11 @@ pub mod ext_swap {
         Unwrap::handler(ctx, amount)
     }
 
-    pub fn unwrap_asset<'info>(
-        ctx: Context<'_, '_, '_, 'info, UnwrapAsset<'info>>,
+    pub fn replace_asset_with_m<'info>(
+        ctx: Context<'_, '_, '_, 'info, ReplaceAssetWithM<'info>>,
         amount: u64,
     ) -> Result<()> {
-        UnwrapAsset::handler(ctx, amount)
+        ReplaceAssetWithM::handler(ctx, amount)
     }
 
     pub fn wrap_asset<'info>(

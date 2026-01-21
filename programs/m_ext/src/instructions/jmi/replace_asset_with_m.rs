@@ -12,7 +12,7 @@ use crate::{
 use earn::utils::conversion::get_scaled_ui_config;
 
 #[derive(Accounts)]
-pub struct UnwrapAsset<'info> {
+pub struct ReplaceAssetWithM<'info> {
     pub token_authority: Signer<'info>,
 
     /// Will be set if a whitelisted authority is signing for a user
@@ -79,7 +79,7 @@ pub struct UnwrapAsset<'info> {
     pub asset_token_program: Interface<'info, TokenInterface>,
 }
 
-impl UnwrapAsset<'_> {
+impl ReplaceAssetWithM<'_> {
     pub fn validate(&self, m_amount: u64) -> Result<()> {
         let auth = match &self.replace_authority {
             Some(auth) => auth.key,
