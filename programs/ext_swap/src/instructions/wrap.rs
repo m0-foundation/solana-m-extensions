@@ -64,7 +64,7 @@ pub struct Wrap<'info> {
         bump,
     )]
     /// CHECK: account does not hold data
-    pub to_vault_auth: AccountInfo<'info>,
+    pub to_m_vault_auth: AccountInfo<'info>,
     #[account(
         seeds = [MINT_AUTHORITY_SEED],
         seeds::program = to_ext_program.key(),
@@ -79,7 +79,7 @@ pub struct Wrap<'info> {
     #[account(
         mut,
         associated_token::mint = m_mint,
-        associated_token::authority = to_vault_auth,
+        associated_token::authority = to_m_vault_auth,
         associated_token::token_program = m_token_program,
     )]
     pub to_m_vault: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -131,7 +131,7 @@ impl<'info> Wrap<'info> {
                     m_mint: ctx.accounts.m_mint.to_account_info(),
                     ext_mint: ctx.accounts.to_mint.to_account_info(),
                     global_account: ctx.accounts.to_global.to_account_info(),
-                    m_vault: ctx.accounts.to_vault_auth.to_account_info(),
+                    m_vault: ctx.accounts.to_m_vault_auth.to_account_info(),
                     ext_mint_authority: ctx.accounts.to_mint_authority.to_account_info(),
                     from_m_token_account: ctx.accounts.m_token_account.to_account_info(),
                     vault_m_token_account: ctx.accounts.to_m_vault.to_account_info(),
