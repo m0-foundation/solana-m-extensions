@@ -27,7 +27,7 @@ declare_id!("3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da");
 const _: () = {
     let yield_features = {
         cfg!(feature = "scaled-ui") as u32
-            + cfg!(feature = "jmi") as u32
+            + cfg!(feature = "no-yield") as u32
             + cfg!(feature = "crank") as u32
     };
 
@@ -46,7 +46,7 @@ const _: () = {
     }
 
     // JMI can only be used with no-yield (not scaled-ui or crank)
-    if cfg!(feature = "jmi") && (cfg!(feature = "scaled-ui") || cfg!(feature = "crank")) {
+    if cfg!(feature = "jmi") && cfg!(not(feature = "no-yield")) {
         panic!("JMI feature can only be enabled with no-yield variant");
     }
 };
@@ -98,7 +98,7 @@ pub mod m_ext {
         RemoveWrapAuthority::handler(ctx, wrap_authority)
     }
 
-    #[cfg(any(feature = "scaled-ui", feature = "no-yield", feature = "jmi"))]
+    #[cfg(any(feature = "scaled-ui", feature = "no-yield"))]
     pub fn claim_fees(ctx: Context<ClaimFees>) -> Result<()> {
         ClaimFees::handler(ctx)
     }
