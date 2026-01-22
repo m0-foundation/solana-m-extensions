@@ -1,64 +1,12 @@
 // external dependencies
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{
-    burn, mint_to, transfer_checked, Burn, Mint, MintTo, Token2022, TokenAccount, TokenInterface,
+    burn, mint_to, transfer_checked, Burn, Mint, MintTo, TokenAccount, TokenInterface,
     TransferChecked,
 };
 
-pub fn transfer_tokens_from_program<'info>(
-    from: &InterfaceAccount<'info, TokenAccount>,
-    to: &InterfaceAccount<'info, TokenAccount>,
-    amount: u64,
-    mint: &InterfaceAccount<'info, Mint>,
-    authority: &AccountInfo<'info>,
-    authority_seeds: &[&[&[u8]]],
-    token_program: &Program<'info, Token2022>,
-) -> Result<()> {
-    // Build the arguments for the transfer instruction
-    let transfer_options = TransferChecked {
-        from: from.to_account_info(),
-        to: to.to_account_info(),
-        mint: mint.to_account_info(),
-        authority: authority.clone(),
-    };
-    let cpi_context = CpiContext::new_with_signer(
-        token_program.to_account_info(),
-        transfer_options,
-        authority_seeds,
-    );
-
-    // Call the transfer instruction
-    transfer_checked(cpi_context, amount, mint.decimals)?;
-
-    Ok(())
-}
-
-pub fn transfer_tokens<'info>(
-    from: &InterfaceAccount<'info, TokenAccount>,
-    to: &InterfaceAccount<'info, TokenAccount>,
-    amount: u64,
-    mint: &InterfaceAccount<'info, Mint>,
-    authority: &AccountInfo<'info>,
-    token_program: &Program<'info, Token2022>,
-) -> Result<()> {
-    // Build the arguments for the transfer instruction
-    let transfer_options = TransferChecked {
-        from: from.to_account_info(),
-        to: to.to_account_info(),
-        mint: mint.to_account_info(),
-        authority: authority.clone(),
-    };
-    let cpi_context = CpiContext::new(token_program.to_account_info(), transfer_options);
-
-    // Call the transfer instruction
-    transfer_checked(cpi_context, amount, mint.decimals)?;
-
-    Ok(())
-}
-
 /// Transfer tokens using the generic TokenInterface (supports both Token and Token2022)
-/// Used by JMI for multi-asset support
-pub fn transfer_tokens_interface<'info>(
+pub fn transfer_tokens<'info>(
     from: &InterfaceAccount<'info, TokenAccount>,
     to: &InterfaceAccount<'info, TokenAccount>,
     amount: u64,
@@ -66,7 +14,6 @@ pub fn transfer_tokens_interface<'info>(
     authority: &AccountInfo<'info>,
     token_program: &Interface<'info, TokenInterface>,
 ) -> Result<()> {
-    // Build the arguments for the transfer instruction
     let transfer_options = TransferChecked {
         from: from.to_account_info(),
         to: to.to_account_info(),
@@ -75,15 +22,14 @@ pub fn transfer_tokens_interface<'info>(
     };
     let cpi_context = CpiContext::new(token_program.to_account_info(), transfer_options);
 
-    // Call the transfer instruction
     transfer_checked(cpi_context, amount, mint.decimals)?;
 
     Ok(())
 }
 
-/// Transfer tokens from a program-owned account using PDA signer with TokenInterface
+/// Transfer tokens from a program-owned account using PDA signer
 /// Supports both SPL Token and Token2022
-pub fn transfer_tokens_from_program_interface<'info>(
+pub fn transfer_tokens_from_program<'info>(
     from: &InterfaceAccount<'info, TokenAccount>,
     to: &InterfaceAccount<'info, TokenAccount>,
     amount: u64,

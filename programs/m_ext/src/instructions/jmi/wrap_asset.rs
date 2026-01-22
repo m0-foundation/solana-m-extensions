@@ -7,7 +7,7 @@ use crate::{
         AssetConfig, ExtGlobalV2, ASSET_CONFIG_SEED, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED,
         M_VAULT_SEED,
     },
-    utils::token::{mint_tokens, transfer_tokens_interface},
+    utils::token::{mint_tokens, transfer_tokens},
 };
 
 #[derive(Accounts)]
@@ -131,7 +131,7 @@ impl WrapAsset<'_> {
         }
 
         // 2. Transfer assets from user to vault
-        transfer_tokens_interface(
+        transfer_tokens(
             &ctx.accounts.from_asset_token_account,
             &ctx.accounts.vault_asset_token_account,
             amount,

@@ -1,12 +1,12 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount, TokenInterface};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::{
     errors::ExtError,
     state::{AssetConfig, ExtGlobalV2, ASSET_CONFIG_SEED, EXT_GLOBAL_SEED, M_VAULT_SEED},
     utils::{
         conversion::{multiplier_to_index, principal_to_amount_down},
-        token::{transfer_tokens, transfer_tokens_from_program_interface},
+        token::{transfer_tokens, transfer_tokens_from_program},
     },
 };
 use earn::utils::conversion::get_scaled_ui_config;
@@ -78,7 +78,7 @@ pub struct ReplaceAssetWithM<'info> {
     )]
     pub to_asset_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    pub m_token_program: Program<'info, Token2022>,
+    pub m_token_program: Interface<'info, TokenInterface>,
     pub asset_token_program: Interface<'info, TokenInterface>,
 }
 
@@ -129,7 +129,7 @@ impl ReplaceAssetWithM<'_> {
         )?;
 
         // Transfer asset from vault to recipient
-        transfer_tokens_from_program_interface(
+        transfer_tokens_from_program(
             &ctx.accounts.vault_asset_token_account,
             &ctx.accounts.to_asset_token_account,
             asset_amount,
