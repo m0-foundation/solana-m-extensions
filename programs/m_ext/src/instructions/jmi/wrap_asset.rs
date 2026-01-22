@@ -18,7 +18,10 @@ pub struct WrapAsset<'info> {
     pub replace_authority: Option<Signer<'info>>,
 
     /// Non-M asset mint (USDC, USDT, etc.) - CANNOT be M
-    #[account(mint::token_program = asset_token_program)]
+    #[account(
+        mint::token_program = asset_token_program,
+        constraint = asset_mint.key() != global_account.m_mint @ ExtError::AssetNotAllowed,
+    )]
     pub asset_mint: InterfaceAccount<'info, Mint>,
 
     /// Extension token mint
@@ -103,16 +106,6 @@ impl WrapAsset<'_> {
             return err!(ExtError::Paused);
         }
 
-        // Validate asset is NOT M (must be non-M asset)
-        if self.asset_mint.key() == self.global_account.m_mint {
-            return err!(ExtError::AssetNotAllowed);
-        }
-
-        // Validate asset cap is set and > 0
-        if self.asset_config.cap == 0 {
-            return err!(ExtError::AssetNotAllowed);
-        }
-
         Ok(())
     }
 
@@ -130,6 +123,9 @@ impl WrapAsset<'_> {
             .amount
             .checked_add(amount)
             .ok_or(ExtError::MathOverflow)?;
+
+        // Uninitialized asset fails at deserialization (no account exists)
+        // Initialized with cap = 0 caught by new_balance > cap check
         if new_balance > ctx.accounts.asset_config.cap {
             return err!(ExtError::AssetCapExceeded);
         }

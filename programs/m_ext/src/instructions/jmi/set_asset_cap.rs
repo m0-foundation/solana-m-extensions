@@ -71,9 +71,7 @@ impl SetAssetCap<'_> {
 
     #[access_control(ctx.accounts.validate())]
     pub fn handler(ctx: Context<Self>, cap: u64) -> Result<()> {
-        let asset_config = &mut ctx.accounts.asset_config;
 
-        // If first initialization (all fields are zero), set bump
         ctx.accounts.asset_config.set_inner(AssetConfig {
             cap: cap,
             bump: ctx.bumps.asset_config,

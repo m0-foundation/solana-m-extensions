@@ -8212,7 +8212,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           });
 
           // given the asset config cap is 0 (disabled)
-          // it reverts with an AssetNotAllowed error
+          // it reverts with an AssetCapExceeded error
           test("Wrap asset with zero cap - reverts", async () => {
             // Disable the asset
             await $.setAssetCap(assetMint.publicKey, new BN(0));
@@ -8232,7 +8232,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
-              "AssetNotAllowed"
+              "AssetCapExceeded"
             );
           });
 
@@ -8376,7 +8376,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
-              "ConstraintSeeds"
+              "AssetNotAllowed"
             );
           });
 
