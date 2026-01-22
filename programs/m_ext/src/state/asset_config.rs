@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 /// Per-asset configuration for JMI multi-asset backing
-/// PDA seeds: [ASSET_CONFIG_SEED, global_account, asset_mint]
+/// PDA seeds: [ASSET_CONFIG_SEED, asset_mint]
 /// Note: Only assets with 6 decimals are accepted (validated in set_asset_cap)
 #[account]
 #[derive(InitSpace)]

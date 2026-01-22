@@ -33,9 +33,8 @@ pub struct WrapAsset<'info> {
     )]
     pub global_account: Account<'info, ExtGlobalV2>,
 
-    /// Asset configuration - REQUIRED for non-M assets
     #[account(
-        seeds = [ASSET_CONFIG_SEED, global_account.key().as_ref(), asset_mint.key().as_ref()],
+        seeds = [ASSET_CONFIG_SEED, asset_mint.key().as_ref()],
         bump = asset_config.bump,
     )]
     pub asset_config: Account<'info, AssetConfig>,

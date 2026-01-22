@@ -1730,11 +1730,7 @@ export class ExtensionTest<
 
   public getAssetConfigAccount(assetMint: PublicKey): PublicKey {
     const [assetConfig] = PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("asset_config"),
-        this.getExtGlobalAccount().toBuffer(),
-        assetMint.toBuffer(),
-      ],
+      [Buffer.from("asset_config"), assetMint.toBuffer()],
       this.ext.programId
     );
     return assetConfig;
@@ -2622,13 +2618,8 @@ export class ExtensionSwapTest extends ExtensionTestBase {
   public getAssetConfigAccount(extKey: string, assetMint: PublicKey): PublicKey {
     const program = this.extensionPrograms[extKey];
     if (!program) throw new Error(`Extension ${extKey} not found`);
-    const globalAccount = this.getExtGlobalAccountFor(extKey);
     return PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("asset_config"),
-        globalAccount.toBuffer(),
-        assetMint.toBuffer(),
-      ],
+      [Buffer.from("asset_config"), assetMint.toBuffer()],
       program.programId
     )[0];
   }

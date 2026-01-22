@@ -29,7 +29,7 @@ pub struct SetAssetCap<'info> {
         init_if_needed,
         payer = admin,
         space = 8 + AssetConfig::INIT_SPACE,
-        seeds = [ASSET_CONFIG_SEED, global_account.key().as_ref(), asset_mint.key().as_ref()],
+        seeds = [ASSET_CONFIG_SEED, asset_mint.key().as_ref()],
         bump,
     )]
     pub asset_config: Account<'info, AssetConfig>,
