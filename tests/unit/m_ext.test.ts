@@ -360,13 +360,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               yieldConfig: {
                 yieldVariant: { noYield: {} },
                 totalAssets: new BN(0),
-                isPaused: false,
               },
               wrapAuthorities,
             });
 
             // Confirm the size of the global account based on the number of wrap authorities
-            const expectedSize = 176 + 10 + wrapAuthorities.length * 32; // 176 bytes base size + 10 for yield config + 4 bytes for vector length + 32 bytes per wrap authority
+            const expectedSize = 176 + 9 + wrapAuthorities.length * 32; // 176 bytes base size + 9 for yield config + 4 bytes for vector length + 32 bytes per wrap authority
             const extGlobalSize = await $.provider.connection
               .getAccountInfo(globalAccount)
               .then((info) => info?.data.length || 0);
@@ -2169,6 +2168,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   vaultMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -2206,6 +2206,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   extMint: wrongMint.publicKey,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -2233,6 +2234,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -2259,6 +2261,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   vaultMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -2280,6 +2283,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount: toExtTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -2301,6 +2305,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   toExtTokenAccount: fromMTokenAccount,
                   fromMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -2333,6 +2338,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.nonWrapAuthority])
@@ -2361,6 +2367,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.wrapAuthority])
                 .rpc()
@@ -2377,6 +2384,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
@@ -2448,6 +2456,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 wrapAuthority: $.ext.programId,
                 fromMTokenAccount,
                 toExtTokenAccount,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
@@ -2525,6 +2534,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 wrapAuthority: $.ext.programId,
                 fromMTokenAccount,
                 toExtTokenAccount,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
@@ -2609,6 +2619,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 wrapAuthority: $.ext.programId,
                 fromMTokenAccount,
                 toExtTokenAccount,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
@@ -2690,6 +2701,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.nonWrapAuthority.publicKey,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.nonWrapAuthority])
@@ -2718,6 +2730,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID
                 })
                 .signers([$.nonWrapAuthority, $.wrapAuthority])
                 .rpc()
@@ -2785,6 +2798,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 wrapAuthority: $.wrapAuthority.publicKey,
                 fromMTokenAccount,
                 toExtTokenAccount,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 extTokenProgram: $.extTokenProgram,
               })
               .signers([$.nonAdmin, $.wrapAuthority])
@@ -2873,6 +2887,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 wrapAuthority: $.wrapAuthority.publicKey,
                 fromMTokenAccount,
                 toExtTokenAccount,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 extTokenProgram: $.extTokenProgram,
               })
               .signers([$.nonWrapAuthority, $.wrapAuthority])
@@ -3023,6 +3038,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID
                 })
                 .signers([$.wrapAuthority])
                 .rpc();
@@ -3106,6 +3122,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3192,6 +3209,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.wrapAuthority])
                 .rpc();
@@ -3285,6 +3303,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3383,6 +3402,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.wrapAuthority])
                 .rpc();
@@ -3479,6 +3499,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3624,6 +3645,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   vaultMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3662,6 +3684,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   extMint: wrongMint.publicKey,
                   fromExtTokenAccount,
                   toMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3691,6 +3714,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.wrapAuthority])
                 .rpc()
@@ -3721,6 +3745,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   vaultMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3742,6 +3767,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   unwrapAuthority: $.ext.programId,
                   toMTokenAccount: fromExtTokenAccount,
                   fromExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3764,6 +3790,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount: toMTokenAccount,
                   toMTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
@@ -3793,6 +3820,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   unwrapAuthority: $.ext.programId,
                   fromExtTokenAccount,
                   toMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.nonWrapAuthority])
@@ -3828,6 +3856,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.wrapAuthority])
                 .rpc()
@@ -3844,6 +3873,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   unwrapAuthority: $.ext.programId,
                   fromExtTokenAccount,
                   toMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3911,6 +3941,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 fromExtTokenAccount,
                 toMTokenAccount,
                 extTokenProgram: $.extTokenProgram,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
               })
               .signers([$.wrapAuthority])
               .rpc();
@@ -3989,6 +4020,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
@@ -4073,6 +4105,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
@@ -4133,6 +4166,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.nonWrapAuthority])
                 .rpc()
@@ -4164,6 +4198,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.nonWrapAuthority, $.nonAdmin])
                 .rpc(),
@@ -4210,6 +4245,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.nonWrapAuthority, $.wrapAuthority])
                 .rpc()
@@ -4280,6 +4316,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 fromExtTokenAccount,
                 toMTokenAccount,
                 extTokenProgram: $.extTokenProgram,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
               })
               .signers([$.nonAdmin, $.wrapAuthority])
               .rpc();
@@ -4374,6 +4411,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 fromExtTokenAccount,
                 toMTokenAccount,
                 extTokenProgram: $.extTokenProgram,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
               })
               .signers([$.nonWrapAuthority, $.wrapAuthority])
               .rpc();
@@ -4476,6 +4514,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 fromExtTokenAccount,
                 toMTokenAccount,
                 extTokenProgram: $.extTokenProgram,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
               })
               .signers([$.wrapAuthority])
               .rpc();
@@ -4576,6 +4615,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 fromExtTokenAccount,
                 toMTokenAccount,
                 extTokenProgram: $.extTokenProgram,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
               })
               .signers([$.wrapAuthority])
               .rpc();
@@ -4675,6 +4715,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 fromExtTokenAccount,
                 toMTokenAccount,
                 extTokenProgram: $.extTokenProgram,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
               })
               .signers([$.wrapAuthority])
               .rpc();
@@ -7927,155 +7968,6 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           });
         });
 
-        describe("pause unit tests", () => {
-          // pause test cases
-          // [x] given the admin does not sign the transaction
-          //   [x] it reverts with a NotAuthorized error
-          // [x] given the admin signs & valid inputs
-          //   [x] it sets is_paused to true on the global account
-          // [x] given the global account is not the global PDA
-          //   [x] it reverts with a ConstraintSeeds error
-
-          // given the admin does not sign the transaction
-          // it reverts with a NotAuthorized error
-          test("Non-admin tries to pause - reverts", async () => {
-            await $.expectAnchorError(
-              $.ext.methods
-                .pause()
-                .accounts({
-                  admin: $.nonAdmin.publicKey,
-                })
-                .signers([$.nonAdmin])
-                .rpc(),
-              "NotAuthorized"
-            );
-          });
-
-          // given valid inputs
-          // it sets is_paused to true on the global account
-          test("Admin pauses contract - success", async () => {
-            await $.pause();
-
-            await $.expectExtGlobalState({
-              yieldConfig: {
-                isPaused: true,
-              },
-            });
-          });
-
-          // given the global account is not the global PDA
-          // it reverts with a ConstraintSeeds error
-          test("Global account is not the global PDA - reverts", async () => {
-            const fakeGlobal = PublicKey.unique();
-
-            // Copy the real global account data to the fake address so it deserializes properly
-            const realGlobalInfo = $.svm.getAccount($.getExtGlobalAccount());
-            if (realGlobalInfo) {
-              $.svm.setAccount(fakeGlobal, realGlobalInfo);
-            }
-
-            await $.expectAnchorError(
-              $.ext.methods
-                .pause()
-                .accountsPartial({
-                  admin: $.admin.publicKey,
-                  globalAccount: fakeGlobal,
-                })
-                .signers([$.admin])
-                .rpc(),
-              "ConstraintSeeds"
-            );
-          });
-        });
-
-        describe("unpause unit tests", () => {
-          // unpause test cases
-          // [x] given the admin does not sign the transaction
-          //   [x] it reverts with a NotAuthorized error
-          // [x] given the admin signs & valid inputs
-          //   [x] it sets is_paused to false on the global account
-          //   [x] it can be called when already unpaused (idempotent)
-          // [x] given the global account is not the global PDA
-          //   [x] it reverts with a ConstraintSeeds error
-
-          // given the admin does not sign the transaction
-          // it reverts with a NotAuthorized error
-          test("Non-admin tries to unpause - reverts", async () => {
-            await $.expectAnchorError(
-              $.ext.methods
-                .unpause()
-                .accounts({
-                  admin: $.nonAdmin.publicKey,
-                })
-                .signers([$.nonAdmin])
-                .rpc(),
-              "NotAuthorized"
-            );
-          });
-
-          // given valid inputs
-          // it sets is_paused to false on the global account
-          test("Admin unpauses contract - success", async () => {
-            await $.pause();
-
-            await $.expectExtGlobalState({
-              yieldConfig: {
-                isPaused: true,
-              },
-            });
-
-            await $.unpause();
-
-            await $.expectExtGlobalState({
-              yieldConfig: {
-                isPaused: false,
-              },
-            });
-          });
-
-          // it can be called when already unpaused (idempotent)
-          test("Unpause when already unpaused - success (idempotent)", async () => {
-            await $.expectExtGlobalState({
-              yieldConfig: {
-                isPaused: false,
-              },
-            });
-
-            await $.unpause();
-
-            await $.expectExtGlobalState({
-              yieldConfig: {
-                isPaused: false,
-              },
-            });
-          });
-
-          // given the global account is not the global PDA
-          // it reverts with a ConstraintSeeds error
-          test("Global account is not the global PDA - reverts", async () => {
-            const fakeGlobal = PublicKey.unique();
-            // if (fakeGlobal === $.getExtGlobalAccount()) return;
-
-            // Copy the real global account data to the fake address so it deserializes properly
-            const realGlobalInfo = $.svm.getAccount($.getExtGlobalAccount());
-            if (realGlobalInfo) {
-              $.svm.setAccount(fakeGlobal, realGlobalInfo);
-            }
-
-            await $.expectAnchorError(
-              $.ext.methods
-                .unpause()
-                .accountsPartial({
-                  admin: $.admin.publicKey,
-                  globalAccount: fakeGlobal,
-                })
-                .signers([$.admin])
-                .rpc(),
-              "ConstraintSeeds"
-            );
-          });
-        });
-
         describe("wrap_asset unit tests", () => {
           // wrap_asset test cases
           // [x] given the caller is not authorized (not in wrap_authorities)
@@ -8083,8 +7975,6 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // [x] given an authorized caller signs
           //   [x] given the amount is 0
           //     [x] it reverts with an InvalidAmount error
-          //   [x] given the contract is paused
-          //     [x] it reverts with a Paused error
           //   [x] given the asset config cap is 0 (disabled)
           //     [x] it reverts with an AssetNotAllowed error
           //   [x] given the wrap would exceed the asset cap
@@ -8184,30 +8074,6 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 .signers([$.wrapAuthority])
                 .rpc(),
               "InvalidAmount"
-            );
-          });
-
-          // given the contract is paused
-          // it reverts with a Paused error
-          test("Wrap asset when paused - reverts", async () => {
-            await $.pause();
-
-            await $.expectAnchorError(
-              $.ext.methods
-                .wrapAsset(new BN(10_000_000))
-                .accountsPartial({
-                  tokenAuthority: $.wrapAuthority.publicKey,
-                  replaceAuthority: $.ext.programId,
-                  assetMint: assetMint.publicKey,
-                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
-                  fromAssetTokenAccount,
-                  toExtTokenAccount,
-                  assetTokenProgram: TOKEN_PROGRAM_ID,
-                  extTokenProgram: $.extTokenProgram,
-                })
-                .signers([$.wrapAuthority])
-                .rpc(),
-              "Paused"
             );
           });
 
@@ -8422,8 +8288,6 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // [x] given an authorized caller signs the transaction
           //   [x] given the m_amount is 0
           //     [x] it reverts with an InvalidAmount error
-          //   [x] given the contract is paused
-          //     [x] it reverts with a Paused error
           //   [x] given the vault has insufficient asset backing for the conversion
           //     [x] it reverts with an InsufficientAssetBacking error
           //   [x] given valid inputs
@@ -8525,42 +8389,6 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 .signers([$.wrapAuthority])
                 .rpc(),
               "InvalidAmount"
-            );
-          });
-
-          // given the contract is paused
-          // it reverts with a Paused error
-          test("Unwrap asset when paused - reverts", async () => {
-            let fromMTokenAccount = await $.getATA(
-              $.mMint.publicKey,
-              $.wrapAuthority.publicKey,
-            );
-
-            let toAssetTokenAccount = await $.getATA(
-              assetMint.publicKey,
-              $.wrapAuthority.publicKey,
-              false
-            );
-            
-            await $.pause();
-
-            await $.expectAnchorError(
-              $.ext.methods
-                .replaceAssetWithM(new BN(10_000_000))
-                .accountsPartial({
-                  tokenAuthority: $.wrapAuthority.publicKey,
-                  replaceAuthority: $.ext.programId,
-                  mMint: $.mMint.publicKey,
-                  assetMint: assetMint.publicKey,
-                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
-                  fromMTokenAccount,
-                  toAssetTokenAccount,
-                  assetTokenProgram: TOKEN_PROGRAM_ID,
-                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
-                })
-                .signers([$.wrapAuthority])
-                .rpc(),
-              "Paused"
             );
           });
 
@@ -8759,6 +8587,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),

@@ -175,7 +175,6 @@ impl MigrateM<'_> {
                 yield_config = YieldConfig {
                     yield_variant: YieldVariant::NoYield,
                     total_assets: 0,
-                    is_paused: false,
                 };
             }
         };

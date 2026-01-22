@@ -122,16 +122,6 @@ pub mod m_ext {
     }
 
     #[cfg(feature = "jmi")]
-    pub fn pause(ctx: Context<Pause>) -> Result<()> {
-        Pause::handler(ctx)
-    }
-
-    #[cfg(feature = "jmi")]
-    pub fn unpause(ctx: Context<Unpause>) -> Result<()> {
-        Unpause::handler(ctx)
-    }
-
-    #[cfg(feature = "jmi")]
     pub fn replace_asset_with_m(ctx: Context<ReplaceAssetWithM>, m_principal: u64) -> Result<()> {
         ReplaceAssetWithM::handler(ctx, m_principal)
     }

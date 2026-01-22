@@ -98,11 +98,6 @@ impl ReplaceAssetWithM<'_> {
             return err!(ExtError::InvalidAmount);
         }
 
-        // Validate the contract is not paused
-        if self.global_account.yield_config.is_paused {
-            return err!(ExtError::Paused);
-        }
-
         Ok(())
     }
 

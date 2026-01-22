@@ -102,14 +102,12 @@ cfg_if! {
         pub struct YieldConfig {
             pub yield_variant: YieldVariant,   // 1 byte
             pub total_assets: u64,             // 8 bytes - sum of non-M assets (6 decimals)
-            pub is_paused: bool,               // 1 byte - global pause state
         }
 
         impl YieldConfig {
             pub fn space() -> usize {
                 1 + // yield_variant
-                8 + // total_assets
-                1   // is_paused
+                8   // total_assets
             }
         }
 

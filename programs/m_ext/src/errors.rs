@@ -35,8 +35,6 @@ pub enum ExtError {
     #[msg("Vault token account frozen.")]
     VaultFrozen,
 
-    #[msg("Contract is paused.")]
-    Paused,
     #[msg("Asset not allowed for wrapping.")]
     AssetNotAllowed,
     #[msg("Asset cap would be exceeded.")]

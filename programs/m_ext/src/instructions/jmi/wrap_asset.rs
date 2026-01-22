@@ -101,11 +101,6 @@ impl WrapAsset<'_> {
             return err!(ExtError::InvalidAmount);
         }
 
-        // Validate contract is not paused
-        if self.global_account.yield_config.is_paused {
-            return err!(ExtError::Paused);
-        }
-
         Ok(())
     }
 

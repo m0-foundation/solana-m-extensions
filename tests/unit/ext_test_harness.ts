@@ -90,7 +90,6 @@ export type YieldConfig<V extends Variant> = V extends Variant.ScaledUi
   : {
       yieldVariant?: YieldVariant;
       totalAssets?: BN;
-      isPaused?: boolean;
     };
 
 export type ExtGlobal<V extends Variant> = {
@@ -1419,9 +1418,6 @@ export class ExtensionTest<
         expected.totalAssets.toString()
       );
     }
-    if (expected.isPaused !== undefined) {
-      expect(actual.isPaused).toEqual(expected.isPaused);
-    }
   }
 
   public async expectEarnManagerState(
@@ -1646,6 +1642,7 @@ export class ExtensionTest<
           : this.ext.programId,
         fromMTokenAccount,
         toExtTokenAccount,
+        mTokenProgram: TOKEN_2022_PROGRAM_ID,
         extTokenProgram: this.extTokenProgram,
       })
       .signers(
@@ -1714,6 +1711,7 @@ export class ExtensionTest<
           : this.ext.programId,
         toMTokenAccount,
         fromExtTokenAccount,
+        mTokenProgram: TOKEN_2022_PROGRAM_ID,
         extTokenProgram: this.extTokenProgram,
       })
       .signers(
@@ -1801,38 +1799,6 @@ export class ExtensionTest<
         admin: signer.publicKey,
         assetMint: assetMint,
         assetTokenProgram: assetTokenProgram,
-      })
-      .signers([signer])
-      .rpc();
-  }
-
-  public async pause(admin?: Keypair): Promise<void> {
-    if (this.variant !== Variant.Jmi) {
-      throw new Error("pause is only available for JMI variant");
-    }
-
-    const signer = admin ?? this.admin;
-
-    await this.ext.methods
-      .pause()
-      .accounts({
-        admin: signer.publicKey,
-      })
-      .signers([signer])
-      .rpc();
-  }
-
-  public async unpause(admin?: Keypair): Promise<void> {
-    if (this.variant !== Variant.Jmi) {
-      throw new Error("unpause is only available for JMI variant");
-    }
-
-    const signer = admin ?? this.admin;
-
-    await this.ext.methods
-      .unpause()
-      .accounts({
-        admin: signer.publicKey,
       })
       .signers([signer])
       .rpc();
@@ -2686,32 +2652,6 @@ export class ExtensionSwapTest extends ExtensionTestBase {
         admin: this.admin.publicKey,
         assetMint: assetMint,
         assetTokenProgram: assetTokenProgram,
-      })
-      .signers([this.admin])
-      .rpc();
-  }
-
-  public async pauseExtension(extKey: string): Promise<void> {
-    const program = this.extensionPrograms[extKey];
-    if (!program) throw new Error(`Extension ${extKey} not found`);
-
-    await program.methods
-      .pause()
-      .accounts({
-        admin: this.admin.publicKey,
-      })
-      .signers([this.admin])
-      .rpc();
-  }
-
-  public async unpauseExtension(extKey: string): Promise<void> {
-    const program = this.extensionPrograms[extKey];
-    if (!program) throw new Error(`Extension ${extKey} not found`);
-
-    await program.methods
-      .unpause()
-      .accounts({
-        admin: this.admin.publicKey,
       })
       .signers([this.admin])
       .rpc();

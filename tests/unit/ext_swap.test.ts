@@ -877,8 +877,6 @@ describe("extension swap tests (new)", () => {
     //   [x] it reverts with an InvalidAmount error
     // [x] given the caller is not authorized (not in wrap_authorities)
     //   [x] it reverts with a NotAuthorized error
-    // [x] given the contract is paused
-    //   [x] it reverts with a Paused error
     // [x] given the asset is M (not a stablecoin)
     //   [x] it reverts with an AssetNotAllowed error
     // [x] given the asset_config.cap is 0 (asset not whitelisted)
@@ -963,19 +961,6 @@ describe("extension swap tests (new)", () => {
       // Re-add for later tests
       $.svm.expireBlockhash();
       await $.addWrapAuthorityToExtension("extA", $.getReplaceAuthorityPda());
-    });
-
-    it("should fail when contract is paused", async () => {
-      await $.pauseExtension("extA");
-
-      await $.expectAnchorError(
-        $.wrapAssetViaSwap("extA", assetMint.publicKey, wrapAssetAmount, $.swapperKeypair),
-        "Paused"
-      );
-
-      // Unpause for later tests
-      $.svm.expireBlockhash();
-      await $.unpauseExtension("extA");
     });
 
     it("should fail when asset is M token", async () => {
@@ -1113,8 +1098,6 @@ describe("extension swap tests (new)", () => {
     //   [x] it reverts with a NotAuthorized error
     // [x] given the caller is not authorized (not in wrap_authorities)
     //   [x] it reverts with a NotAuthorized error
-    // [x] given the contract is paused
-    //   [x] it reverts with a Paused error
     // [x] given the vault has insufficient asset backing for the conversion
     //   [x] it reverts with an InsufficientAssetBacking error
     // [x] given valid inputs
@@ -1237,19 +1220,6 @@ describe("extension swap tests (new)", () => {
       // Re-add for later tests
       $.svm.expireBlockhash();
       await $.addWrapAuthorityToExtension("extA", $.getReplaceAuthorityPda());
-    });
-
-    it("should fail when JMI contract is paused", async () => {
-      await $.pauseExtension("extA");
-
-      await $.expectAnchorError(
-        $.replaceAssetWithMViaSwap("extB", "extA", unwrapAssetMint.publicKey, unwrapAssetAmount, $.swapperKeypair),
-        "Paused"
-      );
-
-      // Unpause for later tests
-      $.svm.expireBlockhash();
-      await $.unpauseExtension("extA");
     });
 
     it("should fail when insufficient asset backing", async () => {
