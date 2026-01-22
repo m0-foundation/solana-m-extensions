@@ -74,14 +74,10 @@ impl SetAssetCap<'_> {
         let asset_config = &mut ctx.accounts.asset_config;
 
         // If first initialization (all fields are zero), set bump
-        if asset_config.cap == 0 && asset_config.bump == 0 {
-            ctx.accounts.asset_config.set_inner(AssetConfig {
-                cap: cap,
-                bump: ctx.bumps.asset_config,
-            });
-        } else {
-            asset_config.cap = cap;
-        }
+        ctx.accounts.asset_config.set_inner(AssetConfig {
+            cap: cap,
+            bump: ctx.bumps.asset_config,
+        });
 
         Ok(())
     }
