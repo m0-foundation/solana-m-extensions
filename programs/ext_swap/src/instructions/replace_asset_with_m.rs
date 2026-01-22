@@ -160,7 +160,7 @@ pub struct ReplaceAssetWithM<'info> {
 }
 
 impl<'info> ReplaceAssetWithM<'info> {
-    fn validate(&self, from_principal: u64) -> Result<()> {
+    fn validate(&self, ext_principal: u64) -> Result<()> {
         // Validate both extensions are whitelisted
         for ext_program in [&self.from_ext_program, &self.jmi_ext_program] {
             if !self.swap_global.is_extension_whitelisted(ext_program.key) {
@@ -168,15 +168,15 @@ impl<'info> ReplaceAssetWithM<'info> {
             }
         }
 
-        if from_principal == 0 {
+        if ext_principal == 0 {
             return err!(SwapError::InvalidAmount);
         }
 
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(from_principal))]
-    pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, from_principal: u64) -> Result<()> {
+    #[access_control(ctx.accounts.validate(ext_principal))]
+    pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, ext_principal: u64) -> Result<()> {
         let m_pre_balance = ctx.accounts.swap_m_account.amount;
 
         // Set replace authority as authority if none provided
@@ -208,12 +208,12 @@ impl<'info> ReplaceAssetWithM<'info> {
                     &[ctx.bumps.fallback_replace_authority],
                 ]],
             ),
-            from_principal,
+            ext_principal,
         )?;
 
         // 2. Calculate M received
         ctx.accounts.swap_m_account.reload()?;
-        let m_amount = ctx.accounts.swap_m_account.amount - m_pre_balance;
+        let m_principal = ctx.accounts.swap_m_account.amount - m_pre_balance;
 
         // 3. Call JMI replace_asset_with_m (swap_global signs for token transfer, replace_authority for authorization)
         m_ext::cpi::replace_asset_with_m(
@@ -242,10 +242,10 @@ impl<'info> ReplaceAssetWithM<'info> {
                     &[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]],
                 ],
             ),
-            m_amount,
+            m_principal,
         )?;
 
-        msg!("{} ext -> {} M -> asset", from_principal, m_amount);
+        msg!("{} ext_principal -> {} m_principal -> asset", ext_principal, m_principal);
 
         Ok(())
     }

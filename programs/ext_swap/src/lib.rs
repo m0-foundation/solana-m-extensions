@@ -82,9 +82,9 @@ pub mod ext_swap {
 
     pub fn replace_asset_with_m<'info>(
         ctx: Context<'_, '_, '_, 'info, ReplaceAssetWithM<'info>>,
-        amount: u64,
+        ext_principal: u64,
     ) -> Result<()> {
-        ReplaceAssetWithM::handler(ctx, amount)
+        ReplaceAssetWithM::handler(ctx, ext_principal)
     }
 
     pub fn wrap_asset<'info>(

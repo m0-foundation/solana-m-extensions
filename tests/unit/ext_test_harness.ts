@@ -1899,7 +1899,7 @@ export class ExtensionTest<
 
   public async replaceAssetWithM(
     assetMint: PublicKey,
-    mAmount: BN,
+    mPrincipal: BN,
     tokenAuthority: Keypair,
     replaceAuthority?: Keypair | null,
     useToken2022ForAsset: boolean = false
@@ -1935,7 +1935,7 @@ export class ExtensionTest<
     );
 
     await this.ext.methods
-      .replaceAssetWithM(mAmount)
+      .replaceAssetWithM(mPrincipal)
       .accountsPartial({
         tokenAuthority: tokenAuthority.publicKey,
         replaceAuthority: replaceAuthority
@@ -2789,7 +2789,7 @@ export class ExtensionSwapTest extends ExtensionTestBase {
     fromExtKey: string,
     jmiExtKey: string,
     assetMint: PublicKey,
-    fromPrincipal: BN,
+    extPrincipal: BN,
     signer: Keypair,
     replaceAuthority?: Keypair,
     useToken2022ForAsset: boolean = false
@@ -2829,7 +2829,7 @@ export class ExtensionSwapTest extends ExtensionTestBase {
       : [signer];
 
     return this.swapProgram.methods
-      .replaceAssetWithM(fromPrincipal)
+      .replaceAssetWithM(extPrincipal)
       .accountsPartial({
         signer: signer.publicKey,
         replaceAuthority: replaceAuthority

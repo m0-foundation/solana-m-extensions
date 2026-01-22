@@ -83,7 +83,7 @@ pub struct ReplaceAssetWithM<'info> {
 }
 
 impl ReplaceAssetWithM<'_> {
-    pub fn validate(&self, m_amount: u64) -> Result<()> {
+    pub fn validate(&self, m_principal: u64) -> Result<()> {
         let auth = match &self.replace_authority {
             Some(auth) => auth.key,
             None => self.token_authority.key,
@@ -94,7 +94,7 @@ impl ReplaceAssetWithM<'_> {
             return err!(ExtError::NotAuthorized);
         }
 
-        if m_amount == 0 {
+        if m_principal == 0 {
             return err!(ExtError::InvalidAmount);
         }
 
@@ -106,12 +106,12 @@ impl ReplaceAssetWithM<'_> {
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(m_amount))]
-    pub fn handler(ctx: Context<Self>, m_amount: u64) -> Result<()> {
+    #[access_control(ctx.accounts.validate(m_principal))]
+    pub fn handler(ctx: Context<Self>, m_principal: u64) -> Result<()> {
         // Get M index and convert principal to economic value
         let m_scaled_ui_config = get_scaled_ui_config(&ctx.accounts.m_mint)?;
         let m_index: u64 = multiplier_to_index(m_scaled_ui_config.new_multiplier.into())?;
-        let asset_amount: u64 = principal_to_amount_down(m_amount, m_index)?;
+        let asset_amount: u64 = principal_to_amount_down(m_principal, m_index)?;
 
         // Validate sufficient asset backing
         if asset_amount > ctx.accounts.vault_asset_token_account.amount {
@@ -122,7 +122,7 @@ impl ReplaceAssetWithM<'_> {
         transfer_tokens(
             &ctx.accounts.from_m_token_account,
             &ctx.accounts.vault_m_token_account,
-            m_amount,
+            m_principal,
             &ctx.accounts.m_mint,
             &ctx.accounts.token_authority.to_account_info(),
             &ctx.accounts.m_token_program,
