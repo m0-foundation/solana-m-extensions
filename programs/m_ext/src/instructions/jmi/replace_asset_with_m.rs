@@ -21,7 +21,10 @@ pub struct ReplaceAssetWithM<'info> {
     #[account(mint::token_program = m_token_program)]
     pub m_mint: InterfaceAccount<'info, Mint>,
 
-    #[account(mint::token_program = asset_token_program)]
+    #[account(
+        mint::token_program = asset_token_program,
+        constraint = asset_mint.key() != m_mint.key() @ ExtError::AssetNotAllowed,
+    )]
     pub asset_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
