@@ -7803,6 +7803,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           //   [x] it reverts with a ConstraintSeeds error
           // [x] given the vault authority is not the m_vault PDA
           //   [x] it reverts with a ConstraintSeeds error
+          // [x] given the asset mint has the ScaledUiAmount extension
+          //   [x] it reverts with an UnsupportedExtension error
+          // [x] given the asset mint has the TransferFeeConfig extension
+          //   [x] it reverts with an UnsupportedExtension error
+          // [x] given the asset mint has the NonTransferable extension
+          //   [x] it reverts with an UnsupportedExtension error
 
           let assetMint: Keypair;
 
@@ -7964,6 +7970,81 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 .signers([$.admin])
                 .rpc(),
               "ConstraintSeeds"
+            );
+          });
+
+          // given the asset mint has the ScaledUiAmount extension
+          // it reverts with an UnsupportedExtension error
+          test("Asset mint with ScaledUiAmount extension - reverts", async () => {
+            const scaledMint = new Keypair();
+            await $.createScaledUiMint(
+              scaledMint,
+              $.admin.publicKey,
+              $.admin.publicKey,
+              6
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: scaledMint.publicKey,
+                  assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "UnsupportedExtension"
+            );
+          });
+
+          // given the asset mint has the TransferFeeConfig extension
+          // it reverts with an UnsupportedExtension error
+          test("Asset mint with TransferFeeConfig extension - reverts", async () => {
+            const transferFeeMint = new Keypair();
+            await $.createTransferFeeMint(
+              transferFeeMint,
+              $.admin.publicKey,
+              $.admin.publicKey,
+              6
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: transferFeeMint.publicKey,
+                  assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "UnsupportedExtension"
+            );
+          });
+
+          // given the asset mint has the NonTransferable extension
+          // it reverts with an UnsupportedExtension error
+          test("Asset mint with NonTransferable extension - reverts", async () => {
+            const nonTransferableMint = new Keypair();
+            await $.createNonTransferableMint(
+              nonTransferableMint,
+              $.admin.publicKey,
+              $.admin.publicKey,
+              6
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: nonTransferableMint.publicKey,
+                  assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "UnsupportedExtension"
             );
           });
         });

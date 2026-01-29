@@ -36,6 +36,8 @@ import {
   getExtensionData,
   createApproveCheckedInstruction,
   createFreezeAccountInstruction,
+  createInitializeTransferFeeConfigInstruction,
+  createInitializeNonTransferableMintInstruction,
   pause,
 } from "@solana/spl-token";
 import {
@@ -594,6 +596,86 @@ class ExtensionTestBase {
     if (!mintInfo) {
       throw new Error("Mint account was not created");
     }
+
+    return mint.publicKey;
+  }
+
+  public async createTransferFeeMint(
+    mint: Keypair,
+    mintAuthority: PublicKey,
+    freezeAuthority: PublicKey | null,
+    decimals = 6
+  ) {
+    const tokenProgram = TOKEN_2022_PROGRAM_ID;
+    const mintLen = getMintLen([ExtensionType.TransferFeeConfig]);
+    const mintLamports =
+      await this.provider.connection.getMinimumBalanceForRentExemption(mintLen);
+
+    const createMintAccount = SystemProgram.createAccount({
+      fromPubkey: this.admin.publicKey,
+      newAccountPubkey: mint.publicKey,
+      space: mintLen,
+      lamports: mintLamports,
+      programId: tokenProgram,
+    });
+
+    const initializeTransferFee = createInitializeTransferFeeConfigInstruction(
+      mint.publicKey,
+      mintAuthority, // fee config authority
+      mintAuthority, // withdraw withheld authority
+      500, // 5% fee in basis points
+      BigInt(1_000_000), // max fee
+      tokenProgram
+    );
+
+    const initializeMint = createInitializeMintInstruction(
+      mint.publicKey,
+      decimals,
+      mintAuthority,
+      freezeAuthority,
+      tokenProgram
+    );
+
+    let tx = new Transaction();
+    tx.add(createMintAccount, initializeTransferFee, initializeMint);
+    await this.provider.sendAndConfirm!(tx, [this.admin, mint]);
+
+    return mint.publicKey;
+  }
+
+  public async createNonTransferableMint(
+    mint: Keypair,
+    mintAuthority: PublicKey,
+    freezeAuthority: PublicKey | null,
+    decimals = 6
+  ) {
+    const tokenProgram = TOKEN_2022_PROGRAM_ID;
+    const mintLen = getMintLen([ExtensionType.NonTransferable]);
+    const mintLamports =
+      await this.provider.connection.getMinimumBalanceForRentExemption(mintLen);
+
+    const createMintAccount = SystemProgram.createAccount({
+      fromPubkey: this.admin.publicKey,
+      newAccountPubkey: mint.publicKey,
+      space: mintLen,
+      lamports: mintLamports,
+      programId: tokenProgram,
+    });
+
+    const initializeNonTransferable =
+      createInitializeNonTransferableMintInstruction(mint.publicKey, tokenProgram);
+
+    const initializeMint = createInitializeMintInstruction(
+      mint.publicKey,
+      decimals,
+      mintAuthority,
+      freezeAuthority,
+      tokenProgram
+    );
+
+    let tx = new Transaction();
+    tx.add(createMintAccount, initializeNonTransferable, initializeMint);
+    await this.provider.sendAndConfirm!(tx, [this.admin, mint]);
 
     return mint.publicKey;
   }

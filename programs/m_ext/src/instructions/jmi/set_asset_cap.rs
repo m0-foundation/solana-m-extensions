@@ -3,10 +3,12 @@ use anchor_spl::{
     associated_token::AssociatedToken,
     token_interface::{Mint, TokenAccount, TokenInterface},
 };
+use spl_token_2022::extension::ExtensionType;
 
 use crate::{
     errors::ExtError,
     state::{AssetConfig, ExtGlobalV2, ASSET_CONFIG_SEED, EXT_GLOBAL_SEED, M_VAULT_SEED},
+    utils::conversion::get_mint_extensions,
 };
 
 #[derive(Accounts)]
@@ -65,6 +67,17 @@ impl SetAssetCap<'_> {
         // Only accept assets with 6 decimals
         if self.asset_mint.decimals != 6 {
             return err!(ExtError::InvalidDecimals);
+        }
+        // Reject assets with problematic Token 2022 extensions
+        let extensions = get_mint_extensions(&self.asset_mint)?;
+        if extensions.contains(&ExtensionType::ScaledUiAmount) {
+            return err!(ExtError::UnsupportedExtension);
+        }
+        if extensions.contains(&ExtensionType::TransferFeeConfig) {
+            return err!(ExtError::UnsupportedExtension);
+        }
+        if extensions.contains(&ExtensionType::NonTransferable) {
+            return err!(ExtError::UnsupportedExtension);
         }
         Ok(())
     }

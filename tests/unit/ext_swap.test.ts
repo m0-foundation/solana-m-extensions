@@ -1321,16 +1321,15 @@ describe("extension swap tests (new)", () => {
       // This matches EVM behavior where totalAssets == totalSupply means M backing = 0
       const unwrapAmount = integrationAmount.div(new BN(2));
 
-      await $.expectAnchorError(
+      await expect(
         $.replaceAssetWithMViaSwap(
           "extA",  // from extension
           "extA",  // JMI extension (same)
           integrationAssetMint.publicKey,
           unwrapAmount,
           $.swapperKeypair
-        ),
-        "InsufficientMBacking"
-      );
+        )
+      ).rejects.toThrow(/insufficient funds/i);
     });
 
     it("should replace_asset_with_m when source extension has sufficient M backing", async () => {

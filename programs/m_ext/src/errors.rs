@@ -44,4 +44,6 @@ pub enum ExtError {
     InsufficientAssetBacking,
     #[msg("Asset must have 6 decimals.")]
     InvalidDecimals,
+    #[msg("Asset has unsupported Token 2022 extension.")]
+    UnsupportedExtension,
 }
