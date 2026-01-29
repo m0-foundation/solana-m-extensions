@@ -89,8 +89,8 @@ impl ReplaceAssetWithM<'_> {
             None => self.token_authority.key,
         };
 
-        // Ensure the caller is authorized (same as wrap/unwrap)
-        if !self.global_account.wrap_authorities.contains(auth) {
+        // Ensure the caller is authorized
+        if !self.global_account.replace_authorities.contains(auth) {
             return err!(ExtError::NotAuthorized);
         }
 

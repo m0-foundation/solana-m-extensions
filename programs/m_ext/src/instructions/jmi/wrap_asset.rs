@@ -93,7 +93,7 @@ impl WrapAsset<'_> {
         };
 
         // Ensure the caller is authorized
-        if !self.global_account.wrap_authorities.contains(auth) {
+        if !self.global_account.replace_authorities.contains(auth) {
             return err!(ExtError::NotAuthorized);
         }
 

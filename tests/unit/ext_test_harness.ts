@@ -104,6 +104,7 @@ export type ExtGlobal<V extends Variant> = {
   mVaultBump?: number;
   extMintAuthorityBump?: number;
   wrapAuthorities?: PublicKey[];
+  replaceAuthorities?: PublicKey[];
   yieldConfig?: YieldConfig<V>;
 };
 
@@ -1438,6 +1439,10 @@ export class ExtensionTest<
       expect(state.mVaultBump).toEqual(expected.mVaultBump);
     if (expected.extMintAuthorityBump)
       expect(state.extMintAuthorityBump).toEqual(expected.extMintAuthorityBump);
+    if (expected.wrapAuthorities)
+      expect(state.wrapAuthorities).toEqual(expected.wrapAuthorities);
+    if (expected.replaceAuthorities)
+      expect(state.replaceAuthorities).toEqual(expected.replaceAuthorities);
   }
 
   private expectScaledUiYieldConfig<V extends Variant.ScaledUi>(
@@ -1599,7 +1604,11 @@ export class ExtensionTest<
   }
 
   // Helper functions for executing MExt instructions
-  public async initializeExt(wrapAuthorities: PublicKey[], feeBps?: BN) {
+  public async initializeExt(
+    wrapAuthorities: PublicKey[],
+    feeBps?: BN,
+    replaceAuthorities: PublicKey[] = []
+  ) {
     switch (this.variant) {
       case Variant.ScaledUi:
         if (!feeBps) {
@@ -1607,7 +1616,7 @@ export class ExtensionTest<
         }
         // Send the transaction
         await this.ext.methods
-          .initialize(wrapAuthorities, feeBps)
+          .initialize(wrapAuthorities, replaceAuthorities, feeBps)
           .accounts({
             admin: this.admin.publicKey,
             mMint: this.mMint.publicKey,
@@ -1619,7 +1628,11 @@ export class ExtensionTest<
         break;
       case Variant.Crank:
         await this.ext.methods
-          .initialize(wrapAuthorities, this.earnAuthority.publicKey)
+          .initialize(
+            wrapAuthorities,
+            replaceAuthorities,
+            this.earnAuthority.publicKey
+          )
           .accounts({
             admin: this.admin.publicKey,
             mMint: this.mMint.publicKey,
@@ -1632,7 +1645,7 @@ export class ExtensionTest<
       case Variant.Jmi:
         // Send the transaction
         await this.ext.methods
-          .initialize(wrapAuthorities)
+          .initialize(wrapAuthorities, replaceAuthorities)
           .accounts({
             admin: this.admin.publicKey,
             mMint: this.mMint.publicKey,
@@ -2513,9 +2526,9 @@ export class ExtensionSwapTest extends ExtensionTestBase {
   }
 
   private async initializeExtensionPrograms() {
-    // ext_a: no-yield variant - initialize with just wrap authorities
+    // ext_a: no-yield variant - initialize with wrap authorities and replace authorities
     await this.extensionPrograms.extA.methods
-      .initialize([this.admin.publicKey])
+      .initialize([this.admin.publicKey], [this.admin.publicKey])
       .accounts({
         admin: this.admin.publicKey,
         mMint: this.mMint.publicKey,
@@ -2527,7 +2540,7 @@ export class ExtensionSwapTest extends ExtensionTestBase {
 
     // ext_b: scaled-ui variant - initialize with wrap authorities and fee_bps
     await this.extensionPrograms.extB.methods
-      .initialize([this.admin.publicKey], new BN(500)) // 5% fee
+      .initialize([this.admin.publicKey], [], new BN(500)) // 5% fee
       .accounts({
         admin: this.admin.publicKey,
         mMint: this.mMint.publicKey,
@@ -2537,9 +2550,9 @@ export class ExtensionSwapTest extends ExtensionTestBase {
       .signers([this.admin])
       .rpc();
 
-    // ext_c: no-yield variant with extra accounts - initialize with just wrap authorities
+    // ext_c: no-yield variant with extra accounts - initialize with wrap authorities and replace authorities
     await this.extensionPrograms.extC.methods
-      .initialize([this.admin.publicKey])
+      .initialize([this.admin.publicKey], [this.admin.publicKey])
       .accounts({
         admin: this.admin.publicKey,
         mMint: this.mMint.publicKey,
@@ -2595,6 +2608,22 @@ export class ExtensionSwapTest extends ExtensionTestBase {
 
     await program.methods
       .addWrapAuthority(authority)
+      .accounts({
+        admin: this.admin.publicKey,
+      })
+      .signers([this.admin])
+      .rpc();
+  }
+
+  public async addReplaceAuthorityToExtension(
+    extensionKey: string,
+    authority: PublicKey
+  ) {
+    const program = this.extensionPrograms[extensionKey];
+    if (!program) throw new Error(`Extension ${extensionKey} not found`);
+
+    await program.methods
+      .addReplaceAuthority(authority)
       .accounts({
         admin: this.admin.publicKey,
       })

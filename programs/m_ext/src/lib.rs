@@ -60,23 +60,41 @@ pub mod m_ext {
     pub fn initialize(
         ctx: Context<Initialize>,
         wrap_authorities: Vec<Pubkey>,
+        replace_authorities: Vec<Pubkey>,
         fee_bps: u64,
     ) -> Result<()> {
-        Initialize::handler(ctx, wrap_authorities, Some(fee_bps), None)
+        Initialize::handler(
+            ctx,
+            wrap_authorities,
+            replace_authorities,
+            Some(fee_bps),
+            None,
+        )
     }
 
     #[cfg(feature = "crank")]
     pub fn initialize(
         ctx: Context<Initialize>,
         wrap_authorities: Vec<Pubkey>,
+        replace_authorities: Vec<Pubkey>,
         earn_authority: Pubkey,
     ) -> Result<()> {
-        Initialize::handler(ctx, wrap_authorities, None, Some(earn_authority))
+        Initialize::handler(
+            ctx,
+            wrap_authorities,
+            replace_authorities,
+            None,
+            Some(earn_authority),
+        )
     }
 
     #[cfg(not(any(feature = "crank", feature = "scaled-ui")))]
-    pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
-        Initialize::handler(ctx, wrap_authorities, None, None)
+    pub fn initialize(
+        ctx: Context<Initialize>,
+        wrap_authorities: Vec<Pubkey>,
+        replace_authorities: Vec<Pubkey>,
+    ) -> Result<()> {
+        Initialize::handler(ctx, wrap_authorities, replace_authorities, None, None)
     }
 
     #[cfg(feature = "scaled-ui")]
@@ -96,6 +114,22 @@ pub mod m_ext {
         wrap_authority: Pubkey,
     ) -> Result<()> {
         RemoveWrapAuthority::handler(ctx, wrap_authority)
+    }
+
+    #[cfg(feature = "jmi")]
+    pub fn add_replace_authority(
+        ctx: Context<AddReplaceAuthority>,
+        new_replace_authority: Pubkey,
+    ) -> Result<()> {
+        AddReplaceAuthority::handler(ctx, new_replace_authority)
+    }
+
+    #[cfg(feature = "jmi")]
+    pub fn remove_replace_authority(
+        ctx: Context<RemoveReplaceAuthority>,
+        replace_authority: Pubkey,
+    ) -> Result<()> {
+        RemoveReplaceAuthority::handler(ctx, replace_authority)
     }
 
     #[cfg(any(feature = "scaled-ui", feature = "no-yield"))]

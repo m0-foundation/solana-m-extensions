@@ -904,8 +904,8 @@ describe("extension swap tests (new)", () => {
       // Set asset cap on JMI extension (extA)
       await $.setAssetCapOnExtension("extA", assetMint.publicKey, wrapAssetCap);
 
-      // Whitelist replace authority PDA on extension
-      await $.addWrapAuthorityToExtension("extA", $.getReplaceAuthorityPda());
+      // Whitelist replace authority PDA on extension's replace_authorities
+      await $.addReplaceAuthorityToExtension("extA", $.getReplaceAuthorityPda());
 
       // Mint asset tokens to swapper
       await $.mintAssetTokensTo(
@@ -946,9 +946,9 @@ describe("extension swap tests (new)", () => {
     });
 
     it("should fail when fallback_replace_authority is not authorized", async () => {
-      // Remove fallback_replace_authority PDA from extA's wrap_authorities
+      // Remove fallback_replace_authority PDA from extA's replace_authorities
       await $.extensionPrograms.extA.methods
-        .removeWrapAuthority($.getReplaceAuthorityPda())
+        .removeReplaceAuthority($.getReplaceAuthorityPda())
         .accounts({ admin: $.admin.publicKey })
         .signers([$.admin])
         .rpc();
@@ -960,7 +960,7 @@ describe("extension swap tests (new)", () => {
 
       // Re-add for later tests
       $.svm.expireBlockhash();
-      await $.addWrapAuthorityToExtension("extA", $.getReplaceAuthorityPda());
+      await $.addReplaceAuthorityToExtension("extA", $.getReplaceAuthorityPda());
     });
 
     it("should fail when asset is M token", async () => {
@@ -1205,9 +1205,9 @@ describe("extension swap tests (new)", () => {
     });
 
     it("should fail when fallback_replace_authority not authorized on JMI extension", async () => {
-      // Remove fallback_replace_authority PDA from JMI extension's wrap_authorities
+      // Remove fallback_replace_authority PDA from JMI extension's replace_authorities
       await $.extensionPrograms.extA.methods
-        .removeWrapAuthority($.getReplaceAuthorityPda())
+        .removeReplaceAuthority($.getReplaceAuthorityPda())
         .accounts({ admin: $.admin.publicKey })
         .signers([$.admin])
         .rpc();
@@ -1219,7 +1219,7 @@ describe("extension swap tests (new)", () => {
 
       // Re-add for later tests
       $.svm.expireBlockhash();
-      await $.addWrapAuthorityToExtension("extA", $.getReplaceAuthorityPda());
+      await $.addReplaceAuthorityToExtension("extA", $.getReplaceAuthorityPda());
     });
 
     it("should fail when insufficient asset backing", async () => {
@@ -1300,8 +1300,8 @@ describe("extension swap tests (new)", () => {
       // Setup for integration tests
       integrationAssetMint = await $.createAssetMint();
       await $.setAssetCapOnExtension("extA", integrationAssetMint.publicKey, integrationCap);
-      // await $.addWrapAuthorityToExtension("extA", $.getReplaceAuthorityPda());
-      // await $.addWrapAuthorityToExtension("extB", $.getReplaceAuthorityPda());
+      // Add fallback_replace_authority to extA's wrap_authorities for same-extension unwrap
+      await $.addWrapAuthorityToExtension("extA", $.getReplaceAuthorityPda());
       await $.mintAssetTokensTo(integrationAssetMint, $.swapperKeypair.publicKey, integrationAmount.mul(new BN(10)));
     });
 

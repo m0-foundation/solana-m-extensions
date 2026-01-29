@@ -91,10 +91,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // Attempt to send the transaction
           await $.expectSystemError(
             (variant === Variant.Jmi
-              ? $.ext.methods.initialize([])
+              ? $.ext.methods.initialize([], [])
               : variant === Variant.ScaledUi
-              ? $.ext.methods.initialize([], new BN(0))
-              : $.ext.methods.initialize([], $.earnAuthority.publicKey)
+              ? $.ext.methods.initialize([], [], new BN(0))
+              : $.ext.methods.initialize([], [], $.earnAuthority.publicKey)
             )
               .accountsPartial({
                 admin: $.nonAdmin.publicKey,
@@ -123,10 +123,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // Attempt to send the transaction
           await $.expectAnchorError(
             (variant === Variant.Jmi
-              ? $.ext.methods.initialize([])
+              ? $.ext.methods.initialize([], [])
               : variant === Variant.ScaledUi
-              ? $.ext.methods.initialize([], new BN(0))
-              : $.ext.methods.initialize([], $.earnAuthority.publicKey)
+              ? $.ext.methods.initialize([], [], new BN(0))
+              : $.ext.methods.initialize([], [], $.earnAuthority.publicKey)
             )
               .accounts({
                 admin: $.nonAdmin.publicKey,
@@ -156,10 +156,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // Attempt to send the transaction
           await $.expectAnchorError(
             (variant === Variant.Jmi
-              ? $.ext.methods.initialize([])
+              ? $.ext.methods.initialize([], [])
               : variant === Variant.ScaledUi
-              ? $.ext.methods.initialize([], new BN(0))
-              : $.ext.methods.initialize([], $.earnAuthority.publicKey)
+              ? $.ext.methods.initialize([], [], new BN(0))
+              : $.ext.methods.initialize([], [], $.earnAuthority.publicKey)
             )
               .accounts({
                 admin: $.nonAdmin.publicKey,
@@ -184,10 +184,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // Expect error (could be one of several "SeedsConstraint", "AccountOwnedByWrongProgram", "AccountNotInitialized")
           await $.expectSystemError(
             (variant === Variant.Jmi
-              ? $.ext.methods.initialize([])
+              ? $.ext.methods.initialize([], [])
               : variant === Variant.ScaledUi
-              ? $.ext.methods.initialize([], new BN(0))
-              : $.ext.methods.initialize([], $.earnAuthority.publicKey)
+              ? $.ext.methods.initialize([], [], new BN(0))
+              : $.ext.methods.initialize([], [], $.earnAuthority.publicKey)
             )
               .accountsPartial({
                 admin: $.nonAdmin.publicKey,
@@ -212,10 +212,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // Expect error (could be one of several "SeedsConstraint", "AccountOwnedByWrongProgram", "AccountNotInitialized")
           await $.expectSystemError(
             (variant === Variant.Jmi
-              ? $.ext.methods.initialize([])
+              ? $.ext.methods.initialize([], [])
               : variant === Variant.ScaledUi
-              ? $.ext.methods.initialize([], new BN(0))
-              : $.ext.methods.initialize([], $.earnAuthority.publicKey)
+              ? $.ext.methods.initialize([], [], new BN(0))
+              : $.ext.methods.initialize([], [], $.earnAuthority.publicKey)
             )
               .accountsPartial({
                 admin: $.nonAdmin.publicKey,
@@ -245,10 +245,10 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // Attempt to send the transaction
           await $.expectAnchorError(
             (variant === Variant.Jmi
-              ? $.ext.methods.initialize([])
+              ? $.ext.methods.initialize([], [])
               : variant === Variant.ScaledUi
-              ? $.ext.methods.initialize([], new BN(0))
-              : $.ext.methods.initialize([], $.earnAuthority.publicKey)
+              ? $.ext.methods.initialize([], [], new BN(0))
+              : $.ext.methods.initialize([], [], $.earnAuthority.publicKey)
             )
               .accounts({
                 admin: $.nonAdmin.publicKey,
@@ -272,11 +272,12 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // Attempt to send transaction
           await $.expectAnchorError(
             (variant === Variant.Jmi
-              ? $.ext.methods.initialize(wrapAuthorities)
+              ? $.ext.methods.initialize(wrapAuthorities, [])
               : variant === Variant.ScaledUi
-              ? $.ext.methods.initialize(wrapAuthorities, new BN(0))
+              ? $.ext.methods.initialize(wrapAuthorities, [], new BN(0))
               : $.ext.methods.initialize(
                   wrapAuthorities,
+                  [],
                   $.earnAuthority.publicKey
                 )
             )
@@ -338,7 +339,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Send the transaction
             await $.ext.methods
-              .initialize(wrapAuthorities)
+              .initialize(wrapAuthorities, [])
               .accounts({
                 admin: $.admin.publicKey,
                 mMint: $.mMint.publicKey,
@@ -365,7 +366,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             });
 
             // Confirm the size of the global account based on the number of wrap authorities
-            const expectedSize = 176 + 9 + wrapAuthorities.length * 32; // 176 bytes base size + 9 for yield config + 4 bytes for vector length + 32 bytes per wrap authority
+            const expectedSize = 176 + 9 + 4 + wrapAuthorities.length * 32; // 176 bytes base size + 9 for yield config + 4 bytes for wrap_authorities vec + 4 bytes for replace_authorities vec + 32 bytes per wrap authority
             const extGlobalSize = await $.provider.connection
               .getAccountInfo(globalAccount)
               .then((info) => info?.data.length || 0);
@@ -406,7 +407,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Attempt to send the transaction
             await $.expectAnchorError(
               $.ext.methods
-                .initialize([], new BN(0))
+                .initialize([], [], new BN(0))
                 .accounts({
                   admin: $.nonAdmin.publicKey,
                   mMint: $.mMint.publicKey,
@@ -434,7 +435,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Attempt to send the transaction
             await $.expectAnchorError(
               $.ext.methods
-                .initialize([], new BN(0))
+                .initialize([], [], new BN(0))
                 .accounts({
                   admin: $.nonAdmin.publicKey,
                   mMint: $.mMint.publicKey,
@@ -485,7 +486,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Send the transaction
             await $.ext.methods
-              .initialize(wrapAuthorities, feeBps)
+              .initialize(wrapAuthorities, [], feeBps)
               .accounts({
                 admin: $.admin.publicKey,
                 mMint: $.mMint.publicKey,
@@ -514,7 +515,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             });
 
             // Check the size of the global account based on the number of wrap authorities
-            const expectedSize = 176 + 25 + wrapAuthorities.length * 32; // 176 bytes base size + 25 yield config size + 32 bytes per wrap authority
+            const expectedSize = 176 + 25 + 4 + wrapAuthorities.length * 32; // 176 bytes base size + 25 yield config size + 4 bytes for replace_authorities vec + 32 bytes per wrap authority
             const extGlobalSize = await $.provider.connection
               .getAccountInfo(globalAccount)
               .then((info) => info?.data.length || 0);
@@ -7781,10 +7782,162 @@ for (const [variant, tokenProgramId] of VARIANTS) {
     if (variant === Variant.Jmi) {
       describe("JMI instruction tests", () => {
         let wrapAuthorities: PublicKey[];
+        let replaceAuthorities: PublicKey[];
 
         beforeEach(async () => {
           wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
-          await $.initializeExt(wrapAuthorities);
+          replaceAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
+          await $.initializeExt(wrapAuthorities, undefined, replaceAuthorities);
+        });
+
+        describe("add_replace_authority unit tests", () => {
+          // test cases
+          // [X] given the admin does not sign the transaction
+          //   [X] it reverts with a NotAuthorized error
+          // [X] given the admin signs the transaction
+          //   [X] given the new replace authority is already in the list
+          //     [X] it reverts with a InvalidParam error
+          //   [X] given the new replace authority is not in the list
+          //     [X] it adds the new replace authority to the list
+          //     [X] it resizes the ext global account to accommodate the new replace authority
+
+          // given the admin does not sign the transaction
+          // it reverts with a NotAuthorized error
+          test("admin does not sign - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .addReplaceAuthority($.nonWrapAuthority.publicKey)
+                .accounts({
+                  admin: $.nonAdmin.publicKey,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the admin signs the transaction
+          // given the new replace authority is already in the list
+          // it reverts with a InvalidParam error
+          test("new replace authority already in the list - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .addReplaceAuthority($.wrapAuthority.publicKey)
+                .accounts({ admin: $.admin.publicKey })
+                .signers([$.admin])
+                .rpc(),
+              "InvalidParam"
+            );
+          });
+
+          // given the admin signs the transaction
+          // given the new replace authority is not in the list
+          // it adds the new replace authority to the list
+          // it resizes the ext global account to accommodate the new replace authority
+          test("new replace authority is not in the list - success", async () => {
+            // Cache the size of the ext global account
+            const extGlobalAccount = $.getExtGlobalAccount();
+            const extGlobalSize = await $.provider.connection
+              .getAccountInfo(extGlobalAccount)
+              .then((info) => info?.data.length || 0);
+
+            // Send the transaction
+            await $.ext.methods
+              .addReplaceAuthority($.nonWrapAuthority.publicKey)
+              .accounts({
+                admin: $.admin.publicKey,
+              })
+              .signers([$.admin])
+              .rpc();
+
+            // Check that the replace authority was added
+            replaceAuthorities.push($.nonWrapAuthority.publicKey);
+
+            await $.expectExtGlobalState({
+              replaceAuthorities,
+            });
+
+            // Check that the ext global account was resized
+            const newExtGlobalSize = await $.provider.connection
+              .getAccountInfo(extGlobalAccount)
+              .then((info) => info?.data.length || 0);
+            expect(newExtGlobalSize).toEqual(extGlobalSize + 32); // 32 bytes for the new replace authority
+          });
+        });
+
+        describe("remove_replace_authority unit tests", () => {
+          // test cases
+          // [X] given the admin does not sign the transaction
+          //   [X] it reverts with a NotAuthorized error
+          // [X] given the admin signs the transaction
+          //   [X] given the replace authority is not in the list
+          //     [X] it reverts with a InvalidParam error
+          //   [X] given the replace authority is in the list
+          //     [X] it removes the replace authority from the list
+          //     [X] it resizes the ext global account down and refunds lamports
+
+          // given the admin does not sign the transaction
+          // it reverts with a NotAuthorized error
+          test("admin does not sign - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .removeReplaceAuthority($.wrapAuthority.publicKey)
+                .accounts({
+                  admin: $.nonAdmin.publicKey,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the admin signs the transaction
+          // given the replace authority is not in the list
+          // it reverts with a InvalidParam error
+          test("replace authority not in the list - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .removeReplaceAuthority($.nonWrapAuthority.publicKey)
+                .accounts({ admin: $.admin.publicKey })
+                .signers([$.admin])
+                .rpc(),
+              "InvalidParam"
+            );
+          });
+
+          // given the admin signs the transaction
+          // given the replace authority is in the list
+          // it removes the replace authority from the list
+          // it resizes the ext global account down and refunds lamports
+          test("replace authority is in the list - success", async () => {
+            // Cache the size of the ext global account
+            const extGlobalAccount = $.getExtGlobalAccount();
+            const extGlobalSize = await $.provider.connection
+              .getAccountInfo(extGlobalAccount)
+              .then((info) => info?.data.length || 0);
+
+            // Send the transaction
+            await $.ext.methods
+              .removeReplaceAuthority($.wrapAuthority.publicKey)
+              .accounts({
+                admin: $.admin.publicKey,
+              })
+              .signers([$.admin])
+              .rpc();
+
+            // Check that the replace authority was removed
+            replaceAuthorities.pop();
+
+            await $.expectExtGlobalState({
+              replaceAuthorities,
+            });
+
+            // Check that the ext global account was resized
+            const newExtGlobalSize = await $.provider.connection
+              .getAccountInfo(extGlobalAccount)
+              .then((info) => info?.data.length || 0);
+            expect(newExtGlobalSize).toEqual(extGlobalSize - 32); // remove 32 bytes
+          });
         });
 
         describe("set_asset_cap unit tests", () => {
