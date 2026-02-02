@@ -1,15 +1,14 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022, TokenAccount, TokenInterface};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::{
     errors::ExtError,
     state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
-    utils::{
-        conversion::{
-            amount_to_principal_down, multiplier_to_index, principal_to_amount_down, sync_index,
-        },
-        token::{mint_tokens, transfer_tokens},
-    },
+    utils::token::{mint_tokens, transfer_tokens},
+};
+
+use crate::utils::conversion::{
+    amount_to_principal_down, multiplier_to_index, principal_to_amount_down, sync_index,
 };
 
 #[derive(Accounts)]
@@ -73,9 +72,7 @@ pub struct Wrap<'info> {
     )]
     pub to_ext_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    // we have duplicate entries for the token2022 program since the interface needs to be consistent
-    // but we want to leave open the possibility that either may not have to be token2022 in the future
-    pub m_token_program: Program<'info, Token2022>,
+    pub m_token_program: Interface<'info, TokenInterface>,
     pub ext_token_program: Interface<'info, TokenInterface>,
 }
 
@@ -98,6 +95,7 @@ impl Wrap<'_> {
         Ok(())
     }
 
+    // Single unified handler for all feature combinations
     #[access_control(ctx.accounts.validate(m_principal))]
     pub fn handler(ctx: Context<Self>, m_principal: u64) -> Result<()> {
         let authority_seeds: &[&[&[u8]]] = &[&[
@@ -107,40 +105,40 @@ impl Wrap<'_> {
 
         // If necessary, sync the index between M and Ext tokens
         // Return the current value to use for conversions
-        let ext_index: u64 = sync_index(
-            &mut ctx.accounts.ext_mint,
-            &mut ctx.accounts.global_account,
-            &ctx.accounts.m_mint,
-            &ctx.accounts.vault_m_token_account,
-            &ctx.accounts.ext_mint_authority,
-            authority_seeds,
-            &ctx.accounts.ext_token_program,
-        )?;
+        let ext_m_principal = {
+            let ext_index: u64 = sync_index(
+                &mut ctx.accounts.ext_mint,
+                &mut ctx.accounts.global_account,
+                &ctx.accounts.m_mint,
+                &ctx.accounts.vault_m_token_account,
+                &ctx.accounts.ext_mint_authority,
+                authority_seeds,
+                &ctx.accounts.ext_token_program,
+            )?;
 
-        // Get the current M index
-        let m_scaled_ui_config =
-            earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
-        let m_index = multiplier_to_index(m_scaled_ui_config.new_multiplier.into())?;
+            let m_scaled_ui_config =
+                earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
+            let m_index = multiplier_to_index(m_scaled_ui_config.new_multiplier.into())?;
 
-        // Calculate the principal amount of ext tokens to mint
-        // based on the principal amount of m tokens to wrap
-        let ext_principal =
-            amount_to_principal_down(principal_to_amount_down(m_principal, m_index)?, ext_index)?;
+            // Calculate the principal amount of ext tokens to mint
+            // based on the principal amount of m tokens to wrap
+            amount_to_principal_down(principal_to_amount_down(m_principal, m_index)?, ext_index)?
+        };
 
-        // Transfer the amount of m tokens from the user to the m vault
+        // Transfer M tokens from user to vault
         transfer_tokens(
             &ctx.accounts.from_m_token_account,              // from
             &ctx.accounts.vault_m_token_account,             // to
-            m_principal,                                     // amount
+            m_principal,                                     // m_principal
             &ctx.accounts.m_mint,                            // mint
             &ctx.accounts.token_authority.to_account_info(), // authority
             &ctx.accounts.m_token_program,                   // token program
         )?;
 
-        // Mint the amount of ext tokens to the user
+        // Mint the m_principal of ext tokens to the user
         mint_tokens(
             &ctx.accounts.to_ext_token_account, // to
-            ext_principal,                      // amount
+            ext_m_principal,                    // m_principal
             &ctx.accounts.ext_mint,             // mint
             &ctx.accounts.ext_mint_authority,   // authority
             authority_seeds,                    // authority seeds

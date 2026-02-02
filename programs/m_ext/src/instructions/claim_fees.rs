@@ -93,10 +93,21 @@ impl ClaimFees<'_> {
             &ctx.accounts.ext_token_program,
         )?;
 
-        // Calculate the required collateral, rounding down to be conservative
         // This amount will always be greater than what is required in the check_solvency function
         // since it allows a rounding error of up to 2e-6
-        let required_m = principal_to_amount_up(ctx.accounts.ext_mint.supply, ext_index)?;
+        //
+        // Convert ext supply from principal to amount units first
+        let ext_supply_amount = principal_to_amount_up(ctx.accounts.ext_mint.supply, ext_index)?;
+
+        // For JMI: subtract total_assets (non-M backing) to get M-backed portion
+        // total_assets is already in amount units (6 decimals)
+        #[cfg(feature = "jmi")]
+        let required_m = ext_supply_amount
+            .checked_sub(ctx.accounts.global_account.yield_config.total_assets)
+            .ok_or(ExtError::MathUnderflow)?;
+
+        #[cfg(not(feature = "jmi"))]
+        let required_m = ext_supply_amount;
 
         // Get the scaled UI config for the M mint to convert principal in the vault to M units
         let m_config = get_scaled_ui_config(&ctx.accounts.m_mint)?;

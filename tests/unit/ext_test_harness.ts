@@ -36,6 +36,10 @@ import {
   getExtensionData,
   createApproveCheckedInstruction,
   createFreezeAccountInstruction,
+  createInitializeTransferFeeConfigInstruction,
+  createInitializeNonTransferableMintInstruction,
+  createInitializeInterestBearingMintInstruction,
+  pause,
 } from "@solana/spl-token";
 import {
   ZERO_WORD,
@@ -46,8 +50,8 @@ import {
   ProofElement,
 } from "../test-utils";
 import { MExt as ScaledUIExt } from "../../target/types/scaled_ui";
-import { MExt as NoYieldExt } from "../../target/types/no_yield";
 import { MExt as CrankExt } from "../../target/types/crank";
+import { MExt as JmiExt } from "../../target/types/jmi";
 import { Earn } from "../programs/earn";
 import { ExtSwap } from "../../target/types/ext_swap";
 
@@ -62,12 +66,12 @@ export enum Comparison {
 // Type definitions for accounts to make it easier to do comparisons
 
 export enum Variant {
-  NoYield = "no_yield",
   ScaledUi = "scaled_ui",
   Crank = "crank",
+  Jmi = "jmi",
 }
 
-type MExt = NoYieldExt | ScaledUIExt | CrankExt;
+type MExt = ScaledUIExt | CrankExt | JmiExt;
 
 type YieldVariant = { noYield: {} } | { scaledUi: {} } | { crank: {} };
 
@@ -88,6 +92,7 @@ export type YieldConfig<V extends Variant> = V extends Variant.ScaledUi
     }
   : {
       yieldVariant?: YieldVariant;
+      totalAssets?: BN;
     };
 
 export type ExtGlobal<V extends Variant> = {
@@ -100,6 +105,7 @@ export type ExtGlobal<V extends Variant> = {
   mVaultBump?: number;
   extMintAuthorityBump?: number;
   wrapAuthorities?: PublicKey[];
+  replaceAuthorities?: PublicKey[];
   yieldConfig?: YieldConfig<V>;
 };
 
@@ -108,6 +114,11 @@ export type EarnManager = {
   isActive?: boolean;
   feeBps?: BN;
   feeTokenAccount?: PublicKey | null;
+  bump?: number;
+};
+
+export type AssetConfig = {
+  cap?: BN;
   bump?: number;
 };
 
@@ -587,6 +598,127 @@ class ExtensionTestBase {
     if (!mintInfo) {
       throw new Error("Mint account was not created");
     }
+
+    return mint.publicKey;
+  }
+
+  public async createTransferFeeMint(
+    mint: Keypair,
+    mintAuthority: PublicKey,
+    freezeAuthority: PublicKey | null,
+    decimals = 6
+  ) {
+    const tokenProgram = TOKEN_2022_PROGRAM_ID;
+    const mintLen = getMintLen([ExtensionType.TransferFeeConfig]);
+    const mintLamports =
+      await this.provider.connection.getMinimumBalanceForRentExemption(mintLen);
+
+    const createMintAccount = SystemProgram.createAccount({
+      fromPubkey: this.admin.publicKey,
+      newAccountPubkey: mint.publicKey,
+      space: mintLen,
+      lamports: mintLamports,
+      programId: tokenProgram,
+    });
+
+    const initializeTransferFee = createInitializeTransferFeeConfigInstruction(
+      mint.publicKey,
+      mintAuthority, // fee config authority
+      mintAuthority, // withdraw withheld authority
+      500, // 5% fee in basis points
+      BigInt(1_000_000), // max fee
+      tokenProgram
+    );
+
+    const initializeMint = createInitializeMintInstruction(
+      mint.publicKey,
+      decimals,
+      mintAuthority,
+      freezeAuthority,
+      tokenProgram
+    );
+
+    let tx = new Transaction();
+    tx.add(createMintAccount, initializeTransferFee, initializeMint);
+    await this.provider.sendAndConfirm!(tx, [this.admin, mint]);
+
+    return mint.publicKey;
+  }
+
+  public async createNonTransferableMint(
+    mint: Keypair,
+    mintAuthority: PublicKey,
+    freezeAuthority: PublicKey | null,
+    decimals = 6
+  ) {
+    const tokenProgram = TOKEN_2022_PROGRAM_ID;
+    const mintLen = getMintLen([ExtensionType.NonTransferable]);
+    const mintLamports =
+      await this.provider.connection.getMinimumBalanceForRentExemption(mintLen);
+
+    const createMintAccount = SystemProgram.createAccount({
+      fromPubkey: this.admin.publicKey,
+      newAccountPubkey: mint.publicKey,
+      space: mintLen,
+      lamports: mintLamports,
+      programId: tokenProgram,
+    });
+
+    const initializeNonTransferable =
+      createInitializeNonTransferableMintInstruction(mint.publicKey, tokenProgram);
+
+    const initializeMint = createInitializeMintInstruction(
+      mint.publicKey,
+      decimals,
+      mintAuthority,
+      freezeAuthority,
+      tokenProgram
+    );
+
+    let tx = new Transaction();
+    tx.add(createMintAccount, initializeNonTransferable, initializeMint);
+    await this.provider.sendAndConfirm!(tx, [this.admin, mint]);
+
+    return mint.publicKey;
+  }
+
+  public async createInterestBearingMint(
+    mint: Keypair,
+    mintAuthority: PublicKey,
+    freezeAuthority: PublicKey | null,
+    decimals = 6
+  ) {
+    const tokenProgram = TOKEN_2022_PROGRAM_ID;
+    const mintLen = getMintLen([ExtensionType.InterestBearingConfig]);
+    const mintLamports =
+      await this.provider.connection.getMinimumBalanceForRentExemption(mintLen);
+
+    const createMintAccount = SystemProgram.createAccount({
+      fromPubkey: this.admin.publicKey,
+      newAccountPubkey: mint.publicKey,
+      space: mintLen,
+      lamports: mintLamports,
+      programId: tokenProgram,
+    });
+
+    const initializeInterestBearing = createInitializeInterestBearingMintInstruction(
+      mint.publicKey,
+      mintAuthority, // rate authority
+      100, // 1% interest rate (basis points)
+      tokenProgram
+    );
+
+    const initializeMint = createInitializeMintInstruction(
+      mint.publicKey,
+      decimals,
+      mintAuthority,
+      freezeAuthority,
+      tokenProgram
+    );
+
+    let tx = new Transaction();
+    tx.add(createMintAccount, initializeInterestBearing, initializeMint);
+    await this.provider.sendAndConfirm!(tx, [this.admin, mint]);
 
     return mint.publicKey;
   }
@@ -1160,7 +1292,7 @@ export class ExtensionTest<
 
     // Create the Ext token mint
     switch (this.variant) {
-      case Variant.NoYield:
+      case Variant.Jmi:
         await this.createMint(
           this.extMint,
           this.getExtMintAuthority(),
@@ -1268,7 +1400,7 @@ export class ExtensionTest<
   }
 
   public async getCurrentExtIndex(): Promise<BN> {
-    if (this.variant === Variant.NoYield) {
+    if (this.variant === Variant.Jmi) {
       return new BN(1e12);
     } else if (this.variant === Variant.ScaledUi) {
       const yieldConfig: YieldConfig<Variant.ScaledUi> = (
@@ -1286,7 +1418,7 @@ export class ExtensionTest<
   }
 
   public async getNewExtIndex(newMIndex: BN): Promise<BN> {
-    if (this.variant === Variant.NoYield) {
+    if (this.variant === Variant.Jmi) {
       return new BN(1e12);
     } else if (this.variant === Variant.ScaledUi) {
       const yieldConfig: YieldConfig<Variant.ScaledUi> = (
@@ -1325,10 +1457,11 @@ export class ExtensionTest<
 
     if (expected.yieldConfig) {
       switch (this.variant) {
-        case Variant.NoYield:
-          expect(state.yieldConfig).toEqual({
-            yieldVariant: { noYield: {} },
-          });
+        case Variant.Jmi:
+          this.expectJmiYieldConfig(
+            state.yieldConfig,
+            expected.yieldConfig
+          );
           break;
         case Variant.ScaledUi:
           this.expectScaledUiYieldConfig(
@@ -1348,6 +1481,10 @@ export class ExtensionTest<
       expect(state.mVaultBump).toEqual(expected.mVaultBump);
     if (expected.extMintAuthorityBump)
       expect(state.extMintAuthorityBump).toEqual(expected.extMintAuthorityBump);
+    if (expected.wrapAuthorities)
+      expect(state.wrapAuthorities).toEqual(expected.wrapAuthorities);
+    if (expected.replaceAuthorities)
+      expect(state.replaceAuthorities).toEqual(expected.replaceAuthorities);
   }
 
   private expectScaledUiYieldConfig<V extends Variant.ScaledUi>(
@@ -1395,6 +1532,19 @@ export class ExtensionTest<
     if (expected.timestamp) {
       expect(actual.timestamp!.toString()).toEqual(
         expected.timestamp.toString()
+      );
+    }
+  }
+
+  private expectJmiYieldConfig<V extends Variant.Jmi>(
+    actual: YieldConfig<V>,
+    expected: YieldConfig<V>
+  ) {
+    expect(actual.yieldVariant!).toEqual({ noYield: {} });
+
+    if (expected.totalAssets) {
+      expect(actual.totalAssets!.toString()).toEqual(
+        expected.totalAssets.toString()
       );
     }
   }
@@ -1496,7 +1646,11 @@ export class ExtensionTest<
   }
 
   // Helper functions for executing MExt instructions
-  public async initializeExt(wrapAuthorities: PublicKey[], feeBps?: BN) {
+  public async initializeExt(
+    wrapAuthorities: PublicKey[],
+    feeBps?: BN,
+    replaceAuthorities: PublicKey[] = []
+  ) {
     switch (this.variant) {
       case Variant.ScaledUi:
         if (!feeBps) {
@@ -1504,7 +1658,7 @@ export class ExtensionTest<
         }
         // Send the transaction
         await this.ext.methods
-          .initialize(wrapAuthorities, feeBps)
+          .initialize(wrapAuthorities, replaceAuthorities, feeBps)
           .accounts({
             admin: this.admin.publicKey,
             mMint: this.mMint.publicKey,
@@ -1516,7 +1670,11 @@ export class ExtensionTest<
         break;
       case Variant.Crank:
         await this.ext.methods
-          .initialize(wrapAuthorities, this.earnAuthority.publicKey)
+          .initialize(
+            wrapAuthorities,
+            replaceAuthorities,
+            this.earnAuthority.publicKey
+          )
           .accounts({
             admin: this.admin.publicKey,
             mMint: this.mMint.publicKey,
@@ -1526,10 +1684,10 @@ export class ExtensionTest<
           .signers([this.admin])
           .rpc();
         break;
-      case Variant.NoYield:
+      case Variant.Jmi:
         // Send the transaction
         await this.ext.methods
-          .initialize(wrapAuthorities)
+          .initialize(wrapAuthorities, replaceAuthorities)
           .accounts({
             admin: this.admin.publicKey,
             mMint: this.mMint.publicKey,
@@ -1621,6 +1779,7 @@ export class ExtensionTest<
           : this.ext.programId,
         fromMTokenAccount,
         toExtTokenAccount,
+        mTokenProgram: TOKEN_2022_PROGRAM_ID,
         extTokenProgram: this.extTokenProgram,
       })
       .signers(
@@ -1689,6 +1848,7 @@ export class ExtensionTest<
           : this.ext.programId,
         toMTokenAccount,
         fromExtTokenAccount,
+        mTokenProgram: TOKEN_2022_PROGRAM_ID,
         extTokenProgram: this.extTokenProgram,
       })
       .signers(
@@ -1699,10 +1859,272 @@ export class ExtensionTest<
     return { vaultMTokenAccount, toMTokenAccount, fromExtTokenAccount };
   }
 
+  // ============================================
+  // JMI-specific helper methods
+  // ============================================
+
+  public getAssetConfigAccount(assetMint: PublicKey): PublicKey {
+    const [assetConfig] = PublicKey.findProgramAddressSync(
+      [Buffer.from("asset_config"), assetMint.toBuffer()],
+      this.ext.programId
+    );
+    return assetConfig;
+  }
+
+  public async createAssetMint(
+    decimals: number = 6,
+    useToken2022: boolean = false
+  ): Promise<Keypair> {
+    const assetMint = new Keypair();
+    await this.createMint(
+      assetMint,
+      this.admin.publicKey,
+      this.admin.publicKey,
+      useToken2022,
+      decimals
+    );
+    return assetMint;
+  }
+
+  public async mintAssetTokens(
+    assetMint: Keypair,
+    to: PublicKey,
+    amount: BN,
+    useToken2022: boolean = false
+  ): Promise<PublicKey> {
+    const tokenAccount = await this.getATA(
+      assetMint.publicKey,
+      to,
+      useToken2022
+    );
+
+    // Create mint-to instruction
+    const mintToIx = createMintToCheckedInstruction(
+      assetMint.publicKey,
+      tokenAccount,
+      this.admin.publicKey,
+      BigInt(amount.toString()),
+      6,
+      [],
+      useToken2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
+    );
+
+    const tx = new Transaction().add(mintToIx);
+    await this.provider.sendAndConfirm!(tx, [this.admin]);
+
+    return tokenAccount;
+  }
+
+  public async setAssetCap(
+    assetMint: PublicKey,
+    cap: BN,
+    admin?: Keypair,
+    useToken2022ForAsset: boolean = false
+  ): Promise<void> {
+    if (this.variant !== Variant.Jmi) {
+      throw new Error("setAssetCap is only available for JMI variant");
+    }
+
+    const signer = admin ?? this.admin;
+    const assetTokenProgram = useToken2022ForAsset
+      ? TOKEN_2022_PROGRAM_ID
+      : TOKEN_PROGRAM_ID;
+
+    await this.ext.methods
+      .setAssetCap(cap)
+      .accountsPartial({
+        admin: signer.publicKey,
+        assetMint: assetMint,
+        assetTokenProgram: assetTokenProgram,
+      })
+      .signers([signer])
+      .rpc();
+  }
+
+  public async wrapAsset(
+    assetMint: PublicKey,
+    amount: BN,
+    tokenAuthority: Keypair,
+    wrapAuthority?: Keypair | null,
+    useToken2022ForAsset: boolean = false
+  ): Promise<{
+    fromAssetTokenAccount: PublicKey;
+    toExtTokenAccount: PublicKey;
+    vaultAssetTokenAccount: PublicKey;
+  }> {
+    if (this.variant !== Variant.Jmi) {
+      throw new Error("wrapAsset is only available for JMI variant");
+    }
+
+    const mVault = this.getMVault();
+    const assetTokenProgram = useToken2022ForAsset
+      ? TOKEN_2022_PROGRAM_ID
+      : TOKEN_PROGRAM_ID;
+
+    const fromAssetTokenAccount = await this.getATA(
+      assetMint,
+      tokenAuthority.publicKey,
+      useToken2022ForAsset
+    );
+    const toExtTokenAccount = await this.getATA(
+      this.extMint.publicKey,
+      tokenAuthority.publicKey,
+      this.useToken2022ForExt
+    );
+    const vaultAssetTokenAccount = await this.getATA(
+      assetMint,
+      mVault,
+      useToken2022ForAsset
+    );
+
+    await this.ext.methods
+      .wrapAsset(amount)
+      .accountsPartial({
+        tokenAuthority: tokenAuthority.publicKey,
+        replaceAuthority: wrapAuthority
+          ? wrapAuthority.publicKey
+          : this.ext.programId,
+        assetMint: assetMint,
+        assetConfig: this.getAssetConfigAccount(assetMint),
+        fromAssetTokenAccount,
+        toExtTokenAccount,
+        vaultAssetTokenAccount,
+        assetTokenProgram,
+        extTokenProgram: this.extTokenProgram,
+      })
+      .signers(
+        wrapAuthority ? [tokenAuthority, wrapAuthority] : [tokenAuthority]
+      )
+      .rpc();
+
+    return { fromAssetTokenAccount, toExtTokenAccount, vaultAssetTokenAccount };
+  }
+
+  public async replaceAssetWithM(
+    assetMint: PublicKey,
+    mPrincipal: BN,
+    tokenAuthority: Keypair,
+    replaceAuthority?: Keypair | null,
+    useToken2022ForAsset: boolean = false
+  ): Promise<{
+    fromMTokenAccount: PublicKey;
+    toAssetTokenAccount: PublicKey;
+    vaultMTokenAccount: PublicKey;
+    vaultAssetTokenAccount: PublicKey;
+  }> {
+    if (this.variant !== Variant.Jmi) {
+      throw new Error("replaceAssetWithM is only available for JMI variant");
+    }
+
+    const mVault = this.getMVault();
+    const assetTokenProgram = useToken2022ForAsset
+      ? TOKEN_2022_PROGRAM_ID
+      : TOKEN_PROGRAM_ID;
+
+    const fromMTokenAccount = await this.getATA(
+      this.mMint.publicKey,
+      tokenAuthority.publicKey
+    );
+    const toAssetTokenAccount = await this.getATA(
+      assetMint,
+      tokenAuthority.publicKey,
+      useToken2022ForAsset
+    );
+    const vaultMTokenAccount = await this.getATA(this.mMint.publicKey, mVault);
+    const vaultAssetTokenAccount = await this.getATA(
+      assetMint,
+      mVault,
+      useToken2022ForAsset
+    );
+
+    await this.ext.methods
+      .replaceAssetWithM(mPrincipal)
+      .accountsPartial({
+        tokenAuthority: tokenAuthority.publicKey,
+        replaceAuthority: replaceAuthority
+          ? replaceAuthority.publicKey
+          : this.ext.programId, // effectively a no-op if not replacing
+        mMint: this.mMint.publicKey,
+        assetMint: assetMint,
+        assetConfig: this.getAssetConfigAccount(assetMint),
+        fromMTokenAccount,
+        toAssetTokenAccount,
+        vaultMTokenAccount,
+        vaultAssetTokenAccount,
+        assetTokenProgram,
+        mTokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .signers(
+        replaceAuthority
+          ? [tokenAuthority, replaceAuthority]
+          : [tokenAuthority]
+      )
+      .rpc();
+
+    return {
+      fromMTokenAccount,
+      toAssetTokenAccount,
+      vaultMTokenAccount,
+      vaultAssetTokenAccount,
+    };
+  }
+
+  public async setupJmiAsset(
+    cap: BN,
+    decimals: number = 6,
+    useToken2022ForAsset: boolean = false
+  ): Promise<{ assetMint: Keypair; vaultAssetTokenAccount: PublicKey }> {
+    if (this.variant !== Variant.Jmi) {
+      throw new Error("setupJmiAsset is only available for JMI variant");
+    }
+
+    // Create asset mint
+    const assetMint = await this.createAssetMint(decimals, useToken2022ForAsset);
+
+    // Set asset cap (this also creates the vault ATA)
+    await this.setAssetCap(assetMint.publicKey, cap, undefined, useToken2022ForAsset);
+
+    // Get the vault ATA
+    const vaultAssetTokenAccount = await this.getATA(
+      assetMint.publicKey,
+      this.getMVault(),
+      useToken2022ForAsset
+    );
+
+    return { assetMint, vaultAssetTokenAccount };
+  }
+
+  public async expectAssetConfigState(
+    assetMint: PublicKey,
+    expected: AssetConfig
+  ): Promise<void> {
+    if (this.variant !== Variant.Jmi) {
+      throw new Error(
+        "expectAssetConfigState is only available for JMI variant"
+      );
+    }
+
+    const assetConfigAccount = this.getAssetConfigAccount(assetMint);
+    const assetConfig = await this.ext.account.assetConfig.fetch(
+      assetConfigAccount
+    );
+
+    if (expected.cap !== undefined) {
+      expect(assetConfig.cap.toString()).toBe(expected.cap.toString());
+    }
+    if (expected.bump !== undefined) {
+      expect(assetConfig.bump).toBe(expected.bump);
+    }
+  }
+
+  // ============================================
+  // End JMI-specific helper methods
+  // ============================================
+
   public async sync(): Promise<PublicKey> {
     switch (this.variant) {
-      case Variant.NoYield:
-        throw new Error("sync is not supported for No Yield variant");
+      case Variant.Jmi:
+        throw new Error("sync is not supported for JMI variant");
         break;
       case Variant.ScaledUi:
         // Sync is open to any address
@@ -2022,7 +2444,7 @@ export class ExtensionSwapTest extends ExtensionTestBase {
     super(addresses);
 
     // Load and add extension programs
-    const NO_YIELD_IDL = require("../../target/idl/no_yield.json");
+    const JMI_IDL = require("../../target/idl/jmi.json");
     const SCALED_UI_IDL = require("../../target/idl/scaled_ui.json");
 
     // Add the test extension programs to SVM
@@ -2039,9 +2461,9 @@ export class ExtensionSwapTest extends ExtensionTestBase {
       "tests/programs/ext_c.so"
     );
 
-    // Create program instances
+    // Create program instances (using JMI IDL for no-yield variants since JMI is a superset)
     this.extensionPrograms.extA = new Program<MExt>(
-      { ...NO_YIELD_IDL, address: ExtensionSwapTest.EXT_PROGRAM_IDS.extA },
+      { ...JMI_IDL, address: ExtensionSwapTest.EXT_PROGRAM_IDS.extA },
       this.provider
     );
     this.extensionPrograms.extB = new Program<MExt>(
@@ -2049,7 +2471,7 @@ export class ExtensionSwapTest extends ExtensionTestBase {
       this.provider
     );
     this.extensionPrograms.extC = new Program<MExt>(
-      { ...NO_YIELD_IDL, address: ExtensionSwapTest.EXT_PROGRAM_IDS.extC },
+      { ...JMI_IDL, address: ExtensionSwapTest.EXT_PROGRAM_IDS.extC },
       this.provider
     );
 
@@ -2146,9 +2568,9 @@ export class ExtensionSwapTest extends ExtensionTestBase {
   }
 
   private async initializeExtensionPrograms() {
-    // ext_a: no-yield variant - initialize with just wrap authorities
+    // ext_a: no-yield variant - initialize with wrap authorities and replace authorities
     await this.extensionPrograms.extA.methods
-      .initialize([this.admin.publicKey])
+      .initialize([this.admin.publicKey], [this.admin.publicKey])
       .accounts({
         admin: this.admin.publicKey,
         mMint: this.mMint.publicKey,
@@ -2160,7 +2582,7 @@ export class ExtensionSwapTest extends ExtensionTestBase {
 
     // ext_b: scaled-ui variant - initialize with wrap authorities and fee_bps
     await this.extensionPrograms.extB.methods
-      .initialize([this.admin.publicKey], new BN(500)) // 5% fee
+      .initialize([this.admin.publicKey], [], new BN(500)) // 5% fee
       .accounts({
         admin: this.admin.publicKey,
         mMint: this.mMint.publicKey,
@@ -2170,9 +2592,9 @@ export class ExtensionSwapTest extends ExtensionTestBase {
       .signers([this.admin])
       .rpc();
 
-    // ext_c: no-yield variant with extra accounts - initialize with just wrap authorities
+    // ext_c: no-yield variant with extra accounts - initialize with wrap authorities and replace authorities
     await this.extensionPrograms.extC.methods
-      .initialize([this.admin.publicKey])
+      .initialize([this.admin.publicKey], [this.admin.publicKey])
       .accounts({
         admin: this.admin.publicKey,
         mMint: this.mMint.publicKey,
@@ -2235,6 +2657,22 @@ export class ExtensionSwapTest extends ExtensionTestBase {
       .rpc();
   }
 
+  public async addReplaceAuthorityToExtension(
+    extensionKey: string,
+    authority: PublicKey
+  ) {
+    const program = this.extensionPrograms[extensionKey];
+    if (!program) throw new Error(`Extension ${extensionKey} not found`);
+
+    await program.methods
+      .addReplaceAuthority(authority)
+      .accounts({
+        admin: this.admin.publicKey,
+      })
+      .signers([this.admin])
+      .rpc();
+  }
+
   public getSwapGlobalAccount(): PublicKey {
     return PublicKey.findProgramAddressSync(
       [Buffer.from("global")],
@@ -2274,5 +2712,248 @@ export class ExtensionSwapTest extends ExtensionTestBase {
     for (const vault of vaults) {
       await this.addMEarner(vault);
     }
+  }
+
+  // ============================================
+  // JMI-specific helper methods for ExtensionSwapTest
+  // ============================================
+
+  public getReplaceAuthorityPda(): PublicKey {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("replace_authority")],
+      this.swapProgram.programId
+    )[0];
+  }
+
+  public getExtGlobalAccountFor(extKey: string): PublicKey {
+    const program = this.extensionPrograms[extKey];
+    if (!program) throw new Error(`Extension ${extKey} not found`);
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("global")],
+      program.programId
+    )[0];
+  }
+
+  public getAssetConfigAccount(extKey: string, assetMint: PublicKey): PublicKey {
+    const program = this.extensionPrograms[extKey];
+    if (!program) throw new Error(`Extension ${extKey} not found`);
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("asset_config"), assetMint.toBuffer()],
+      program.programId
+    )[0];
+  }
+
+  public async createAssetMint(
+    decimals: number = 6,
+    useToken2022: boolean = false
+  ): Promise<Keypair> {
+    const assetMint = new Keypair();
+    await this.createMint(
+      assetMint,
+      this.admin.publicKey,
+      this.admin.publicKey,
+      useToken2022,
+      decimals
+    );
+    return assetMint;
+  }
+
+  public async mintAssetTokensTo(
+    assetMint: Keypair,
+    to: PublicKey,
+    amount: BN,
+    useToken2022: boolean = false
+  ): Promise<PublicKey> {
+    const tokenAccount = await this.getATA(
+      assetMint.publicKey,
+      to,
+      useToken2022
+    );
+
+    const mintToIx = createMintToCheckedInstruction(
+      assetMint.publicKey,
+      tokenAccount,
+      this.admin.publicKey,
+      BigInt(amount.toString()),
+      6,
+      [],
+      useToken2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
+    );
+
+    const tx = new Transaction().add(mintToIx);
+    await this.provider.sendAndConfirm!(tx, [this.admin]);
+
+    return tokenAccount;
+  }
+
+  public async setAssetCapOnExtension(
+    extKey: string,
+    assetMint: PublicKey,
+    cap: BN,
+    useToken2022ForAsset: boolean = false
+  ): Promise<void> {
+    const program = this.extensionPrograms[extKey];
+    if (!program) throw new Error(`Extension ${extKey} not found`);
+
+    const assetTokenProgram = useToken2022ForAsset
+      ? TOKEN_2022_PROGRAM_ID
+      : TOKEN_PROGRAM_ID;
+
+    await program.methods
+      .setAssetCap(cap)
+      .accountsPartial({
+        admin: this.admin.publicKey,
+        assetMint: assetMint,
+        assetTokenProgram: assetTokenProgram,
+      })
+      .signers([this.admin])
+      .rpc();
+  }
+
+  public async wrapAssetViaSwap(
+    extKey: string,
+    assetMint: PublicKey,
+    amount: BN,
+    signer: Keypair,
+    replaceAuthority?: Keypair,
+    useToken2022ForAsset: boolean = false
+  ): Promise<string> {
+    const program = this.extensionPrograms[extKey];
+    if (!program) throw new Error(`Extension ${extKey} not found`);
+
+    const extMint = this.extensionMints[extKey.replace("ext", "mint")];
+    if (!extMint) throw new Error(`Extension mint for ${extKey} not found`);
+
+    const mVault = this.getMVaultForExtension(program.programId);
+    const assetTokenProgram = useToken2022ForAsset
+      ? TOKEN_2022_PROGRAM_ID
+      : TOKEN_PROGRAM_ID;
+
+    const userAssetAccount = await this.getATA(
+      assetMint,
+      signer.publicKey,
+      useToken2022ForAsset
+    );
+    const userExtAccount = await this.getATA(
+      extMint.publicKey,
+      signer.publicKey,
+      true
+    );
+    const vaultAssetAccount = await this.getATA(
+      assetMint,
+      mVault,
+      useToken2022ForAsset
+    );
+
+    const signers = replaceAuthority
+      ? [signer, replaceAuthority]
+      : [signer];
+
+    return this.swapProgram.methods
+      .wrapAsset(amount)
+      .accountsPartial({
+        signer: signer.publicKey,
+        replaceAuthority: replaceAuthority
+          ? replaceAuthority.publicKey
+          : null,
+        fallbackReplaceAuthority: this.getReplaceAuthorityPda(),
+        swapGlobal: this.getSwapGlobalAccount(),
+        toGlobal: this.getExtGlobalAccountFor(extKey),
+        toMint: extMint.publicKey,
+        assetMint: assetMint,
+        assetConfig: this.getAssetConfigAccount(extKey, assetMint),
+        assetTokenAccount: userAssetAccount,
+        toTokenAccount: userExtAccount,
+        toVaultAuth: mVault,
+        toMintAuthority: PublicKey.findProgramAddressSync(
+          [Buffer.from("mint_authority")],
+          program.programId
+        )[0],
+        toAssetVault: vaultAssetAccount,
+        toTokenProgram: TOKEN_2022_PROGRAM_ID,
+        assetTokenProgram: assetTokenProgram,
+        toExtProgram: program.programId,
+      })
+      .signers(signers)
+      .rpc();
+  }
+
+  public async replaceAssetWithMViaSwap(
+    fromExtKey: string,
+    jmiExtKey: string,
+    assetMint: PublicKey,
+    extPrincipal: BN,
+    signer: Keypair,
+    replaceAuthority?: Keypair,
+    useToken2022ForAsset: boolean = false
+  ): Promise<string> {
+    const fromProgram = this.extensionPrograms[fromExtKey];
+    const jmiProgram = this.extensionPrograms[jmiExtKey];
+    if (!fromProgram) throw new Error(`Extension ${fromExtKey} not found`);
+    if (!jmiProgram) throw new Error(`Extension ${jmiExtKey} not found`);
+
+    const fromMint = this.extensionMints[fromExtKey.replace("ext", "mint")];
+    if (!fromMint) throw new Error(`Extension mint for ${fromExtKey} not found`);
+
+    const fromMVault = this.getMVaultForExtension(fromProgram.programId);
+    const jmiMVault = this.getMVaultForExtension(jmiProgram.programId);
+    const assetTokenProgram = useToken2022ForAsset
+      ? TOKEN_2022_PROGRAM_ID
+      : TOKEN_PROGRAM_ID;
+
+    const userFromAccount = await this.getATA(
+      fromMint.publicKey,
+      signer.publicKey,
+      true
+    );
+    const userAssetAccount = await this.getATA(
+      assetMint,
+      signer.publicKey,
+      useToken2022ForAsset
+    );
+    const swapMAccount = await this.getATA(
+      this.mMint.publicKey,
+      this.getSwapGlobalAccount(),
+      true
+    );
+
+    const signers = replaceAuthority
+      ? [signer, replaceAuthority]
+      : [signer];
+
+    return this.swapProgram.methods
+      .replaceAssetWithM(extPrincipal)
+      .accountsPartial({
+        signer: signer.publicKey,
+        replaceAuthority: replaceAuthority
+          ? replaceAuthority.publicKey
+          : null,
+        swapGlobal: this.getSwapGlobalAccount(),
+        fromGlobal: this.getExtGlobalAccountFor(fromExtKey),
+        jmiGlobal: this.getExtGlobalAccountFor(jmiExtKey),
+        fromMint: fromMint.publicKey,
+        mMint: this.mMint.publicKey,
+        assetMint: assetMint,
+        assetConfig: this.getAssetConfigAccount(jmiExtKey, assetMint),
+        fromTokenAccount: userFromAccount,
+        toAssetTokenAccount: userAssetAccount,
+        swapMAccount: swapMAccount,
+        fromMVaultAuth: fromMVault,
+        fromMintAuthority: PublicKey.findProgramAddressSync(
+          [Buffer.from("mint_authority")],
+          fromProgram.programId
+        )[0],
+        fromMVault: await this.getATA(this.mMint.publicKey, fromMVault, true),
+        jmiMVaultAuth: jmiMVault,
+        jmiMVault: await this.getATA(this.mMint.publicKey, jmiMVault, true),
+        jmiAssetVault: await this.getATA(assetMint, jmiMVault, useToken2022ForAsset),
+        fromTokenProgram: TOKEN_2022_PROGRAM_ID,
+        assetTokenProgram: assetTokenProgram,
+        mTokenProgram: TOKEN_2022_PROGRAM_ID,
+        fromExtProgram: fromProgram.programId,
+        jmiExtProgram: jmiProgram.programId,
+      })
+      .signers(signers)
+      .rpc();
   }
 }

@@ -174,13 +174,15 @@ impl MigrateM<'_> {
             } else if #[cfg(feature = "no-yield")] {
                 yield_config = YieldConfig {
                     yield_variant: YieldVariant::NoYield,
+                    total_assets: 0,
                 };
             }
         };
 
         // Resize the global account to accommodate the new yield config
         // We need to take into account the current number of wrap authorities
-        let new_size = ExtGlobalV2::size(old_global.wrap_authorities.len());
+        // replace_authorities starts empty during migration
+        let new_size = ExtGlobalV2::size(old_global.wrap_authorities.len(), 0);
         let account_info = ctx.accounts.global_account.to_account_info();
         account_info.realloc(new_size, false)?;
 
@@ -214,6 +216,7 @@ impl MigrateM<'_> {
             ext_mint_authority_bump: old_global.ext_mint_authority_bump,
             yield_config,
             wrap_authorities: old_global.wrap_authorities.clone(),
+            replace_authorities: vec![], // starts empty during migration
         };
 
         // Write the new global account data

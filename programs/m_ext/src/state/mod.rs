@@ -14,12 +14,13 @@ pub struct ExtGlobalV2 {
     pub bump: u8,
     pub m_vault_bump: u8,
     pub ext_mint_authority_bump: u8,
-    pub yield_config: YieldConfig,     // variant specific state
-    pub wrap_authorities: Vec<Pubkey>, // accounts permissioned to wrap/unwrap the ext_mint
+    pub yield_config: YieldConfig,        // variant specific state
+    pub wrap_authorities: Vec<Pubkey>,    // accounts permissioned to wrap/unwrap the ext_mint
+    pub replace_authorities: Vec<Pubkey>, // accounts permissioned for JMI operations (wrap_asset, replace_asset_with_m)
 }
 
 impl ExtGlobalV2 {
-    pub fn size(wrap_authorities: usize) -> usize {
+    pub fn size(wrap_authorities: usize, replace_authorities: usize) -> usize {
         8 + // discriminator
         32 + // admin
         1 + 32 + // pending_admin (Option<Pubkey>)
@@ -31,7 +32,9 @@ impl ExtGlobalV2 {
         1 + // ext_mint_authority_bump
         YieldConfig::space() + // yield_config
         4 + // length of wrap_authorities vector
-        wrap_authorities * 32 // each Pubkey is 32 bytes
+        wrap_authorities * 32 + // each Pubkey is 32 bytes
+        4 + // length of replace_authorities vector
+        replace_authorities * 32 // each Pubkey is 32 bytes
     }
 }
 
@@ -40,6 +43,10 @@ pub const MINT_AUTHORITY_SEED: &[u8] = b"mint_authority";
 
 #[constant]
 pub const M_VAULT_SEED: &[u8] = b"m_vault";
+
+#[cfg(feature = "jmi")]
+#[constant]
+pub const ASSET_CONFIG_SEED: &[u8] = b"asset_config";
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 #[repr(u8)]
@@ -93,15 +100,21 @@ cfg_if! {
         pub use earner::*;
         pub use earn_manager::*;
     } else {
+        // no-yield contains fields JMI fields
         #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
         pub struct YieldConfig {
-            pub yield_variant: YieldVariant, // variant of yield config
+            pub yield_variant: YieldVariant,   // 1 byte
+            pub total_assets: u64,             // 8 bytes - sum of non-M assets (6 decimals)
         }
 
         impl YieldConfig {
             pub fn space() -> usize {
-                1 // yield_variant
+                1 + // yield_variant
+                8   // total_assets
             }
         }
+
+        pub mod asset_config;
+        pub use asset_config::*;
     }
 }

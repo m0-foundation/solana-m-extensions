@@ -24,11 +24,11 @@ const initialIndex = new BN(1_100_000_000_000); // 1.1 with 12 decimals
 const ONE = new BN(1_000_000_000_000); // 1.0 with 12 decimals
 
 const VARIANTS = [
-  [Variant.NoYield, TOKEN_2022_PROGRAM_ID],
-  [Variant.NoYield, TOKEN_PROGRAM_ID],
   [Variant.ScaledUi, TOKEN_2022_PROGRAM_ID],
   [Variant.Crank, TOKEN_PROGRAM_ID],
   [Variant.Crank, TOKEN_2022_PROGRAM_ID],
+  [Variant.Jmi, TOKEN_2022_PROGRAM_ID],
+  [Variant.Jmi, TOKEN_PROGRAM_ID],
 ];
 
 // Implement test cases for all variants
@@ -90,11 +90,11 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
           // Attempt to send the transaction
           await $.expectSystemError(
-            (variant === Variant.NoYield
-              ? $.ext.methods.initialize([])
+            (variant === Variant.Jmi
+              ? $.ext.methods.initialize([], [])
               : variant === Variant.ScaledUi
-              ? $.ext.methods.initialize([], new BN(0))
-              : $.ext.methods.initialize([], $.earnAuthority.publicKey)
+              ? $.ext.methods.initialize([], [], new BN(0))
+              : $.ext.methods.initialize([], [], $.earnAuthority.publicKey)
             )
               .accountsPartial({
                 admin: $.nonAdmin.publicKey,
@@ -122,11 +122,11 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
           // Attempt to send the transaction
           await $.expectAnchorError(
-            (variant === Variant.NoYield
-              ? $.ext.methods.initialize([])
+            (variant === Variant.Jmi
+              ? $.ext.methods.initialize([], [])
               : variant === Variant.ScaledUi
-              ? $.ext.methods.initialize([], new BN(0))
-              : $.ext.methods.initialize([], $.earnAuthority.publicKey)
+              ? $.ext.methods.initialize([], [], new BN(0))
+              : $.ext.methods.initialize([], [], $.earnAuthority.publicKey)
             )
               .accounts({
                 admin: $.nonAdmin.publicKey,
@@ -155,11 +155,11 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
           // Attempt to send the transaction
           await $.expectAnchorError(
-            (variant === Variant.NoYield
-              ? $.ext.methods.initialize([])
+            (variant === Variant.Jmi
+              ? $.ext.methods.initialize([], [])
               : variant === Variant.ScaledUi
-              ? $.ext.methods.initialize([], new BN(0))
-              : $.ext.methods.initialize([], $.earnAuthority.publicKey)
+              ? $.ext.methods.initialize([], [], new BN(0))
+              : $.ext.methods.initialize([], [], $.earnAuthority.publicKey)
             )
               .accounts({
                 admin: $.nonAdmin.publicKey,
@@ -183,11 +183,11 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // Attempt to send transaction
           // Expect error (could be one of several "SeedsConstraint", "AccountOwnedByWrongProgram", "AccountNotInitialized")
           await $.expectSystemError(
-            (variant === Variant.NoYield
-              ? $.ext.methods.initialize([])
+            (variant === Variant.Jmi
+              ? $.ext.methods.initialize([], [])
               : variant === Variant.ScaledUi
-              ? $.ext.methods.initialize([], new BN(0))
-              : $.ext.methods.initialize([], $.earnAuthority.publicKey)
+              ? $.ext.methods.initialize([], [], new BN(0))
+              : $.ext.methods.initialize([], [], $.earnAuthority.publicKey)
             )
               .accountsPartial({
                 admin: $.nonAdmin.publicKey,
@@ -211,11 +211,11 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           // Attempt to send transaction
           // Expect error (could be one of several "SeedsConstraint", "AccountOwnedByWrongProgram", "AccountNotInitialized")
           await $.expectSystemError(
-            (variant === Variant.NoYield
-              ? $.ext.methods.initialize([])
+            (variant === Variant.Jmi
+              ? $.ext.methods.initialize([], [])
               : variant === Variant.ScaledUi
-              ? $.ext.methods.initialize([], new BN(0))
-              : $.ext.methods.initialize([], $.earnAuthority.publicKey)
+              ? $.ext.methods.initialize([], [], new BN(0))
+              : $.ext.methods.initialize([], [], $.earnAuthority.publicKey)
             )
               .accountsPartial({
                 admin: $.nonAdmin.publicKey,
@@ -244,11 +244,11 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
           // Attempt to send the transaction
           await $.expectAnchorError(
-            (variant === Variant.NoYield
-              ? $.ext.methods.initialize([])
+            (variant === Variant.Jmi
+              ? $.ext.methods.initialize([], [])
               : variant === Variant.ScaledUi
-              ? $.ext.methods.initialize([], new BN(0))
-              : $.ext.methods.initialize([], $.earnAuthority.publicKey)
+              ? $.ext.methods.initialize([], [], new BN(0))
+              : $.ext.methods.initialize([], [], $.earnAuthority.publicKey)
             )
               .accounts({
                 admin: $.nonAdmin.publicKey,
@@ -271,12 +271,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
           // Attempt to send transaction
           await $.expectAnchorError(
-            (variant === Variant.NoYield
-              ? $.ext.methods.initialize(wrapAuthorities)
+            (variant === Variant.Jmi
+              ? $.ext.methods.initialize(wrapAuthorities, [])
               : variant === Variant.ScaledUi
-              ? $.ext.methods.initialize(wrapAuthorities, new BN(0))
+              ? $.ext.methods.initialize(wrapAuthorities, [], new BN(0))
               : $.ext.methods.initialize(
                   wrapAuthorities,
+                  [],
                   $.earnAuthority.publicKey
                 )
             )
@@ -302,7 +303,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
         //   [X] the bumps are set correctly
         //   [X] the wrap authorities are set correctly
 
-        if (variant === Variant.NoYield) {
+        if (variant === Variant.Jmi) {
           // given accounts and params are correct
           // it creates the global account
           // it sets the admin to the signer
@@ -338,7 +339,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Send the transaction
             await $.ext.methods
-              .initialize(wrapAuthorities)
+              .initialize(wrapAuthorities, [])
               .accounts({
                 admin: $.admin.publicKey,
                 mMint: $.mMint.publicKey,
@@ -359,12 +360,13 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               extMintAuthorityBump,
               yieldConfig: {
                 yieldVariant: { noYield: {} },
+                totalAssets: new BN(0),
               },
               wrapAuthorities,
             });
 
             // Confirm the size of the global account based on the number of wrap authorities
-            const expectedSize = 176 + 1 + wrapAuthorities.length * 32; // 176 bytes base size + 1 for yield config discriminator + 4 bytes for vector length + 32 bytes per wrap authority
+            const expectedSize = 176 + 9 + 4 + wrapAuthorities.length * 32; // 176 bytes base size + 9 for yield config + 4 bytes for wrap_authorities vec + 4 bytes for replace_authorities vec + 32 bytes per wrap authority
             const extGlobalSize = await $.provider.connection
               .getAccountInfo(globalAccount)
               .then((info) => info?.data.length || 0);
@@ -405,7 +407,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Attempt to send the transaction
             await $.expectAnchorError(
               $.ext.methods
-                .initialize([], new BN(0))
+                .initialize([], [], new BN(0))
                 .accounts({
                   admin: $.nonAdmin.publicKey,
                   mMint: $.mMint.publicKey,
@@ -433,7 +435,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             // Attempt to send the transaction
             await $.expectAnchorError(
               $.ext.methods
-                .initialize([], new BN(0))
+                .initialize([], [], new BN(0))
                 .accounts({
                   admin: $.nonAdmin.publicKey,
                   mMint: $.mMint.publicKey,
@@ -484,7 +486,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Send the transaction
             await $.ext.methods
-              .initialize(wrapAuthorities, feeBps)
+              .initialize(wrapAuthorities, [], feeBps)
               .accounts({
                 admin: $.admin.publicKey,
                 mMint: $.mMint.publicKey,
@@ -513,7 +515,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             });
 
             // Check the size of the global account based on the number of wrap authorities
-            const expectedSize = 176 + 25 + wrapAuthorities.length * 32; // 176 bytes base size + 25 yield config size + 32 bytes per wrap authority
+            const expectedSize = 176 + 25 + 4 + wrapAuthorities.length * 32; // 176 bytes base size + 25 yield config size + 4 bytes for replace_authorities vec + 32 bytes per wrap authority
             const extGlobalSize = await $.provider.connection
               .getAccountInfo(globalAccount)
               .then((info) => info?.data.length || 0);
@@ -540,7 +542,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
 
           const feeBps =
-            variant === Variant.NoYield ? new BN(0) : new BN(randomInt(10000));
+            variant === Variant.Jmi ? new BN(0) : new BN(randomInt(10000));
           // Initialize the extension program
           await $.initializeExt(wrapAuthorities, feeBps);
 
@@ -723,7 +725,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
 
           const feeBps =
-            variant === Variant.NoYield ? new BN(0) : new BN(randomInt(10000));
+            variant === Variant.Jmi ? new BN(0) : new BN(randomInt(10000));
           // Initialize the extension program
           await $.initializeExt(wrapAuthorities, feeBps);
         });
@@ -811,7 +813,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
 
           const feeBps =
-            variant === Variant.NoYield ? new BN(0) : new BN(randomInt(10000));
+            variant === Variant.Jmi ? new BN(0) : new BN(randomInt(10000));
           // Initialize the extension program
           await $.initializeExt(wrapAuthorities, feeBps);
         });
@@ -899,15 +901,15 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           //   [X] it reverts with a NotAuthorized error
           // [X] given the admin signs the transaction
           //   [X] given the m vault is not the m vault PDA
-          //     [X] it reverts with a ConstraintSeeds error
+          //     [X] it reverts with a AccountNotInitialized error
           //   [X] given the m vault token account is not the m vault PDA's ATA
           //     [X] it reverts with a ConstraintAssociated error
           //   [X] given the ext mint does not match the one on the global account
           //     [X] it reverts with an InvalidMint error
           //   [X] given the ext mint authority is not the ext mint authority PDA
-          //     [X] it reverts with a ConstraintSeeds error
+          //     [X] it reverts with a AccountNotInitialized error
           //   [X] given the m earn global account does not match the derived PDA
-          //     [X] it reverts with a ConstraintSeeds error
+          //     [X] it reverts with a AccountNotInitialized error
           //   [X] given the recipient token account is not a token account for the m mint
           //     [X] it reverts with a ConstraintTokenMint error
           //   [X] given the vault m token account is frozen (i.e. extension is not approved as an earner)
@@ -1376,7 +1378,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           //       [X] it transfers the excess collateral to the recipient token account
           //     [X] given the m vault does not have excess collateral
           //       [X] it completes but doesn't transfer any tokens
-          if (variant === Variant.NoYield) {
+          if (variant === Variant.Jmi) {
             // given all accounts are correct
             // given the m vault has excess collateral
             // it transfers the excess collateral to the recipient token account
@@ -2167,6 +2169,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   vaultMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -2204,6 +2207,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   extMint: wrongMint.publicKey,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -2231,6 +2235,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -2257,6 +2262,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   vaultMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -2278,6 +2284,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount: toExtTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -2299,6 +2306,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   toExtTokenAccount: fromMTokenAccount,
                   fromMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -2331,6 +2339,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.nonWrapAuthority])
@@ -2359,6 +2368,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.wrapAuthority])
                 .rpc()
@@ -2375,6 +2385,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
@@ -2446,6 +2457,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 wrapAuthority: $.ext.programId,
                 fromMTokenAccount,
                 toExtTokenAccount,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
@@ -2523,6 +2535,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 wrapAuthority: $.ext.programId,
                 fromMTokenAccount,
                 toExtTokenAccount,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
@@ -2607,6 +2620,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 wrapAuthority: $.ext.programId,
                 fromMTokenAccount,
                 toExtTokenAccount,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
@@ -2688,6 +2702,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.nonWrapAuthority.publicKey,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.nonWrapAuthority])
@@ -2716,6 +2731,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID
                 })
                 .signers([$.nonWrapAuthority, $.wrapAuthority])
                 .rpc()
@@ -2783,6 +2799,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 wrapAuthority: $.wrapAuthority.publicKey,
                 fromMTokenAccount,
                 toExtTokenAccount,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 extTokenProgram: $.extTokenProgram,
               })
               .signers([$.nonAdmin, $.wrapAuthority])
@@ -2871,6 +2888,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 wrapAuthority: $.wrapAuthority.publicKey,
                 fromMTokenAccount,
                 toExtTokenAccount,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 extTokenProgram: $.extTokenProgram,
               })
               .signers([$.nonWrapAuthority, $.wrapAuthority])
@@ -3021,6 +3039,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID
                 })
                 .signers([$.wrapAuthority])
                 .rpc();
@@ -3104,6 +3123,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3190,6 +3210,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.wrapAuthority])
                 .rpc();
@@ -3283,6 +3304,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3381,6 +3403,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromMTokenAccount,
                   toExtTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.wrapAuthority])
                 .rpc();
@@ -3477,6 +3500,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   wrapAuthority: $.ext.programId,
                   fromMTokenAccount,
                   toExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3622,6 +3646,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   vaultMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3660,6 +3685,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   extMint: wrongMint.publicKey,
                   fromExtTokenAccount,
                   toMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3689,6 +3715,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.wrapAuthority])
                 .rpc()
@@ -3719,6 +3746,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   vaultMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3740,6 +3768,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   unwrapAuthority: $.ext.programId,
                   toMTokenAccount: fromExtTokenAccount,
                   fromExtTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3762,6 +3791,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount: toMTokenAccount,
                   toMTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.wrapAuthority])
                 .rpc(),
@@ -3791,6 +3821,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   unwrapAuthority: $.ext.programId,
                   fromExtTokenAccount,
                   toMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.nonWrapAuthority])
@@ -3826,6 +3857,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.wrapAuthority])
                 .rpc()
@@ -3842,6 +3874,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   unwrapAuthority: $.ext.programId,
                   fromExtTokenAccount,
                   toMTokenAccount,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                   extTokenProgram: $.extTokenProgram,
                 })
                 .signers([$.wrapAuthority])
@@ -3909,6 +3942,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 fromExtTokenAccount,
                 toMTokenAccount,
                 extTokenProgram: $.extTokenProgram,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
               })
               .signers([$.wrapAuthority])
               .rpc();
@@ -3987,6 +4021,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
@@ -4071,6 +4106,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 unwrapAuthority: $.ext.programId,
                 fromExtTokenAccount,
                 toMTokenAccount,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 extTokenProgram: $.extTokenProgram,
               })
               .signers([$.wrapAuthority])
@@ -4131,6 +4167,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.nonWrapAuthority])
                 .rpc()
@@ -4162,6 +4199,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.nonWrapAuthority, $.nonAdmin])
                 .rpc(),
@@ -4208,6 +4246,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                   fromExtTokenAccount,
                   toMTokenAccount,
                   extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.nonWrapAuthority, $.wrapAuthority])
                 .rpc()
@@ -4278,6 +4317,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 fromExtTokenAccount,
                 toMTokenAccount,
                 extTokenProgram: $.extTokenProgram,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
               })
               .signers([$.nonAdmin, $.wrapAuthority])
               .rpc();
@@ -4372,6 +4412,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 fromExtTokenAccount,
                 toMTokenAccount,
                 extTokenProgram: $.extTokenProgram,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
               })
               .signers([$.nonWrapAuthority, $.wrapAuthority])
               .rpc();
@@ -4474,6 +4515,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 fromExtTokenAccount,
                 toMTokenAccount,
                 extTokenProgram: $.extTokenProgram,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
               })
               .signers([$.wrapAuthority])
               .rpc();
@@ -4574,6 +4616,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 fromExtTokenAccount,
                 toMTokenAccount,
                 extTokenProgram: $.extTokenProgram,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
               })
               .signers([$.wrapAuthority])
               .rpc();
@@ -4673,6 +4716,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 fromExtTokenAccount,
                 toMTokenAccount,
                 extTokenProgram: $.extTokenProgram,
+                mTokenProgram: TOKEN_2022_PROGRAM_ID,
               })
               .signers([$.wrapAuthority])
               .rpc();
@@ -7733,5 +7777,1108 @@ for (const [variant, tokenProgramId] of VARIANTS) {
         });
       });
     }
-  });
+
+    // JMI-specific tests (JMI variant only)
+    if (variant === Variant.Jmi) {
+      describe("JMI instruction tests", () => {
+        let wrapAuthorities: PublicKey[];
+        let replaceAuthorities: PublicKey[];
+
+        beforeEach(async () => {
+          wrapAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
+          replaceAuthorities = [$.admin.publicKey, $.wrapAuthority.publicKey];
+          await $.initializeExt(wrapAuthorities, undefined, replaceAuthorities);
+        });
+
+        describe("add_replace_authority unit tests", () => {
+          // test cases
+          // [X] given the admin does not sign the transaction
+          //   [X] it reverts with a NotAuthorized error
+          // [X] given the admin signs the transaction
+          //   [X] given the new replace authority is already in the list
+          //     [X] it reverts with a InvalidParam error
+          //   [X] given the new replace authority is not in the list
+          //     [X] it adds the new replace authority to the list
+          //     [X] it resizes the ext global account to accommodate the new replace authority
+
+          // given the admin does not sign the transaction
+          // it reverts with a NotAuthorized error
+          test("admin does not sign - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .addReplaceAuthority($.nonWrapAuthority.publicKey)
+                .accounts({
+                  admin: $.nonAdmin.publicKey,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the admin signs the transaction
+          // given the new replace authority is already in the list
+          // it reverts with a InvalidParam error
+          test("new replace authority already in the list - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .addReplaceAuthority($.wrapAuthority.publicKey)
+                .accounts({ admin: $.admin.publicKey })
+                .signers([$.admin])
+                .rpc(),
+              "InvalidParam"
+            );
+          });
+
+          // given the admin signs the transaction
+          // given the new replace authority is not in the list
+          // it adds the new replace authority to the list
+          // it resizes the ext global account to accommodate the new replace authority
+          test("new replace authority is not in the list - success", async () => {
+            // Cache the size of the ext global account
+            const extGlobalAccount = $.getExtGlobalAccount();
+            const extGlobalSize = await $.provider.connection
+              .getAccountInfo(extGlobalAccount)
+              .then((info) => info?.data.length || 0);
+
+            // Send the transaction
+            await $.ext.methods
+              .addReplaceAuthority($.nonWrapAuthority.publicKey)
+              .accounts({
+                admin: $.admin.publicKey,
+              })
+              .signers([$.admin])
+              .rpc();
+
+            // Check that the replace authority was added
+            replaceAuthorities.push($.nonWrapAuthority.publicKey);
+
+            await $.expectExtGlobalState({
+              replaceAuthorities,
+            });
+
+            // Check that the ext global account was resized
+            const newExtGlobalSize = await $.provider.connection
+              .getAccountInfo(extGlobalAccount)
+              .then((info) => info?.data.length || 0);
+            expect(newExtGlobalSize).toEqual(extGlobalSize + 32); // 32 bytes for the new replace authority
+          });
+        });
+
+        describe("remove_replace_authority unit tests", () => {
+          // test cases
+          // [X] given the admin does not sign the transaction
+          //   [X] it reverts with a NotAuthorized error
+          // [X] given the admin signs the transaction
+          //   [X] given the replace authority is not in the list
+          //     [X] it reverts with a InvalidParam error
+          //   [X] given the replace authority is in the list
+          //     [X] it removes the replace authority from the list
+          //     [X] it resizes the ext global account down and refunds lamports
+
+          // given the admin does not sign the transaction
+          // it reverts with a NotAuthorized error
+          test("admin does not sign - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .removeReplaceAuthority($.wrapAuthority.publicKey)
+                .accounts({
+                  admin: $.nonAdmin.publicKey,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the admin signs the transaction
+          // given the replace authority is not in the list
+          // it reverts with a InvalidParam error
+          test("replace authority not in the list - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .removeReplaceAuthority($.nonWrapAuthority.publicKey)
+                .accounts({ admin: $.admin.publicKey })
+                .signers([$.admin])
+                .rpc(),
+              "InvalidParam"
+            );
+          });
+
+          // given the admin signs the transaction
+          // given the replace authority is in the list
+          // it removes the replace authority from the list
+          // it resizes the ext global account down and refunds lamports
+          test("replace authority is in the list - success", async () => {
+            // Cache the size of the ext global account
+            const extGlobalAccount = $.getExtGlobalAccount();
+            const extGlobalSize = await $.provider.connection
+              .getAccountInfo(extGlobalAccount)
+              .then((info) => info?.data.length || 0);
+
+            // Send the transaction
+            await $.ext.methods
+              .removeReplaceAuthority($.wrapAuthority.publicKey)
+              .accounts({
+                admin: $.admin.publicKey,
+              })
+              .signers([$.admin])
+              .rpc();
+
+            // Check that the replace authority was removed
+            replaceAuthorities.pop();
+
+            await $.expectExtGlobalState({
+              replaceAuthorities,
+            });
+
+            // Check that the ext global account was resized
+            const newExtGlobalSize = await $.provider.connection
+              .getAccountInfo(extGlobalAccount)
+              .then((info) => info?.data.length || 0);
+            expect(newExtGlobalSize).toEqual(extGlobalSize - 32); // remove 32 bytes
+          });
+        });
+
+        describe("set_asset_cap unit tests", () => {
+          // set_asset_cap test cases
+          // [x] given the admin does not sign the transaction
+          //   [x] it reverts with a NotAuthorized error
+          // [x] given the asset mint is the M token
+          //   [x] it reverts with a CannotCapMToken error
+          // [x] given the asset mint does not have 6 decimals
+          //   [x] it reverts with an InvalidDecimals error
+          // [x] given valid inputs and admin signs
+          //   [x] new assetConfig asset cap is set successfully
+          //   [x] existing assetConfig asset cap is updated successfully
+          //   [x] it can set the cap to 0 to disable the asset
+          // [x] given the global account is not the global PDA
+          //   [x] it reverts with a ConstraintSeeds error
+          // [x] given the vault authority is not the m_vault PDA
+          //   [x] it reverts with a ConstraintSeeds error
+          // [x] given the asset mint has the ScaledUiAmount extension
+          //   [x] it reverts with an UnsupportedExtension error
+          // [x] given the asset mint has the TransferFeeConfig extension
+          //   [x] it reverts with an UnsupportedExtension error
+          // [x] given the asset mint has the NonTransferable extension
+          //   [x] it reverts with an UnsupportedExtension error
+          // [x] given the asset mint has the InterestBearingConfig extension
+          //   [x] it reverts with an UnsupportedExtension error
+
+          let assetMint: Keypair;
+
+          beforeEach(async () => {
+            assetMint = await $.createAssetMint(6);
+          });
+
+          // given the admin does not sign the transaction
+          // it reverts with a NotAuthorized error
+          test("Non-admin tries to set asset cap - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.nonAdmin.publicKey,
+                  assetMint: assetMint.publicKey,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([$.nonAdmin])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the asset mint is the M token
+          // it reverts with a CannotCapMToken error
+          test("Asset mint is M token - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: $.mMint.publicKey,
+                  assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "CannotCapMToken"
+            );
+          });
+
+          // given the asset mint does not have 6 decimals
+          // it reverts with an InvalidDecimals error
+          test("Asset mint with wrong decimals - reverts", async () => {
+            const wrongDecimalsMint = await $.createAssetMint(9);
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: wrongDecimalsMint.publicKey,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "InvalidDecimals"
+            );
+          });
+
+          // given valid inputs
+          // it creates the asset_config account and sets the cap
+          test("Set asset cap - success", async () => {
+            const cap = new BN(1_000_000_000);
+            await $.setAssetCap(assetMint.publicKey, cap);
+
+            await $.expectAssetConfigState(assetMint.publicKey, {
+              cap: cap,
+            });
+
+            // Verify the vault asset ATA was created
+            const vaultAssetATA = await $.getATA(
+              assetMint.publicKey,
+              $.getMVault(),
+              false
+            );
+            // Verify it has zero balance (just created)
+            await $.expectTokenBalance(
+              vaultAssetATA,
+              new BN(0),
+              Comparison.Equal,
+              undefined,
+              false
+            );
+          });
+
+          // it can update an existing cap to a new value
+          test("Update existing asset cap - success", async () => {
+            const initialCap = new BN(1_000_000_000);
+            await $.setAssetCap(assetMint.publicKey, initialCap);
+
+            await $.expectAssetConfigState(assetMint.publicKey, {
+              cap: initialCap,
+            });
+
+            const newCap = new BN(2_000_000_000);
+            await $.setAssetCap(assetMint.publicKey, newCap);
+
+            await $.expectAssetConfigState(assetMint.publicKey, {
+              cap: newCap,
+            });
+          });
+
+          // it can set the cap to 0 to disable the asset
+          test("Set cap to zero to disable asset - success", async () => {
+            const cap = new BN(1_000_000_000);
+            await $.setAssetCap(assetMint.publicKey, cap);
+            await $.expectAssetConfigState(assetMint.publicKey, {
+              cap: cap,
+            });
+
+            await $.setAssetCap(assetMint.publicKey, new BN(0));
+            await $.expectAssetConfigState(assetMint.publicKey, {
+              cap: new BN(0),
+            });
+          });
+
+          // given the global account is not the global PDA
+          // it reverts with a ConstraintSeeds error
+          test("Global account is not the global PDA - reverts", async () => {
+            const fakeGlobal = PublicKey.unique();
+            if (fakeGlobal === $.getExtGlobalAccount()) return;
+
+            // Copy the real global account data to the fake address so it deserializes properly
+            const realGlobalInfo = $.svm.getAccount($.getExtGlobalAccount());
+            if (realGlobalInfo) {
+              $.svm.setAccount(fakeGlobal, realGlobalInfo);
+            }
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: assetMint.publicKey,
+                  globalAccount: fakeGlobal,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "ConstraintSeeds"
+            );
+          });
+
+          // given the vault authority is not the m_vault PDA
+          // it reverts with a ConstraintSeeds error
+          test("Vault authority is not the m_vault PDA - reverts", async () => {
+            const fakeVault = PublicKey.unique();
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: assetMint.publicKey,
+                  vaultAuthority: fakeVault,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "ConstraintSeeds"
+            );
+          });
+
+          // given the asset mint has the ScaledUiAmount extension
+          // it reverts with an UnsupportedExtension error
+          test("Asset mint with ScaledUiAmount extension - reverts", async () => {
+            const scaledMint = new Keypair();
+            await $.createScaledUiMint(
+              scaledMint,
+              $.admin.publicKey,
+              $.admin.publicKey,
+              6
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: scaledMint.publicKey,
+                  assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "UnsupportedExtension"
+            );
+          });
+
+          // given the asset mint has the TransferFeeConfig extension
+          // it reverts with an UnsupportedExtension error
+          test("Asset mint with TransferFeeConfig extension - reverts", async () => {
+            const transferFeeMint = new Keypair();
+            await $.createTransferFeeMint(
+              transferFeeMint,
+              $.admin.publicKey,
+              $.admin.publicKey,
+              6
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: transferFeeMint.publicKey,
+                  assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "UnsupportedExtension"
+            );
+          });
+
+          // given the asset mint has the NonTransferable extension
+          // it reverts with an UnsupportedExtension error
+          test("Asset mint with NonTransferable extension - reverts", async () => {
+            const nonTransferableMint = new Keypair();
+            await $.createNonTransferableMint(
+              nonTransferableMint,
+              $.admin.publicKey,
+              $.admin.publicKey,
+              6
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: nonTransferableMint.publicKey,
+                  assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "UnsupportedExtension"
+            );
+          });
+
+          // given the asset mint has the InterestBearingConfig extension
+          // it reverts with an UnsupportedExtension error
+          test("Asset mint with InterestBearingConfig extension - reverts", async () => {
+            const interestBearingMint = new Keypair();
+            await $.createInterestBearingMint(
+              interestBearingMint,
+              $.admin.publicKey,
+              $.admin.publicKey,
+              6
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: interestBearingMint.publicKey,
+                  assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "UnsupportedExtension"
+            );
+          });
+        });
+
+        describe("wrap_asset unit tests", () => {
+          // wrap_asset test cases
+          // [x] given the caller is not authorized (not in wrap_authorities)
+          //   [x] it reverts with a NotAuthorized error
+          // [x] given an authorized caller signs
+          //   [x] given the amount is 0
+          //     [x] it reverts with an InvalidAmount error
+          //   [x] given the asset config cap is 0 (disabled)
+          //     [x] it reverts with an AssetNotAllowed error
+          //   [x] given the wrap would exceed the asset cap
+          //     [x] it reverts with an AssetCapExceeded error
+          // [x] given an authorized caller signs & valid inputs
+          //   [x] it transfers assets from user to vault
+          //   [x] it increments total_assets on the global account
+          //   [x] wraps multiple assets correctly
+          // [x] given the asset mint is the M token
+          //     [x] it reverts with a ConstraintSeeds error (no asset config can exist for M)
+          // [x] given the asset config does not exist for this asset
+          //     [x] it reverts with an AccountNotInitialized error
+
+          let assetMint: Keypair;
+          let fromAssetTokenAccount: PublicKey;
+          let toExtTokenAccount: PublicKey;
+
+          const assetCap = new BN(1_000_000_000); // 1000 tokens
+          const mintAmount = new BN(100_000_000); // 100 tokens
+
+          beforeEach(async () => {
+            // Setup asset with cap
+            const setup = await $.setupJmiAsset(assetCap);
+            assetMint = setup.assetMint;
+
+            // Mint assets to wrap authority
+            await $.mintAssetTokens(assetMint, $.wrapAuthority.publicKey, mintAmount);
+
+            fromAssetTokenAccount = await $.getATA(
+              assetMint.publicKey,
+              $.wrapAuthority.publicKey,
+              false
+            );
+
+            toExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.wrapAuthority.publicKey,
+              $.useToken2022ForExt
+            );
+
+          });
+
+          // given the caller is not authorized (not in wrap_authorities)
+          // it reverts with a NotAuthorized error
+          test("Non-authorized caller tries to wrap asset - reverts", async () => {
+
+            // Mint some assets to the non-wrap authority
+            await $.mintAssetTokens(assetMint, $.nonWrapAuthority.publicKey, mintAmount);
+
+            fromAssetTokenAccount = await $.getATA(
+              assetMint.publicKey,
+              $.nonWrapAuthority.publicKey,
+              false
+            );
+
+            toExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.nonWrapAuthority.publicKey,
+              $.useToken2022ForExt
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrapAsset(new BN(10_000_000))
+                .accountsPartial({
+                  tokenAuthority: $.nonWrapAuthority.publicKey,
+                  replaceAuthority: $.ext.programId,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromAssetTokenAccount,
+                  toExtTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.nonWrapAuthority])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the amount is 0
+          // it reverts with an InvalidAmount error
+          test("Wrap asset with zero amount - reverts", async () => {
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrapAsset(new BN(0))
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  replaceAuthority: $.ext.programId,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromAssetTokenAccount,
+                  toExtTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "InvalidAmount"
+            );
+          });
+
+          // given the asset config cap is 0 (disabled)
+          // it reverts with an AssetCapExceeded error
+          test("Wrap asset with zero cap - reverts", async () => {
+            // Disable the asset
+            await $.setAssetCap(assetMint.publicKey, new BN(0));
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrapAsset(new BN(10_000_000))
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  replaceAuthority: $.ext.programId,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromAssetTokenAccount,
+                  toExtTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "AssetCapExceeded"
+            );
+          });
+
+          // given the wrap would exceed the asset cap
+          // it reverts with an AssetCapExceeded error
+          test("Wrap asset exceeding cap - reverts", async () => {
+            // Set a small cap
+            await $.setAssetCap(assetMint.publicKey, new BN(10_000_000));
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrapAsset(new BN(20_000_000)) // Exceeds cap
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  replaceAuthority: $.ext.programId,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromAssetTokenAccount,
+                  toExtTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "AssetCapExceeded"
+            );
+          });
+
+          // given valid inputs
+          // it transfers assets from user to vault and mints ext tokens 1:1
+          test("Wrap asset - success", async () => {
+            const wrapAmount = new BN(10_000_000);
+
+            // Get initial balances
+            const userAssetAccount = await $.getATA(
+              assetMint.publicKey,
+              $.wrapAuthority.publicKey,
+              false
+            );
+            const userExtAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.wrapAuthority.publicKey,
+              $.useToken2022ForExt
+            );
+            const vaultAssetAccount = await $.getATA(
+              assetMint.publicKey,
+              $.getMVault(),
+              false
+            );
+
+            const initialUserAssetBalance = await $.getTokenBalance(userAssetAccount, false);
+            const initialUserExtBalance = await $.getTokenBalance(userExtAccount, $.useToken2022ForExt);
+            const initialVaultAssetBalance = await $.getTokenBalance(vaultAssetAccount, false);
+
+            // Wrap assets
+            await $.wrapAsset(assetMint.publicKey, wrapAmount, $.wrapAuthority);
+
+            // Verify balances
+            await $.expectTokenBalance(
+              userAssetAccount,
+              initialUserAssetBalance.sub(wrapAmount),
+              Comparison.Equal,
+              undefined,
+              false
+            );
+            await $.expectTokenBalance(
+              userExtAccount,
+              initialUserExtBalance.add(wrapAmount),
+              Comparison.Equal,
+              undefined,
+              $.useToken2022ForExt
+            );
+            await $.expectTokenBalance(
+              vaultAssetAccount,
+              initialVaultAssetBalance.add(wrapAmount),
+              Comparison.Equal,
+              undefined,
+              false
+            );
+
+            // Verify total_assets updated
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                totalAssets: wrapAmount,
+              },
+            });
+          });
+
+          // Multiple wraps accumulate total_assets
+          test("Multiple wrap assets - success", async () => {
+            const wrapAmount1 = new BN(10_000_000);
+            const wrapAmount2 = new BN(20_000_000);
+
+            await $.wrapAsset(assetMint.publicKey, wrapAmount1, $.wrapAuthority);
+            await $.wrapAsset(assetMint.publicKey, wrapAmount2, $.wrapAuthority);
+
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                totalAssets: wrapAmount1.add(wrapAmount2),
+              },
+            });
+          });
+
+          // given the asset mint is the M token
+          // it reverts with a ConstraintSeeds error (asset config PDA doesn't match)
+          test("Wrap asset with M token as asset - reverts", async () => {
+            // Add wrap authority as M earner to unfreeze the ATA (M token has frozen default state)
+            await $.addMEarner($.wrapAuthority.publicKey);
+            // Mint M tokens to wrap authority
+            await $.mintM($.wrapAuthority.publicKey, mintAmount);
+
+            const fromMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.wrapAuthority.publicKey,
+              true // M uses Token2022
+            );
+
+            // Create a fake AssetConfig account at wrong address to trigger ConstraintSeeds
+            const fakeAssetConfig = PublicKey.unique();
+
+            // Copy real AssetConfig data to the fake address so it deserializes properly
+            const realAssetConfigInfo = $.svm.getAccount(
+              $.getAssetConfigAccount(assetMint.publicKey)
+            );
+            if (realAssetConfigInfo) {
+              $.svm.setAccount(fakeAssetConfig, realAssetConfigInfo);
+            }
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrapAsset(new BN(10_000_000))
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  replaceAuthority: $.ext.programId,
+                  assetMint: $.mMint.publicKey,
+                  assetConfig: fakeAssetConfig, // Use fake account instead of PDA
+                  fromAssetTokenAccount: fromMTokenAccount,
+                  toExtTokenAccount,
+                  assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "AssetNotAllowed"
+            );
+          });
+
+          // given the asset config does not exist for this asset
+          // it reverts with a AccountNotInitialized error
+          test("Wrap asset with non-existent asset config - reverts", async () => {
+            // Create asset mint WITHOUT setting up asset config
+            const noConfigMint = await $.createAssetMint();
+
+            // Mint tokens to wrap authority
+            await $.mintAssetTokens(noConfigMint, $.wrapAuthority.publicKey, mintAmount);
+
+            const fromAssetTokenAccount = await $.getATA(
+              noConfigMint.publicKey,
+              $.wrapAuthority.publicKey,
+              false
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrapAsset(new BN(10_000_000))
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  replaceAuthority: $.ext.programId,
+                  assetMint: noConfigMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(noConfigMint.publicKey),
+                  fromAssetTokenAccount,
+                  toExtTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "AccountNotInitialized"
+            );
+          });
+        });
+
+        describe("replace_asset_with_m unit tests", () => {
+          // replace_asset_with_m test cases
+          // [x] given the caller is not authorized (not in wrap_authorities)
+          //   [x] it reverts with a NotAuthorized error
+          // [x] given an authorized caller signs the transaction
+          //   [x] given the m_amount is 0
+          //     [x] it reverts with an InvalidAmount error
+          //   [x] given the vault has insufficient asset backing for the conversion
+          //     [x] it reverts with an InsufficientAssetBacking error
+          //   [x] given valid inputs
+          //     [x] it transfers M from user to vault
+          //     [x] it transfers asset from vault to user
+          //     [x] it decrements total_assets on the global account
+
+          let assetMint: Keypair;
+          const assetCap = new BN(1_000_000_000); // 1000 tokens
+          const mintAmount = new BN(100_000_000); // 100 tokens
+          const wrapAmount = new BN(50_000_000); // 50 tokens
+
+          beforeEach(async () => {
+            // Setup asset with cap
+            const setup = await $.setupJmiAsset(assetCap);
+            assetMint = setup.assetMint;
+
+            // Add the wrap authority and as M earners to have thawed token accounts
+            await $.addMEarner($.wrapAuthority.publicKey);
+            await $.addMEarner($.nonWrapAuthority.publicKey);
+
+            // Mint assets and wrap some to create initial state
+            await $.mintAssetTokens(assetMint, $.wrapAuthority.publicKey, mintAmount);
+            await $.wrapAsset(assetMint.publicKey, wrapAmount, $.wrapAuthority);
+
+            // Mint M to wrap authority for replace_asset_with_m
+            await $.mintM($.wrapAuthority.publicKey, mintAmount);
+          });
+
+          // given the caller is not authorized (not in wrap_authorities)
+          // it reverts with a NotAuthorized error
+          test("Non-authorized caller tries to unwrap asset - reverts", async () => {
+            // Mint M to non-wrap authority
+            await $.mintM($.nonWrapAuthority.publicKey, mintAmount);
+
+            // Create asset token account for non-wrap authority
+            await $.getATA(assetMint.publicKey, $.nonWrapAuthority.publicKey, false);
+
+            let fromMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.nonWrapAuthority.publicKey,
+            );
+
+            let toAssetTokenAccount = await $.getATA(
+              assetMint.publicKey,
+              $.nonWrapAuthority.publicKey,
+              false
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .replaceAssetWithM(new BN(10_000_000))
+                .accountsPartial({
+                  tokenAuthority: $.nonWrapAuthority.publicKey,
+                  replaceAuthority: $.ext.programId,
+                  mMint: $.mMint.publicKey,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromMTokenAccount,
+                  toAssetTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.nonWrapAuthority])
+                .rpc(),
+              "NotAuthorized"
+            );
+          });
+
+          // given the m_amount is 0
+          // it reverts with an InvalidAmount error
+          test("Unwrap asset with zero M amount - reverts", async () => {
+
+            let fromMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.wrapAuthority.publicKey,
+            );
+
+            let toAssetTokenAccount = await $.getATA(
+              assetMint.publicKey,
+              $.wrapAuthority.publicKey,
+              false
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .replaceAssetWithM(new BN(0))
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  replaceAuthority: $.ext.programId,
+                  mMint: $.mMint.publicKey,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromMTokenAccount,
+                  toAssetTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "InvalidAmount"
+            );
+          });
+
+          // given the vault has insufficient asset backing for the conversion
+          // it reverts with an InsufficientAssetBacking error
+          test("Unwrap asset with insufficient backing - reverts", async () => {
+            // Try to unwrap more than the vault has
+            const largeAmount = wrapAmount.mul(new BN(10)); // Way more than vault has
+
+            let fromMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.wrapAuthority.publicKey,
+            );
+
+            let toAssetTokenAccount = await $.getATA(
+              assetMint.publicKey,
+              $.wrapAuthority.publicKey,
+              false
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .replaceAssetWithM(largeAmount)
+                .accountsPartial({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  replaceAuthority: $.ext.programId,
+                  mMint: $.mMint.publicKey,
+                  assetMint: assetMint.publicKey,
+                  assetConfig: $.getAssetConfigAccount(assetMint.publicKey),
+                  fromMTokenAccount,
+                  toAssetTokenAccount,
+                  assetTokenProgram: TOKEN_PROGRAM_ID,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "InsufficientAssetBacking"
+            );
+          });
+
+          // given valid inputs - success
+          test("Unwrap asset - success", async () => {
+            // Use a smaller amount that fits within the vault's backing
+            // M index is ~1.1, so mAmount of 10M should give ~9M assets
+            const mAmount = new BN(10_000_000);
+
+            // Get initial balances
+            const userMAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.wrapAuthority.publicKey
+            );
+            const userAssetAccount = await $.getATA(
+              assetMint.publicKey,
+              $.wrapAuthority.publicKey,
+              false
+            );
+            const vaultMAccount = await $.getATA($.mMint.publicKey, $.getMVault());
+            const vaultAssetAccount = await $.getATA(
+              assetMint.publicKey,
+              $.getMVault(),
+              false
+            );
+
+            const initialUserMBalance = await $.getTokenBalance(userMAccount);
+            const initialUserAssetBalance = await $.getTokenBalance(userAssetAccount, false);
+            const initialVaultMBalance = await $.getTokenBalance(vaultMAccount);
+            const initialVaultAssetBalance = await $.getTokenBalance(vaultAssetAccount, false);
+            const globalAccount = await $.ext.account.extGlobalV2.fetch($.getExtGlobalAccount());
+            const initialTotalAssets = (globalAccount.yieldConfig as any).totalAssets as BN;
+
+            // Unwrap assets
+            await $.replaceAssetWithM(assetMint.publicKey, mAmount, $.wrapAuthority);
+
+            // Verify M transferred to vault
+            await $.expectTokenBalance(
+              userMAccount,
+              initialUserMBalance.sub(mAmount)
+            );
+            await $.expectTokenBalance(
+              vaultMAccount,
+              initialVaultMBalance.add(mAmount)
+            );
+
+            // Verify assets transferred from vault (amount depends on M index)
+            const userAssetBalanceAfter = await $.getTokenBalance(userAssetAccount, false);
+            const vaultAssetBalanceAfter = await $.getTokenBalance(vaultAssetAccount, false);
+            const assetTransferred = initialVaultAssetBalance.sub(vaultAssetBalanceAfter);
+
+            expect(assetTransferred.gt(new BN(0))).toBe(true);
+            expect(userAssetBalanceAfter.sub(initialUserAssetBalance).toString()).toBe(
+              assetTransferred.toString()
+            );
+
+            // Verify total_assets decremented
+            await $.expectExtGlobalState({
+              yieldConfig: {
+                totalAssets: initialTotalAssets.sub(assetTransferred),
+              },
+            });
+          });
+
+          // given valid inputs
+          // it converts M amount to asset amount using M index (rounds down)
+          test("M amount converts to asset amount using M index (rounds down)", async () => {
+
+            // Get M index from M token's ScaledUiAmountConfig (not ext's multiplier)
+            const mScaledUiConfig = await $.getScaledUiAmountConfig($.mMint.publicKey);
+            const mIndex = new BN(Math.floor(mScaledUiConfig.newMultiplier * 1e12));
+            expect(mIndex.toString()).toBe(new BN("1100000000000").toString()); // Sanity check mIndex not 1
+            const INDEX_SCALE = new BN("1000000000000"); // 1e12 -> taken from constants
+
+            // Get user's asset token account
+            const userAssetAta = await $.getATA(assetMint.publicKey, $.wrapAuthority.publicKey, false);
+            const initialAssetBalance = await $.getTokenBalance(userAssetAta, false);
+
+            // Perform replace_asset_with_m with known M amount
+            const mAmount = new BN(5_000_000); // 5 tokens (6 decimals)
+            await $.replaceAssetWithM(assetMint.publicKey, mAmount, $.wrapAuthority);
+
+            // Calculate expected asset amount (rounding down)
+            const expectedAssetAmount = mAmount.mul(mIndex).div(INDEX_SCALE);
+
+            // Verify asset received matches expected (with index conversion)
+            const finalAssetBalance = await $.getTokenBalance(userAssetAta, false);
+            const assetReceived = finalAssetBalance.sub(initialAssetBalance);
+            expect(assetReceived.eq(expectedAssetAmount)).toBe(true);
+          });
+
+        describe("unwrap with JMI backing tests", () => {
+          // unwrap test cases (JMI-specific additions)
+          // [x] given the JMI feature is enabled
+          //   [x] given ext_principal exceeds M backing (ext_supply - total_assets)
+          //     [x] it reverts with an InsufficientMBacking error
+          //   [x] given ext_principal equals available M backing
+          //     [x] it succeeds and unwraps the full M backing
+
+          let assetMint: Keypair;
+          const assetCap = new BN(1_000_000_000);
+          const mWrapAmount = new BN(50_000_000); // 50 tokens wrapped via M
+          const assetWrapAmount = new BN(30_000_000); // 30 tokens wrapped via asset
+
+          let fromExtTokenAccount: PublicKey;
+          let toMTokenAccount: PublicKey;
+
+          beforeEach(async () => {
+            // Setup asset with cap
+            const setup = await $.setupJmiAsset(assetCap);
+            assetMint = setup.assetMint;
+
+            // Then setup and wrap assets
+            await $.expectAssetConfigState(assetMint.publicKey, {
+              cap: assetCap,
+            });
+
+            // First wrap M tokens
+            const feeBps = new BN(randomInt(10000))
+
+            await $.mintM($.wrapAuthority.publicKey, mWrapAmount);
+            await $.wrap($.wrapAuthority, mWrapAmount);
+   
+            await $.mintAssetTokens(assetMint, $.wrapAuthority.publicKey, assetWrapAmount.mul(new BN(2)));
+            await $.wrapAsset(assetMint.publicKey, assetWrapAmount, $.wrapAuthority);
+
+            fromExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.wrapAuthority.publicKey,
+              $.useToken2022ForExt
+            );
+
+            toMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.wrapAuthority.publicKey
+            );
+
+          });
+
+          // given ext_principal exceeds M backing
+          // it reverts with insufficient funds error from token program
+          test("Unwrap exceeding M backing - reverts", async () => {
+            // Get current ext balance (should have mWrapAmount + assetWrapAmount worth)
+            const userExtAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.wrapAuthority.publicKey,
+              $.useToken2022ForExt
+            );
+            const userExtBalance = await $.getTokenBalance(userExtAccount, $.useToken2022ForExt);
+
+            // Try to unwrap entire ext balance - but only mWrapAmount is backed by M
+            // This should fail because some of the ext is backed by assets, not M
+            try {
+              await $.ext.methods
+                .unwrap(userExtBalance)
+                .accounts({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  unwrapAuthority: $.ext.programId,
+                  fromExtTokenAccount,
+                  toMTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
+                  mTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.wrapAuthority])
+                .rpc();
+              throw new Error("Transaction should have reverted");
+            } catch (e) {
+              expect(String(e)).toContain("insufficient funds");
+            }
+          });
+
+          // given ext_principal equals available M backing
+          // it succeeds and unwraps the full M backing
+          test("Unwrap exactly M backing - success", async () => {
+            // Unwrap exactly the M backing amount (mWrapAmount)
+            const userMAccountBefore = await $.getATA(
+              $.mMint.publicKey,
+              $.wrapAuthority.publicKey
+            );
+            const mBalanceBefore = await $.getTokenBalance(userMAccountBefore);
+
+            // Unwrap exactly mWrapAmount (the full M backing)
+            await $.unwrap($.wrapAuthority, mWrapAmount);
+
+            // Verify M was received
+            const mBalanceAfter = await $.getTokenBalance(userMAccountBefore);
+            expect(mBalanceAfter.gt(mBalanceBefore)).toBe(true);
+          });
+        });
+      });
+    });
+  };
+});
 }
+

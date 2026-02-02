@@ -38,7 +38,7 @@ cfg_if! {
 }
 
 #[derive(Accounts)]
-#[instruction(wrap_authorities: Vec<Pubkey>)]
+#[instruction(wrap_authorities: Vec<Pubkey>, replace_authorities: Vec<Pubkey>)]
 pub struct Initialize<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
@@ -47,7 +47,8 @@ pub struct Initialize<'info> {
         init,
         payer = admin,
         space = ExtGlobalV2::size(
-            wrap_authorities.len()
+            wrap_authorities.len(),
+            replace_authorities.len()
         ),
         seeds = [EXT_GLOBAL_SEED],
         bump
@@ -165,12 +166,19 @@ impl Initialize<'_> {
     pub fn handler(
         ctx: Context<Initialize>,
         wrap_authorities: Vec<Pubkey>,
+        replace_authorities: Vec<Pubkey>,
         fee_bps: Option<u64>,
         earn_authority: Option<Pubkey>,
     ) -> Result<()> {
         // Create hash set from wrap_authorities to ensure uniqueness
         let wrap_auth_set: HashSet<Pubkey> = wrap_authorities.clone().into_iter().collect();
         if wrap_auth_set.len() < wrap_authorities.len() {
+            return err!(ExtError::InvalidParam);
+        }
+
+        // Create hash set from replace_authorities to ensure uniqueness
+        let replace_auth_set: HashSet<Pubkey> = replace_authorities.clone().into_iter().collect();
+        if replace_auth_set.len() < replace_authorities.len() {
             return err!(ExtError::InvalidParam);
         }
 
@@ -199,8 +207,10 @@ impl Initialize<'_> {
                     timestamp: timestamp as u64,
                 };
             } else {
+                // JMI extends no-yield with additional fields
                 yield_config = YieldConfig {
                     yield_variant: YieldVariant::NoYield,
+                    total_assets: 0,
                 };
             }
         }
@@ -217,6 +227,7 @@ impl Initialize<'_> {
             ext_mint_authority_bump: ctx.bumps.ext_mint_authority,
             yield_config,
             wrap_authorities,
+            replace_authorities,
         });
 
         // Set the ScaledUi multiplier to 1.0

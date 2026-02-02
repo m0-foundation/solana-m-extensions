@@ -29,3 +29,11 @@ cfg_if::cfg_if!(
         pub use migrate::*;
     }
 );
+
+// JMI-specific instructions
+cfg_if::cfg_if!(
+    if #[cfg(feature = "jmi")] {
+        pub mod jmi;
+        pub use jmi::*;
+    }
+);

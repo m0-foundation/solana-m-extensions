@@ -44,6 +44,11 @@ const _: () = {
             "Invalid feature configuration: 'migrate' and 'crank' cannot be enabled without 'wm'"
         );
     }
+
+    // JMI can only be used with no-yield (not scaled-ui or crank)
+    if cfg!(feature = "jmi") && cfg!(not(feature = "no-yield")) {
+        panic!("JMI feature can only be enabled with no-yield variant");
+    }
 };
 
 #[program]
@@ -55,23 +60,41 @@ pub mod m_ext {
     pub fn initialize(
         ctx: Context<Initialize>,
         wrap_authorities: Vec<Pubkey>,
+        replace_authorities: Vec<Pubkey>,
         fee_bps: u64,
     ) -> Result<()> {
-        Initialize::handler(ctx, wrap_authorities, Some(fee_bps), None)
+        Initialize::handler(
+            ctx,
+            wrap_authorities,
+            replace_authorities,
+            Some(fee_bps),
+            None,
+        )
     }
 
     #[cfg(feature = "crank")]
     pub fn initialize(
         ctx: Context<Initialize>,
         wrap_authorities: Vec<Pubkey>,
+        replace_authorities: Vec<Pubkey>,
         earn_authority: Pubkey,
     ) -> Result<()> {
-        Initialize::handler(ctx, wrap_authorities, None, Some(earn_authority))
+        Initialize::handler(
+            ctx,
+            wrap_authorities,
+            replace_authorities,
+            None,
+            Some(earn_authority),
+        )
     }
 
     #[cfg(not(any(feature = "crank", feature = "scaled-ui")))]
-    pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
-        Initialize::handler(ctx, wrap_authorities, None, None)
+    pub fn initialize(
+        ctx: Context<Initialize>,
+        wrap_authorities: Vec<Pubkey>,
+        replace_authorities: Vec<Pubkey>,
+    ) -> Result<()> {
+        Initialize::handler(ctx, wrap_authorities, replace_authorities, None, None)
     }
 
     #[cfg(feature = "scaled-ui")]
@@ -93,6 +116,22 @@ pub mod m_ext {
         RemoveWrapAuthority::handler(ctx, wrap_authority)
     }
 
+    #[cfg(feature = "jmi")]
+    pub fn add_replace_authority(
+        ctx: Context<AddReplaceAuthority>,
+        new_replace_authority: Pubkey,
+    ) -> Result<()> {
+        AddReplaceAuthority::handler(ctx, new_replace_authority)
+    }
+
+    #[cfg(feature = "jmi")]
+    pub fn remove_replace_authority(
+        ctx: Context<RemoveReplaceAuthority>,
+        replace_authority: Pubkey,
+    ) -> Result<()> {
+        RemoveReplaceAuthority::handler(ctx, replace_authority)
+    }
+
     #[cfg(any(feature = "scaled-ui", feature = "no-yield"))]
     pub fn claim_fees(ctx: Context<ClaimFees>) -> Result<()> {
         ClaimFees::handler(ctx)
@@ -108,6 +147,22 @@ pub mod m_ext {
 
     pub fn revoke_admin_transfer(ctx: Context<RevokeAdminTransfer>) -> Result<()> {
         RevokeAdminTransfer::handler(ctx)
+    }
+
+    // JMI-specific instructions
+    #[cfg(feature = "jmi")]
+    pub fn set_asset_cap(ctx: Context<SetAssetCap>, cap: u64) -> Result<()> {
+        SetAssetCap::handler(ctx, cap)
+    }
+
+    #[cfg(feature = "jmi")]
+    pub fn replace_asset_with_m(ctx: Context<ReplaceAssetWithM>, m_principal: u64) -> Result<()> {
+        ReplaceAssetWithM::handler(ctx, m_principal)
+    }
+
+    #[cfg(feature = "jmi")]
+    pub fn wrap_asset(ctx: Context<WrapAsset>, amount: u64) -> Result<()> {
+        WrapAsset::handler(ctx, amount)
     }
 
     #[cfg(feature = "crank")]
@@ -139,8 +194,8 @@ pub mod m_ext {
 
     // Wrap authority instructions
 
-    pub fn wrap(ctx: Context<Wrap>, amount: u64) -> Result<()> {
-        Wrap::handler(ctx, amount)
+    pub fn wrap(ctx: Context<Wrap>, m_principal: u64) -> Result<()> {
+        Wrap::handler(ctx, m_principal)
     }
 
     pub fn unwrap(ctx: Context<Unwrap>, amount: u64) -> Result<()> {

@@ -34,4 +34,16 @@ pub enum ExtError {
     InvalidTokenProgram,
     #[msg("Vault token account frozen.")]
     VaultFrozen,
+    #[msg("Asset not allowed for wrapping.")]
+    AssetNotAllowed,
+    #[msg("Asset cap would be exceeded.")]
+    AssetCapExceeded,
+    #[msg("Cannot set cap for M token.")]
+    CannotCapMToken,
+    #[msg("Insufficient asset backing for replacement.")]
+    InsufficientAssetBacking,
+    #[msg("Asset must have 6 decimals.")]
+    InvalidDecimals,
+    #[msg("Asset has unsupported Token 2022 extension.")]
+    UnsupportedExtension,
 }
