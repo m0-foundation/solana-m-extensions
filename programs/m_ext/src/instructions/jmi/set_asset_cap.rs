@@ -79,6 +79,9 @@ impl SetAssetCap<'_> {
         if extensions.contains(&ExtensionType::NonTransferable) {
             return err!(ExtError::UnsupportedExtension);
         }
+        if extensions.contains(&ExtensionType::InterestBearingConfig) {
+            return err!(ExtError::UnsupportedExtension);
+        }
         Ok(())
     }
 

@@ -7962,6 +7962,8 @@ for (const [variant, tokenProgramId] of VARIANTS) {
           //   [x] it reverts with an UnsupportedExtension error
           // [x] given the asset mint has the NonTransferable extension
           //   [x] it reverts with an UnsupportedExtension error
+          // [x] given the asset mint has the InterestBearingConfig extension
+          //   [x] it reverts with an UnsupportedExtension error
 
           let assetMint: Keypair;
 
@@ -8193,6 +8195,31 @@ for (const [variant, tokenProgramId] of VARIANTS) {
                 .accountsPartial({
                   admin: $.admin.publicKey,
                   assetMint: nonTransferableMint.publicKey,
+                  assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+                })
+                .signers([$.admin])
+                .rpc(),
+              "UnsupportedExtension"
+            );
+          });
+
+          // given the asset mint has the InterestBearingConfig extension
+          // it reverts with an UnsupportedExtension error
+          test("Asset mint with InterestBearingConfig extension - reverts", async () => {
+            const interestBearingMint = new Keypair();
+            await $.createInterestBearingMint(
+              interestBearingMint,
+              $.admin.publicKey,
+              $.admin.publicKey,
+              6
+            );
+
+            await $.expectAnchorError(
+              $.ext.methods
+                .setAssetCap(new BN(1_000_000_000))
+                .accountsPartial({
+                  admin: $.admin.publicKey,
+                  assetMint: interestBearingMint.publicKey,
                   assetTokenProgram: TOKEN_2022_PROGRAM_ID,
                 })
                 .signers([$.admin])

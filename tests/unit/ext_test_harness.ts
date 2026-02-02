@@ -38,6 +38,7 @@ import {
   createFreezeAccountInstruction,
   createInitializeTransferFeeConfigInstruction,
   createInitializeNonTransferableMintInstruction,
+  createInitializeInterestBearingMintInstruction,
   pause,
 } from "@solana/spl-token";
 import {
@@ -676,6 +677,47 @@ class ExtensionTestBase {
 
     let tx = new Transaction();
     tx.add(createMintAccount, initializeNonTransferable, initializeMint);
+    await this.provider.sendAndConfirm!(tx, [this.admin, mint]);
+
+    return mint.publicKey;
+  }
+
+  public async createInterestBearingMint(
+    mint: Keypair,
+    mintAuthority: PublicKey,
+    freezeAuthority: PublicKey | null,
+    decimals = 6
+  ) {
+    const tokenProgram = TOKEN_2022_PROGRAM_ID;
+    const mintLen = getMintLen([ExtensionType.InterestBearingConfig]);
+    const mintLamports =
+      await this.provider.connection.getMinimumBalanceForRentExemption(mintLen);
+
+    const createMintAccount = SystemProgram.createAccount({
+      fromPubkey: this.admin.publicKey,
+      newAccountPubkey: mint.publicKey,
+      space: mintLen,
+      lamports: mintLamports,
+      programId: tokenProgram,
+    });
+
+    const initializeInterestBearing = createInitializeInterestBearingMintInstruction(
+      mint.publicKey,
+      mintAuthority, // rate authority
+      100, // 1% interest rate (basis points)
+      tokenProgram
+    );
+
+    const initializeMint = createInitializeMintInstruction(
+      mint.publicKey,
+      decimals,
+      mintAuthority,
+      freezeAuthority,
+      tokenProgram
+    );
+
+    let tx = new Transaction();
+    tx.add(createMintAccount, initializeInterestBearing, initializeMint);
     await this.provider.sendAndConfirm!(tx, [this.admin, mint]);
 
     return mint.publicKey;
