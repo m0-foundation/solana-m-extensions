@@ -1309,6 +1309,66 @@ export class ExtensionTest<
     }
   }
 
+  /**
+   * Get the current M index from the M mint's scaled UI config.
+   * This is the index used for M token principal <-> UI amount conversions.
+   * Uses newMultiplier to match Rust multiplier_to_index behavior.
+   */
+  public async getCurrentMIndex(): Promise<BN> {
+    const scaledUiConfig = await this.getScaledUiAmountConfig(this.mMint.publicKey);
+    // Use newMultiplier to match Rust: multiplier_to_index(m_scaled_ui_config.new_multiplier)
+    const multiplier = scaledUiConfig.newMultiplier;
+    // index = multiplier * 1e12 (same formula as Rust multiplier_to_index)
+    return new BN(Math.floor(multiplier * 1e12));
+  }
+
+  /**
+   * Calculate the expected principals from a UI amount for wrap/unwrap operations.
+   * This mirrors the Rust amount_to_principal_down calculation.
+   *
+   * @param uiAmount - The UI amount being wrapped/unwrapped
+   * @returns Object with mPrincipal and extPrincipal
+   */
+  public async getExpectedWrapPrincipals(uiAmount: BN): Promise<{
+    mPrincipal: BN;
+    extPrincipal: BN;
+  }> {
+    const INDEX_SCALE = new BN("1000000000000"); // 1e12
+
+    const mIndex = await this.getCurrentMIndex();
+    const extIndex = await this.getCurrentExtIndex();
+
+    // amount_to_principal_down: principal = (amount * INDEX_SCALE) / index
+    const mPrincipal = uiAmount.mul(INDEX_SCALE).div(mIndex);
+    const extPrincipal = uiAmount.mul(INDEX_SCALE).div(extIndex);
+
+    return { mPrincipal, extPrincipal };
+  }
+
+  /**
+   * Calculate expected principal from UI amount for a specific index.
+   * Mirrors Rust amount_to_principal_down.
+   */
+  public amountToPrincipalDown(amount: BN, index: BN): BN {
+    const INDEX_SCALE = new BN("1000000000000"); // 1e12
+    if (index.eq(INDEX_SCALE)) {
+      return amount;
+    }
+    return amount.mul(INDEX_SCALE).div(index);
+  }
+
+  /**
+   * Calculate expected UI amount from principal for a specific index.
+   * Mirrors Rust principal_to_amount_down.
+   */
+  public principalToAmountDown(principal: BN, index: BN): BN {
+    const INDEX_SCALE = new BN("1000000000000"); // 1e12
+    if (index.eq(INDEX_SCALE)) {
+      return principal;
+    }
+    return index.mul(principal).div(INDEX_SCALE);
+  }
+
   public async expectExtGlobalState(expected: ExtGlobal<V>) {
     const state = await this.ext.account.extGlobalV2.fetch(
       this.getExtGlobalAccount()
@@ -2274,5 +2334,18 @@ export class ExtensionSwapTest extends ExtensionTestBase {
     for (const vault of vaults) {
       await this.addMEarner(vault);
     }
+  }
+
+  /**
+   * Get the current M index from the M mint's scaled UI config.
+   * This is the index used for M token principal <-> UI amount conversions.
+   * Uses newMultiplier to match Rust multiplier_to_index behavior.
+   */
+  public async getCurrentMIndex(): Promise<BN> {
+    const scaledUiConfig = await this.getScaledUiAmountConfig(this.mMint.publicKey);
+    // Use newMultiplier to match Rust: multiplier_to_index(m_scaled_ui_config.new_multiplier)
+    const multiplier = scaledUiConfig.newMultiplier;
+    // index = multiplier * 1e12 (same formula as Rust multiplier_to_index)
+    return new BN(Math.floor(multiplier * 1e12));
   }
 }
