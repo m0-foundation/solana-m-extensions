@@ -147,7 +147,7 @@ pub struct Swap<'info> {
 impl<'info> Swap<'info> {
     fn validate(
         &self,
-        from_amount: u64,
+        amount: u64,
         remaining_accounts: &[AccountInfo<'_>],
         remaining_accounts_split_idx: usize,
     ) -> Result<()> {
@@ -161,7 +161,7 @@ impl<'info> Swap<'info> {
             return err!(SwapError::InvalidIndex);
         }
 
-        if from_amount == 0 {
+        if amount == 0 {
             return err!(SwapError::InvalidAmount);
         }
 
@@ -216,7 +216,7 @@ impl<'info> Swap<'info> {
         };
 
         // Wrap the specified amount of M to the extension token
-        // It is possible that there is a different between the amount of M unwrapped
+        // It is possible that there is a difference between the amount of M unwrapped
         // and the amount of M required due to rounding. In practice, this is covered
         // by a balance in the swap facility's M vault.
         m_ext::cpi::wrap(
