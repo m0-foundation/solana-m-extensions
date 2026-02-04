@@ -215,10 +215,7 @@ impl<'info> Swap<'info> {
             None => ctx.accounts.swap_global.to_account_info(),
         };
 
-        // Wrap the specified amount of M to the extension token
-        // It is possible that there is a difference between the amount of M unwrapped
-        // and the amount of M required due to rounding. In practice, this is covered
-        // by a balance in the swap facility's M vault.
+        // Wrap the specified amount to the extension token
         m_ext::cpi::wrap(
             CpiContext::new_with_signer(
                 ctx.accounts.to_ext_program.to_account_info(),
