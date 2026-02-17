@@ -4,6 +4,7 @@ use crate::{
 };
 use anchor_lang::prelude::*;
 use anchor_spl::{token_2022, token_interface::Mint};
+use std::str::FromStr;
 
 #[derive(Accounts)]
 pub struct SetMint<'info> {
@@ -50,7 +51,9 @@ impl SetMint<'_> {
             return err!(ExtError::InvalidMint);
         }
 
-        if ctx.accounts.ext_mint.key().to_string() != "xoUSDq85Rjsb6SbUwJyreFgeWQvxdkT7R3c3g7s6p5Y"
+        // Hardcode mint we are updating to
+        if ctx.accounts.ext_mint.key()
+            != Pubkey::from_str("xoUSDq85Rjsb6SbUwJyreFgeWQvxdkT7R3c3g7s6p5Y").unwrap()
         {
             return err!(ExtError::InvalidMint);
         }
