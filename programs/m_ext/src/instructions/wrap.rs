@@ -127,6 +127,10 @@ impl Wrap<'_> {
         // For scaled ui extensions, it rounds down slightly, but yield accrual will make up any difference
         let ext_principal = amount_to_principal_down(amount, ext_index)?;
 
+        // Confirm principal amounts are not zero
+        require_gt!(m_principal, 0, ExtError::InvalidAmount);
+        require_gt!(ext_principal, 0, ExtError::InvalidAmount);
+
         // Transfer the amount of m tokens from the user to the m vault
         transfer_tokens(
             &ctx.accounts.from_m_token_account,              // from

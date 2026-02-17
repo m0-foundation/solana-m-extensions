@@ -128,6 +128,10 @@ impl Unwrap<'_> {
         // from the amount of ext tokens to unwrap
         let m_principal: u64 = amount_to_principal_down(amount, m_index)?;
 
+        // Confirm principal amounts are not zero
+        require_gt!(m_principal, 0, ExtError::InvalidAmount);
+        require_gt!(ext_principal, 0, ExtError::InvalidAmount);
+
         // Burn the amount of ext tokens from the user
         burn_tokens(
             &ctx.accounts.from_ext_token_account,            // from
