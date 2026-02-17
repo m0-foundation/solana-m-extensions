@@ -21,7 +21,7 @@ solana_security_txt::security_txt! {
     auditors: "Asymmetric Research,Adevar Labs,OtterSec,Halborn"
 }
 
-declare_id!("3C865D264L4NkAm78zfnDzQJJvXuU3fMjRUvRxyPi5da");
+declare_id!("mexteGyWXgUR65XepNKtLJ2H66MmyLWrDSeA1bqzZ4C");
 
 // Validate feature combinations
 const _: () = {
@@ -72,6 +72,10 @@ pub mod m_ext {
     #[cfg(not(any(feature = "crank", feature = "scaled-ui")))]
     pub fn initialize(ctx: Context<Initialize>, wrap_authorities: Vec<Pubkey>) -> Result<()> {
         Initialize::handler(ctx, wrap_authorities, None, None)
+    }
+
+    pub fn set_mint(ctx: Context<SetMint>) -> Result<()> {
+        SetMint::handler(ctx)
     }
 
     #[cfg(feature = "scaled-ui")]
