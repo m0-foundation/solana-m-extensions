@@ -1226,7 +1226,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
               // Verify multiplier was updated
 
-              $.expectScaledUiAmountConfig($.extMint.publicKey, {
+              await $.expectScaledUiAmountConfig($.extMint.publicKey, {
                 authority: $.getExtMintAuthority(),
                 multiplier,
                 newMultiplier: multiplier,
@@ -1619,7 +1619,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               .rpc();
 
             // Verify multiplier was updated
-            $.expectScaledUiAmountConfig($.extMint.publicKey, {
+            await $.expectScaledUiAmountConfig($.extMint.publicKey, {
               authority: $.getExtMintAuthority(),
               multiplier,
               newMultiplier: multiplier,
@@ -3471,7 +3471,7 @@ for (const [variant, tokenProgramId] of VARIANTS) {
         // than ext tokens minted. ScaledUi variant handles this through yield accrual.
         describe("precision edge cases", () => {
           // Test small amount (1 token) handling
-          test("wrap with small amount (1 token) - verifies principals calculated correctly", async () => {
+          test("wrap with small amount - verifies principals calculated correctly", async () => {
             const fromMTokenAccount = await $.getATA(
               $.mMint.publicKey,
               $.wrapAuthority.publicKey,
@@ -3498,8 +3498,11 @@ for (const [variant, tokenProgramId] of VARIANTS) {
               $.useToken2022ForExt,
             );
 
-            // Wrap smallest possible amount
-            const wrapAmount = new BN(1);
+            // Wrap the smallest amount that produces a non-zero principal at the current M index.
+            // Formula: ceil(m_index / 1e12) ensures floor(amount * 1e12 / m_index) >= 1.
+            const INDEX_SCALE = new BN("1000000000000"); // 1e12
+            const mIndex = await $.getCurrentMIndex();
+            const wrapAmount = mIndex.add(INDEX_SCALE.subn(1)).div(INDEX_SCALE);
 
             // Send the instruction
             await $.ext.methods
@@ -3618,6 +3621,68 @@ for (const [variant, tokenProgramId] of VARIANTS) {
             expect(
               afterWrapVaultBalance.sub(initialVaultBalance).toNumber(),
             ).toBe(mPrincipal.toNumber());
+          });
+
+          // given the M index is high enough that amount_to_principal_down rounds to zero
+          // it reverts with InvalidAmount before executing any token operations
+          test("wrap reverts with InvalidAmount when m_principal is zero", async () => {
+            await $.propagateIndex(new BN(2_000_000_000_000));
+            const fromMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.wrapAuthority.publicKey,
+            );
+            const toExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.wrapAuthority.publicKey,
+              $.useToken2022ForExt,
+            );
+
+            // floor(1 * 1e12 / 2e12) = 0, triggering require_gt!(m_principal, 0)
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrap(new BN(1))
+                .accounts({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
+                  fromMTokenAccount,
+                  toExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "InvalidAmount",
+            );
+          });
+
+          // ScaledUI only: ext_index = m_index, so ext_principal rounds to zero at the same threshold
+          test("wrap reverts with InvalidAmount when ext_principal is zero", async () => {
+            if (variant !== Variant.ScaledUi) return;
+            await $.propagateIndex(new BN(2_000_000_000_000));
+            const fromMTokenAccount = await $.getATA(
+              $.mMint.publicKey,
+              $.wrapAuthority.publicKey,
+            );
+            const toExtTokenAccount = await $.getATA(
+              $.extMint.publicKey,
+              $.wrapAuthority.publicKey,
+              $.useToken2022ForExt,
+            );
+
+            // floor(1 * 1e12 / 2e12) = 0 for both m and ext principal (ext_index = m_index)
+            await $.expectAnchorError(
+              $.ext.methods
+                .wrap(new BN(1))
+                .accounts({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  wrapAuthority: $.ext.programId,
+                  fromMTokenAccount,
+                  toExtTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "InvalidAmount",
+            );
           });
         });
       });
@@ -4776,6 +4841,52 @@ for (const [variant, tokenProgramId] of VARIANTS) {
 
             // Confirm the extension is solvent
             await $.expectExtSolvent();
+          });
+        });
+
+        describe("precision edge cases", () => {
+          // given the M index is high enough that amount_to_principal_down rounds to zero
+          // it reverts with InvalidAmount before executing any token operations
+          test("unwrap reverts with InvalidAmount when m_principal is zero", async () => {
+            await $.propagateIndex(new BN(2_000_000_000_000));
+
+            // floor(1 * 1e12 / 2e12) = 0, triggering require_gt!(m_principal, 0)
+            await $.expectAnchorError(
+              $.ext.methods
+                .unwrap(new BN(1))
+                .accounts({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  unwrapAuthority: $.ext.programId,
+                  fromExtTokenAccount,
+                  toMTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "InvalidAmount",
+            );
+          });
+
+          // ScaledUI only: ext_index = m_index, so ext_principal rounds to zero at the same threshold
+          test("unwrap reverts with InvalidAmount when ext_principal is zero", async () => {
+            if (variant !== Variant.ScaledUi) return;
+            await $.propagateIndex(new BN(2_000_000_000_000));
+
+            // floor(1 * 1e12 / 2e12) = 0 for both m and ext principal (ext_index = m_index)
+            await $.expectAnchorError(
+              $.ext.methods
+                .unwrap(new BN(1))
+                .accounts({
+                  tokenAuthority: $.wrapAuthority.publicKey,
+                  unwrapAuthority: $.ext.programId,
+                  fromExtTokenAccount,
+                  toMTokenAccount,
+                  extTokenProgram: $.extTokenProgram,
+                })
+                .signers([$.wrapAuthority])
+                .rpc(),
+              "InvalidAmount",
+            );
           });
         });
       });
