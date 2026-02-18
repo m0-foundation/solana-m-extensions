@@ -147,7 +147,7 @@ pub struct Swap<'info> {
 impl<'info> Swap<'info> {
     fn validate(
         &self,
-        from_principal: u64,
+        amount: u64,
         remaining_accounts: &[AccountInfo<'_>],
         remaining_accounts_split_idx: usize,
     ) -> Result<()> {
@@ -161,22 +161,19 @@ impl<'info> Swap<'info> {
             return err!(SwapError::InvalidIndex);
         }
 
-        if from_principal == 0 {
+        if amount == 0 {
             return err!(SwapError::InvalidAmount);
         }
 
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(from_principal, ctx.remaining_accounts, remaining_accounts_split_idx))]
+    #[access_control(ctx.accounts.validate(amount, ctx.remaining_accounts, remaining_accounts_split_idx))]
     pub fn handler(
         ctx: Context<'_, '_, '_, 'info, Self>,
-        from_principal: u64,
+        amount: u64,
         remaining_accounts_split_idx: usize,
     ) -> Result<()> {
-        let m_pre_balance = ctx.accounts.swap_m_account.amount;
-        let to_pre_balance = ctx.accounts.to_token_account.amount;
-
         // Optional remaining accounts passed to the instructions
         let remaining_accounts = ctx.remaining_accounts;
         let (unwrap_remaining_accounts, wrap_remaining_accounts) =
@@ -188,6 +185,7 @@ impl<'info> Swap<'info> {
             None => ctx.accounts.swap_global.to_account_info(),
         };
 
+        // Unwrap a specific amount of extension token for M
         m_ext::cpi::unwrap(
             CpiContext::new_with_signer(
                 ctx.accounts.from_ext_program.to_account_info(),
@@ -208,12 +206,8 @@ impl<'info> Swap<'info> {
                 &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
             )
             .with_remaining_accounts(unwrap_remaining_accounts.to_vec()),
-            from_principal,
+            amount,
         )?;
-
-        // Reload M balance and wrap difference
-        ctx.accounts.swap_m_account.reload()?;
-        let m_delta = ctx.accounts.swap_m_account.amount - m_pre_balance;
 
         // Set swap program as authority if none provided
         let wrap_authority = match &ctx.accounts.wrap_authority {
@@ -221,6 +215,7 @@ impl<'info> Swap<'info> {
             None => ctx.accounts.swap_global.to_account_info(),
         };
 
+        // Wrap the specified amount to the extension token
         m_ext::cpi::wrap(
             CpiContext::new_with_signer(
                 ctx.accounts.to_ext_program.to_account_info(),
@@ -241,13 +236,8 @@ impl<'info> Swap<'info> {
                 &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
             )
             .with_remaining_accounts(wrap_remaining_accounts.to_vec()),
-            m_delta,
+            amount,
         )?;
-
-        // Reload and log amounts
-        ctx.accounts.to_token_account.reload()?;
-        let to_principal = ctx.accounts.to_token_account.amount - to_pre_balance;
-        msg!("{} -> {} M -> {}", from_principal, m_delta, to_principal);
 
         Ok(())
     }

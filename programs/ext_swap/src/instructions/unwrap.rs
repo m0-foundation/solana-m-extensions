@@ -100,7 +100,7 @@ pub struct Unwrap<'info> {
 }
 
 impl<'info> Unwrap<'info> {
-    fn validate(&self, ext_principal: u64) -> Result<()> {
+    fn validate(&self, amount: u64) -> Result<()> {
         if !self
             .swap_global
             .is_extension_whitelisted(self.from_ext_program.key)
@@ -121,15 +121,15 @@ impl<'info> Unwrap<'info> {
             return err!(SwapError::UnauthorizedUnwrapper);
         }
 
-        if ext_principal == 0 {
+        if amount == 0 {
             return err!(SwapError::InvalidAmount);
         }
 
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(ext_principal))]
-    pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, ext_principal: u64) -> Result<()> {
+    #[access_control(ctx.accounts.validate(amount))]
+    pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, amount: u64) -> Result<()> {
         // Set swap program as authority if none provided
         let unwrap_authority = match &ctx.accounts.unwrap_authority {
             Some(auth) => auth.to_account_info(),
@@ -156,7 +156,7 @@ impl<'info> Unwrap<'info> {
                 &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
             )
             .with_remaining_accounts(ctx.remaining_accounts.to_vec()),
-            ext_principal,
+            amount,
         )
     }
 }

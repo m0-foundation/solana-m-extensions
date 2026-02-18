@@ -99,7 +99,7 @@ pub struct Wrap<'info> {
 }
 
 impl<'info> Wrap<'info> {
-    fn validate(&self, m_principal: u64) -> Result<()> {
+    fn validate(&self, amount: u64) -> Result<()> {
         if !self
             .swap_global
             .is_extension_whitelisted(self.to_ext_program.key)
@@ -107,15 +107,15 @@ impl<'info> Wrap<'info> {
             return err!(SwapError::InvalidExtension);
         }
 
-        if m_principal == 0 {
+        if amount == 0 {
             return err!(SwapError::InvalidAmount);
         }
 
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(m_principal))]
-    pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, m_principal: u64) -> Result<()> {
+    #[access_control(ctx.accounts.validate(amount))]
+    pub fn handler(ctx: Context<'_, '_, '_, 'info, Self>, amount: u64) -> Result<()> {
         // Set swap program as authority if none provided
         let wrap_authority = match &ctx.accounts.wrap_authority {
             Some(auth) => auth.to_account_info(),
@@ -142,7 +142,7 @@ impl<'info> Wrap<'info> {
                 &[&[GLOBAL_SEED, &[ctx.accounts.swap_global.bump]]],
             )
             .with_remaining_accounts(ctx.remaining_accounts.to_vec()),
-            m_principal,
+            amount,
         )
     }
 }

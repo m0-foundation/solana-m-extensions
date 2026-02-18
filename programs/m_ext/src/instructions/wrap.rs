@@ -5,9 +5,7 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{
-            amount_to_principal_down, multiplier_to_index, principal_to_amount_down, sync_index,
-        },
+        conversion::{amount_to_principal_down, multiplier_to_index, sync_index},
         token::{mint_tokens, transfer_tokens},
     },
 };
@@ -80,7 +78,7 @@ pub struct Wrap<'info> {
 }
 
 impl Wrap<'_> {
-    pub fn validate(&self, m_principal: u64) -> Result<()> {
+    pub fn validate(&self, amount: u64) -> Result<()> {
         let auth = match &self.wrap_authority {
             Some(auth) => auth.key,
             None => self.token_authority.key,
@@ -91,15 +89,15 @@ impl Wrap<'_> {
             return err!(ExtError::NotAuthorized);
         }
 
-        if m_principal == 0 {
+        if amount == 0 {
             return err!(ExtError::InvalidAmount);
         }
 
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(m_principal))]
-    pub fn handler(ctx: Context<Self>, m_principal: u64) -> Result<()> {
+    #[access_control(ctx.accounts.validate(amount))]
+    pub fn handler(ctx: Context<Self>, amount: u64) -> Result<()> {
         let authority_seeds: &[&[&[u8]]] = &[&[
             MINT_AUTHORITY_SEED,
             &[ctx.accounts.global_account.ext_mint_authority_bump],
@@ -117,15 +115,21 @@ impl Wrap<'_> {
             &ctx.accounts.ext_token_program,
         )?;
 
-        // Get the current M index
+        // Get the current M index and calculate M principal to transfer based on the amount of M to wrap
         let m_scaled_ui_config =
             earn::utils::conversion::get_scaled_ui_config(&ctx.accounts.m_mint)?;
         let m_index = multiplier_to_index(m_scaled_ui_config.new_multiplier.into())?;
+        let m_principal = amount_to_principal_down(amount, m_index)?;
 
         // Calculate the principal amount of ext tokens to mint
-        // based on the principal amount of m tokens to wrap
-        let ext_principal =
-            amount_to_principal_down(principal_to_amount_down(m_principal, m_index)?, ext_index)?;
+        // based on the amount of m input
+        // For extension tokens that do not use scaled ui, this will be a 1:1 conversion
+        // For scaled ui extensions, it rounds down slightly, but yield accrual will make up any difference
+        let ext_principal = amount_to_principal_down(amount, ext_index)?;
+
+        // Confirm principal amounts are not zero
+        require_gt!(m_principal, 0, ExtError::InvalidAmount);
+        require_gt!(ext_principal, 0, ExtError::InvalidAmount);
 
         // Transfer the amount of m tokens from the user to the m vault
         transfer_tokens(

@@ -5,9 +5,7 @@ use crate::{
     errors::ExtError,
     state::{ExtGlobalV2, EXT_GLOBAL_SEED, MINT_AUTHORITY_SEED, M_VAULT_SEED},
     utils::{
-        conversion::{
-            amount_to_principal_down, multiplier_to_index, principal_to_amount_down, sync_index,
-        },
+        conversion::{amount_to_principal_down, multiplier_to_index, sync_index},
         token::{burn_tokens, transfer_tokens_from_program},
     },
 };
@@ -80,7 +78,7 @@ pub struct Unwrap<'info> {
 }
 
 impl Unwrap<'_> {
-    pub fn validate(&self, ext_principal: u64) -> Result<()> {
+    pub fn validate(&self, amount: u64) -> Result<()> {
         let auth = match &self.unwrap_authority {
             Some(auth) => auth.key,
             None => self.token_authority.key,
@@ -91,15 +89,15 @@ impl Unwrap<'_> {
             return err!(ExtError::NotAuthorized);
         }
 
-        if ext_principal == 0 {
+        if amount == 0 {
             return err!(ExtError::InvalidAmount);
         }
 
         Ok(())
     }
 
-    #[access_control(ctx.accounts.validate(ext_principal))]
-    pub fn handler(ctx: Context<Self>, ext_principal: u64) -> Result<()> {
+    #[access_control(ctx.accounts.validate(amount))]
+    pub fn handler(ctx: Context<Self>, amount: u64) -> Result<()> {
         let authority_seeds: &[&[&[u8]]] = &[&[
             MINT_AUTHORITY_SEED,
             &[ctx.accounts.global_account.ext_mint_authority_bump],
@@ -116,6 +114,10 @@ impl Unwrap<'_> {
             authority_seeds,
             &ctx.accounts.ext_token_program,
         )?;
+        // Calculate the principal amount of ext tokens to unwrap from the amount of ext tokens provided
+        // For extension tokens that do not use scaled ui, this will be a 1:1 conversion
+        // For scaled ui extensions, it rounds down slightly, similar to how wrapping rounded down
+        let ext_principal = amount_to_principal_down(amount, ext_index)?;
 
         // Get the current multiplier for the m_mint
         let m_scaled_ui_config =
@@ -123,9 +125,12 @@ impl Unwrap<'_> {
         let m_index: u64 = multiplier_to_index(m_scaled_ui_config.new_multiplier.into())?;
 
         // Calculate the principal amount of m tokens
-        // from the principal amount of ext tokens to unwrap
-        let m_principal: u64 =
-            amount_to_principal_down(principal_to_amount_down(ext_principal, ext_index)?, m_index)?;
+        // from the amount of ext tokens to unwrap
+        let m_principal: u64 = amount_to_principal_down(amount, m_index)?;
+
+        // Confirm principal amounts are not zero
+        require_gt!(m_principal, 0, ExtError::InvalidAmount);
+        require_gt!(ext_principal, 0, ExtError::InvalidAmount);
 
         // Burn the amount of ext tokens from the user
         burn_tokens(
