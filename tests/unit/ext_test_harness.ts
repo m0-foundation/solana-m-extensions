@@ -1507,8 +1507,9 @@ export class ExtensionTest<
     if (expected.authority) expect(state.authority).toEqual(expected.authority);
     if (expected.multiplier) {
       // account for javascript vs. rust floating point precision differences
-      const exp_high = (Math.floor(expected.multiplier * 1e12) + 1) / 1e12;
-      const exp_low = (Math.floor(expected.multiplier * 1e12) - 1) / 1e12;
+      // use ±2/1e12 to absorb floating-point rounding in the division itself
+      const exp_high = (Math.floor(expected.multiplier * 1e12) + 2) / 1e12;
+      const exp_low = (Math.floor(expected.multiplier * 1e12) - 2) / 1e12;
 
       expect(state.multiplier).toBeGreaterThanOrEqual(exp_low);
       expect(state.multiplier).toBeLessThanOrEqual(exp_high);
@@ -1519,8 +1520,9 @@ export class ExtensionTest<
       );
     if (expected.newMultiplier) {
       // account for javascript vs. rust floating point precision differences
-      const exp_high = (Math.floor(expected.newMultiplier * 1e12) + 1) / 1e12;
-      const exp_low = (Math.floor(expected.newMultiplier * 1e12) - 1) / 1e12;
+      // use ±2/1e12 to absorb floating-point rounding in the division itself
+      const exp_high = (Math.floor(expected.newMultiplier * 1e12) + 2) / 1e12;
+      const exp_low = (Math.floor(expected.newMultiplier * 1e12) - 2) / 1e12;
 
       expect(state.newMultiplier).toBeGreaterThanOrEqual(exp_low);
       expect(state.newMultiplier).toBeLessThanOrEqual(exp_high);
