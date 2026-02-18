@@ -58,7 +58,7 @@ impl SetMint<'_> {
             return err!(ExtError::InvalidMint);
         }
 
-        ctx.accounts.global_account.m_mint = ctx.accounts.ext_mint.key();
+        ctx.accounts.global_account.ext_mint = ctx.accounts.ext_mint.key();
         msg!("Set ext mint to {}", ctx.accounts.ext_mint.key());
 
         Ok(())

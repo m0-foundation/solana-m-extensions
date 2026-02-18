@@ -47,6 +47,7 @@ import { AnchorProvider, Program, Wallet, BN } from "@coral-xyz/anchor";
 import { ExtSwap } from "../../target/types/ext_swap";
 import { MExt as MigrateExt } from "../../target/types/migrate";
 import { MExt as CrankExt } from "../../target/types/crank";
+import { MExt as NoYieldExt } from "../../target/types/no_yield";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 import { sha256 } from "@noble/hashes/sha2";
 import {
@@ -451,6 +452,31 @@ async function main() {
 
       sendOrSerialize(transaction, connection, payer);
     });
+
+  program.command("update-xo-mint").action(async () => {
+    const [payer, ext] = keysFromEnv(["PAYER_KEYPAIR", "XO"]);
+    NO_YIELD_EXT_IDL.address = ext.publicKey;
+
+    const program = new Program<NoYieldExt>(
+      NO_YIELD_EXT_IDL,
+      anchorProvider(connection, payer),
+    );
+
+    const admin = new PublicKey(process.env.SQUADS_MULTISIG!);
+
+    const tx = await program.methods
+      .setMint()
+      .accountsPartial({
+        admin,
+        extMint: "xoUSDq85Rjsb6SbUwJyreFgeWQvxdkT7R3c3g7s6p5Y",
+      })
+      .transaction();
+
+    tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    tx.feePayer = admin;
+
+    await sendOrSerialize(tx, connection, payer);
+  });
 
   program
     .command("migrate-ext")
