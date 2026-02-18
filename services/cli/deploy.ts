@@ -1,6 +1,14 @@
 import { Command } from "commander";
 import shell from "shelljs";
-import { Keypair, PublicKey } from "@solana/web3.js";
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  TransactionInstruction,
+} from "@solana/web3.js";
+import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 import fs from "fs";
 
 if (!fs.existsSync("devnet-keypair.json")) {
@@ -98,6 +106,106 @@ const opts: shell.ExecOptions & { async: false } = {
         updateProgram(pubkey, parseInt(computePrice), squadsAuth, swapProgram);
       },
     );
+
+  program
+    .command("extend-program")
+    .description("Extend a program account to fit a larger binary ")
+    .argument("<programId>", "Program ID to extend")
+    .option(
+      "-b, --binary <path>",
+      "Path to the new program binary",
+      "target/verifiable/m_ext.so",
+    )
+    .action(async (programId, { binary }) => {
+      if (!fs.existsSync(binary)) {
+        throw new Error(
+          `Binary not found at ${binary}. Build the program first.`,
+        );
+      }
+
+      const newBinarySize = fs.statSync(binary).size;
+
+      // Get current program data length and ProgramData address from chain
+      const showResult = shell.exec(
+        `solana program show ${programId} --url ${process.env.RPC_URL}`,
+        opts,
+      );
+      if (showResult.code !== 0) {
+        throw new Error(`Failed to fetch program info: ${showResult.stderr}`);
+      }
+
+      const dataLengthMatch = showResult.stdout.match(/Data Length: (\d+)/);
+      if (!dataLengthMatch) {
+        throw new Error(
+          `Could not parse Data Length from program info:\n${showResult.stdout}`,
+        );
+      }
+
+      const programDataMatch = showResult.stdout.match(
+        /ProgramData Address: (\w+)/,
+      );
+      if (!programDataMatch) {
+        throw new Error(
+          `Could not parse ProgramData Address from program info:\n${showResult.stdout}`,
+        );
+      }
+
+      const currentDataLength = parseInt(dataLengthMatch[1]);
+      const programDataAddress = new PublicKey(programDataMatch[1]);
+      const additionalBytes = newBinarySize - currentDataLength;
+
+      if (additionalBytes <= 0) {
+        console.log(
+          `Program already has enough space (current: ${currentDataLength}, needed: ${newBinarySize})`,
+        );
+        return;
+      }
+
+      console.log(`Current program data length: ${currentDataLength}`);
+      console.log(`New binary size:             ${newBinarySize}`);
+      console.log(`Additional bytes needed:     ${additionalBytes}`);
+
+      // Build the BPF Loader ExtendProgram instruction
+      const BPF_LOADER_UPGRADEABLE = new PublicKey(
+        "BPFLoaderUpgradeab1e11111111111111111111111",
+      );
+
+      const data = Buffer.alloc(8);
+      data.writeUInt32LE(6, 0); // ExtendProgram discriminator
+      data.writeUInt32LE(Math.floor(additionalBytes * 1.05), 4);
+
+      const payer = new PublicKey(process.env.SQUADS_MULTISIG!);
+
+      const ix = new TransactionInstruction({
+        programId: BPF_LOADER_UPGRADEABLE,
+        keys: [
+          { pubkey: programDataAddress, isSigner: false, isWritable: true },
+          {
+            pubkey: new PublicKey(programId),
+            isSigner: false,
+            isWritable: true,
+          },
+          {
+            pubkey: SystemProgram.programId,
+            isSigner: false,
+            isWritable: false,
+          },
+          { pubkey: payer, isSigner: true, isWritable: true },
+        ],
+        data,
+      });
+
+      const connection = new Connection(process.env.RPC_URL!);
+      const tx = new Transaction().add(ix);
+      tx.feePayer = payer;
+      tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+      const serialized = tx.serialize({ verifySignatures: false });
+      console.log("Transaction:", {
+        b64: serialized.toString("base64"),
+        b58: bs58.encode(serialized),
+      });
+    });
 
   program
     .command("verify-pda-txn")

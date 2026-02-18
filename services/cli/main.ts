@@ -83,6 +83,8 @@ const mints: { [key: string]: string } = {
     "mzeroXDoBpRVhnEXBra27qzAMdxgpWVY3DzQW7xMVJp",
   mexteGyWXgUR65XepNKtLJ2H66MmyLWrDSeA1bqzZ4C:
     "xoUSD7HdezER6vVPbYETEpPR3G7CsCgzWioiDezxDsg",
+  extUkDFf3HLekkxbcZ3XRUizMjbxMJgKBay3p9xGVmg:
+    "usdsfJbX78ktZUnoRC7dwvvQz7xH3WdkpGne76gdUia",
 };
 
 const M_MINT = new PublicKey("mzerojk9tg56ebsrEAhfkyc9VgKjTW2zDqp6C5mhjzH");
@@ -664,10 +666,10 @@ async function main() {
     });
 
   program
-    .command("remove-whitelisted-extension")
+    .command("remove-whitelisted-extensions")
     .description("Remove whitelisted extensions on the Swap Facility")
-    .argument("<extension>", "Extension to remove")
-    .action(async (extension) => {
+    .argument("<extensions>", "Extension to remove")
+    .action(async (extensions) => {
       const [payer] = keysFromEnv(["PAYER_KEYPAIR"]);
 
       const admin = process.env.SQUADS_MULTISIG
@@ -679,14 +681,18 @@ async function main() {
         anchorProvider(connection, payer),
       );
 
-      const tx = new Transaction().add(
-        await extSwap.methods
-          .removeWhitelistedExtension(new PublicKey(extension))
-          .accounts({
-            admin,
-          })
-          .instruction(),
-      );
+      const tx = new Transaction();
+
+      for (const extension of extensions.split(",")) {
+        tx.add(
+          await extSwap.methods
+            .removeWhitelistedExtension(new PublicKey(extension))
+            .accounts({
+              admin,
+            })
+            .instruction(),
+        );
+      }
 
       tx.feePayer = admin;
       tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
@@ -703,6 +709,8 @@ async function main() {
         "M0_WM",
         "USDK",
         "USDKY",
+        "USDP",
+        "XO",
       ]);
       const ixs = [
         ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 250_000 }),
