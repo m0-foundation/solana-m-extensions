@@ -18,6 +18,7 @@ import {
   createInitializePausableConfigInstruction,
   createInitializePermanentDelegateInstruction,
   createInitializeTransferHookInstruction,
+  createInitializeDefaultAccountStateInstruction,
   createSetAuthorityInstruction,
   ExtensionType,
   getAssociatedTokenAddressSync,
@@ -28,6 +29,7 @@ import {
   TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
   TYPE_SIZE,
+  AccountState,
 } from "@solana/spl-token";
 import {
   createInitializeInstruction,
@@ -105,27 +107,24 @@ async function main() {
   const program = new Command();
   const connection = new Connection(process.env.RPC_URL ?? "");
 
-  program.command("print-extensions").action(() => {
-    const [usdk, usdky] = keysFromEnv(["USDK", "USDKY"]);
+  program.command("print-extensions").action(async () => {
+    const { execSync } = require("child_process");
 
-    const addresses: { [key: string]: PublicKey } = {
-      "USDK program": usdk.publicKey,
-      "USDK vault": PublicKey.findProgramAddressSync(
-        [Buffer.from("m_vault")],
-        usdk.publicKey,
-      )[0],
-      "USDKY program": usdky.publicKey,
-      "USDKY vault": PublicKey.findProgramAddressSync(
-        [Buffer.from("m_vault")],
-        usdky.publicKey,
-      )[0],
+    const opKeys: { [name: string]: string } = {
+      USDK: "op://Solana Dev/Solana Program Keys/program-keypair-1",
+      USDKY: "op://Solana Dev/Solana Program Keys/program-keypair-2",
+      "USD+": "op://Solana Dev/Solana Program Keys/program-keypair-3",
+      XO: "op://Solana Dev/Solana Program Keys/solana-earner-delta-keypair",
     };
 
-    const tableData = Object.entries(addresses).map(([name, pubkey]) => ({
-      Name: name,
-      Address: pubkey.toBase58(),
-      Hex: `0x${pubkey.toBuffer().toString("hex")}`,
-    }));
+    const tableData = Object.entries(opKeys).map(([name, path]) => {
+      const raw = execSync(`op read "${path}"`, { encoding: "utf-8" }).trim();
+      const keypair = Keypair.fromSecretKey(Buffer.from(JSON.parse(raw)));
+      return {
+        Name: name,
+        Address: keypair.publicKey.toBase58(),
+      };
+    });
 
     console.table(tableData);
   });
@@ -139,7 +138,11 @@ async function main() {
     .option("-s, --symbol <string>", "Token Symbol", process.env.EXT_SYMBOL)
     .option("-u, --uri [string]", "Token URI", process.env.EXT_URI)
     .option("--init-scaled-ui", "Enable scaled UI amounts", false)
-    .option("--init-confidential", "Enable confidential transfers", false)
+    .option(
+      "--confidential-transfers-authority <pubkey>",
+      "Enable confidential transfers",
+      "",
+    )
     .option("--transfer-hook-authority <pubkey>", "Enable transfer hook", "")
     .option("--pause-authority <pubkey>", "Enable pauser extension", "")
     .option(
@@ -150,19 +153,21 @@ async function main() {
     .option("--legacy-program", "Do not use Token2022 program", false)
     .option("-f --freeze-authority <pubkey>", "Token freeze authority", "")
     .option("--metadata-authority <pubkey>", "Metadata authority", "")
+    .option("--init-default-state", "Default accounts state", false)
     .action(
       async ({
         name,
         symbol,
         uri,
         initScaledUi,
-        initConfidential,
+        confidentialTransfersAuthority,
         pauseAuthority,
         legacyProgram,
         freezeAuthority,
         permanentDelegateAuthority,
         metadataAuthority,
         transferHookAuthority,
+        initDefaultState,
       }) => {
         const [payer, mint, ext] = keysFromEnv([
           "PAYER_KEYPAIR",
@@ -245,7 +250,7 @@ async function main() {
           console.log("Adding scaled UI amount extension");
           extensions.push(ExtensionType.ScaledUiAmountConfig);
         }
-        if (initConfidential) {
+        if (confidentialTransfersAuthority) {
           console.log("Adding confidential transfer extension");
           extensions.push(ExtensionType.ConfidentialTransferMint);
         }
@@ -260,6 +265,10 @@ async function main() {
         if (permanentDelegateAuthority) {
           console.log("Adding permanent delegate extension");
           extensions.push(ExtensionType.PermanentDelegate);
+        }
+        if (initDefaultState) {
+          console.log("Adding default accounts state extension");
+          extensions.push(ExtensionType.DefaultAccountState);
         }
 
         // Create the token 2022 mint with the ScaledUiAmount extension
@@ -276,6 +285,9 @@ async function main() {
             : null,
           metadataAuthority ? new PublicKey(metadataAuthority) : null,
           transferHookAuthority ? new PublicKey(transferHookAuthority) : null,
+          confidentialTransfersAuthority
+            ? new PublicKey(confidentialTransfersAuthority)
+            : null,
           name,
           symbol,
           uri,
@@ -1066,6 +1078,7 @@ async function createToken2022Mint(
   permanentDelegateAuthority: PublicKey | null,
   metadataAuthority: PublicKey | null,
   transferHookAuthority: PublicKey | null,
+  confidentialTransfersAuthority: PublicKey | null,
   tokenName: string,
   tokenSymbol: string,
   uri: string,
@@ -1136,7 +1149,7 @@ async function createToken2022Mint(
         instructions.push(
           createInitializeConfidentialTransferMintInstruction(
             mint.publicKey,
-            authority,
+            confidentialTransfersAuthority ?? authority,
             false,
           ),
         );
@@ -1155,6 +1168,15 @@ async function createToken2022Mint(
           createInitializePermanentDelegateInstruction(
             mint.publicKey,
             permanentDelegateAuthority!,
+            TOKEN_2022_PROGRAM_ID,
+          ),
+        );
+        break;
+      case ExtensionType.DefaultAccountState:
+        instructions.push(
+          createInitializeDefaultAccountStateInstruction(
+            mint.publicKey,
+            AccountState.Initialized,
             TOKEN_2022_PROGRAM_ID,
           ),
         );

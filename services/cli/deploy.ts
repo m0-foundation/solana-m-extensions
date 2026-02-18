@@ -43,7 +43,7 @@ const opts: shell.ExecOptions & { async: false } = {
           --skip-new-upgrade-authority-signer-check \
           --keypair devnet-keypair.json \
           --url ${process.env.RPC_URL}`,
-        opts
+        opts,
       );
       if (result.code !== 0) throw new Error(`Build failed: ${result.stderr}`);
 
@@ -96,7 +96,7 @@ const opts: shell.ExecOptions & { async: false } = {
 
         if (!skipBuild) buildProgram(pubkey, type, migrate, swapProgram);
         updateProgram(pubkey, parseInt(computePrice), squadsAuth, swapProgram);
-      }
+      },
     );
 
   program
@@ -106,7 +106,7 @@ const opts: shell.ExecOptions & { async: false } = {
     .option(
       "-h, --hash <name>",
       "Commit hash",
-      "88a692239f1c336d412d591c78bbf31043ad0af2"
+      "88a692239f1c336d412d591c78bbf31043ad0af2",
     )
     .action(({ type, extension, hash }) => {
       const [pid] = keysFromEnv([extension]);
@@ -125,7 +125,7 @@ const opts: shell.ExecOptions & { async: false } = {
         `solana-verify remote submit-job \ 
           --program-id ${pubkey} \ 
           --uploader ${process.env.SQUADS_MULTISIG}`,
-        opts
+        opts,
       );
 
       console.log(`Submit verify job: ${result.stdout}`);
@@ -138,7 +138,7 @@ function buildProgram(
   pid: string,
   yieldFeature: string,
   includeMigrate = false,
-  swapProgram = false
+  swapProgram = false,
 ) {
   // remove old binary
   shell.rm("-f", "target/verifiable/m_ext.so");
@@ -151,7 +151,7 @@ function buildProgram(
       `anchor build -p ext_swap --verifiable ${
         includeMigrate ? "-- --features migrate" : ""
       }`,
-      opts
+      opts,
     );
     if (res.code !== 0) throw new Error(`Swap build failed: ${res.stderr}`);
     return;
@@ -178,7 +178,7 @@ function buildProgram(
     }${
       pid === "wMXX1K1nca5W4pZr1piETe78gcAVVrEFi9f4g46uXko" ? ",wm" : ""
     } --no-default-features`,
-    opts
+    opts,
   );
   if (result.code !== 0) {
     throw new Error(`Build failed: ${result.stderr}`);
@@ -199,7 +199,7 @@ function deployProgram(programKeypair: Keypair, computePrice: number) {
       --max-sign-attempts 3 \
       --program-id pid.json \
       target/verifiable/m_ext.so`,
-    opts
+    opts,
   );
 
   // delete the temporary pid keypair file
@@ -216,12 +216,12 @@ function updateProgram(
   pid: string,
   computePrice: number,
   squadsAuth = false,
-  swapProgram = false
+  swapProgram = false,
 ) {
   // create a temporary buffer to write the upgrade to
   shell.exec(
     "solana-keygen new --no-bip39-passphrase --force -s --outfile=buffer.json",
-    opts
+    opts,
   );
 
   const bufferAddress = shell
@@ -238,7 +238,7 @@ function updateProgram(
       --max-sign-attempts 3 \
       --buffer buffer.json \
       target/verifiable/${swapProgram ? "ext_swap" : "m_ext"}.so`,
-    opts
+    opts,
   );
   if (result.code !== 0) {
     throw new Error(`Buffer write failed: ${result.stderr}`);
@@ -255,7 +255,7 @@ function updateProgram(
         --keypair devnet-keypair.json \
         --new-buffer-authority ${auth} \
          ${bufferAddress} `,
-      opts
+      opts,
     );
     if (result.code !== 0) {
       throw new Error(`Set buffer authority failed: ${result.stderr}`);
@@ -271,7 +271,7 @@ function updateProgram(
       --keypair devnet-keypair.json \
       ${bufferAddress} \
       ${swapProgram ? "MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH" : pid}`,
-    opts
+    opts,
   );
   if (result.code !== 0) {
     throw new Error(`Upgrade failed: ${result.stderr}`);
@@ -290,7 +290,7 @@ function postIDL(pid: string, init = false) {
       --provider.cluster ${process.env.RPC_URL} \
       --provider.wallet devnet-keypair.json \
       ${pid}`,
-    opts
+    opts,
   );
 }
 
@@ -301,7 +301,7 @@ function postSwapIDL() {
       --provider.cluster ${process.env.RPC_URL} \
       --provider.wallet devnet-keypair.json \
       MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH`,
-    opts
+    opts,
   );
 }
 
@@ -309,7 +309,7 @@ function verifyPdaTransaction(
   pid: string,
   yieldFeature: string,
   commitHash: string,
-  libraryName = "m_ext"
+  libraryName = "m_ext",
 ) {
   const result = shell.exec(
     `solana-verify export-pda-tx \
@@ -319,7 +319,7 @@ function verifyPdaTransaction(
       --commit-hash ${commitHash} \
       --uploader ${process.env.SQUADS_MULTISIG} \
       -- --features ${yieldFeature} --no-default-features`,
-    opts
+    opts,
   );
 
   console.log(`PDA verification transaction: ${result.stdout}`);
@@ -330,12 +330,12 @@ function setProgramID(pid: string) {
     "-i",
     /declare_id!\("[^"]*"\)/,
     `declare_id!("${pid}")`,
-    "programs/m_ext/src/lib.rs"
+    "programs/m_ext/src/lib.rs",
   );
 }
 
 function keysFromEnv(keys: string[]) {
   return keys.map((key) =>
-    Keypair.fromSecretKey(Buffer.from(JSON.parse(process.env[key]!)))
+    Keypair.fromSecretKey(Buffer.from(JSON.parse(process.env[key]!))),
   );
 }
