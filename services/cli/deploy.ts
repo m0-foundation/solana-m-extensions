@@ -11,6 +11,8 @@ import {
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 import fs from "fs";
 
+const EXT_SWAP_PID = "MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH";
+
 if (!fs.existsSync("devnet-keypair.json")) {
   throw new Error("devnet keypair not found");
 }
@@ -66,7 +68,7 @@ const opts: shell.ExecOptions & { async: false } = {
     .option("-s, --swapProgram", "Update swap program", false)
     .action(({ type, extension, init, swapProgram }) => {
       const [pid] = keysFromEnv([extension]);
-      const pubkey = pid.publicKey.toBase58();
+      const pubkey = swapProgram ? EXT_SWAP_PID : pid.publicKey.toBase58();
 
       console.log(`Building and initializing IDL for extension ${pubkey}`);
 
@@ -301,9 +303,7 @@ const opts: shell.ExecOptions & { async: false } = {
 
   program
     .command("verify-build")
-    .description(
-      "Compare the on-chain program hash against a local build hash",
-    )
+    .description("Compare the on-chain program hash against a local build hash")
     .option("-t, --type <type>", "Yield type", "scaled-ui")
     .option("-e, --extension <name>", "Extension program ID", "USDK")
     .option("-s, --swapProgram", "Verify swap program", false)
@@ -311,8 +311,10 @@ const opts: shell.ExecOptions & { async: false } = {
     .option("-m, --migrate", "Include migrate feature", false)
     .action(({ type, extension, swapProgram, skipBuild, migrate }) => {
       const [pid] = keysFromEnv([extension]);
-      const pubkey = pid.publicKey.toBase58();
-      const binaryPath = `target/verifiable/${swapProgram ? "ext_swap" : "m_ext"}.so`;
+      const pubkey = swapProgram ? EXT_SWAP_PID : pid.publicKey.toBase58();
+      const binaryPath = `target/verifiable/${
+        swapProgram ? "ext_swap" : "m_ext"
+      }.so`;
 
       if (!skipBuild) {
         buildProgram(pubkey, type, migrate, swapProgram);
@@ -332,9 +334,7 @@ const opts: shell.ExecOptions & { async: false } = {
         opts,
       );
       if (onChainResult.code !== 0) {
-        throw new Error(
-          `Failed to get on-chain hash: ${onChainResult.stderr}`,
-        );
+        throw new Error(`Failed to get on-chain hash: ${onChainResult.stderr}`);
       }
       const onChainHash = onChainResult.stdout.trim();
 
@@ -352,9 +352,13 @@ const opts: shell.ExecOptions & { async: false } = {
       console.log(`Local hash:    ${localHash}`);
 
       if (onChainHash === localHash) {
-        console.log("\n✅ Hashes match — local build is verified against the deployed program.");
+        console.log(
+          "\n✅ Hashes match — local build is verified against the deployed program.",
+        );
       } else {
-        console.log("\n❌ Hash mismatch — local build does NOT match the deployed program.");
+        console.log(
+          "\n❌ Hash mismatch — local build does NOT match the deployed program.",
+        );
         process.exit(1);
       }
     });
