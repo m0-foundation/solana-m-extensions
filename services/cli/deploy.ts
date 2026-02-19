@@ -124,34 +124,33 @@ const opts: shell.ExecOptions & { async: false } = {
       }
 
       const newBinarySize = fs.statSync(binary).size;
+      const connection = new Connection(process.env.RPC_URL!);
+      const programPubkey = new PublicKey(programId);
 
-      // Get current program data length and ProgramData address from chain
-      const showResult = shell.exec(
-        `solana program show ${programId} --url ${process.env.RPC_URL}`,
-        opts,
-      );
-      if (showResult.code !== 0) {
-        throw new Error(`Failed to fetch program info: ${showResult.stderr}`);
+      // Fetch program account to extract ProgramData address
+      const programAccount = await connection.getAccountInfo(programPubkey);
+      if (!programAccount) {
+        throw new Error(`Program account not found: ${programId}`);
       }
 
-      const dataLengthMatch = showResult.stdout.match(/Data Length: (\d+)/);
-      if (!dataLengthMatch) {
+      // BPF Upgradeable Loader "Program" variant: 4-byte discriminator + 32-byte programdata address
+      const programDataAddress = new PublicKey(
+        programAccount.data.subarray(4, 36),
+      );
+
+      // ProgramData header: 4 (discriminator) + 8 (slot) + 1 (Option tag) + 32 (authority) = 45 bytes
+      const PROGRAMDATA_HEADER_SIZE = 45;
+      const programDataAccount = await connection.getAccountInfo(
+        programDataAddress,
+      );
+      if (!programDataAccount) {
         throw new Error(
-          `Could not parse Data Length from program info:\n${showResult.stdout}`,
+          `ProgramData account not found: ${programDataAddress.toBase58()}`,
         );
       }
 
-      const programDataMatch = showResult.stdout.match(
-        /ProgramData Address: (\w+)/,
-      );
-      if (!programDataMatch) {
-        throw new Error(
-          `Could not parse ProgramData Address from program info:\n${showResult.stdout}`,
-        );
-      }
-
-      const currentDataLength = parseInt(dataLengthMatch[1]);
-      const programDataAddress = new PublicKey(programDataMatch[1]);
+      const currentDataLength =
+        programDataAccount.data.length - PROGRAMDATA_HEADER_SIZE;
       const additionalBytes = newBinarySize - currentDataLength;
 
       if (additionalBytes <= 0) {
@@ -172,7 +171,7 @@ const opts: shell.ExecOptions & { async: false } = {
 
       const data = Buffer.alloc(8);
       data.writeUInt32LE(6, 0); // ExtendProgram discriminator
-      data.writeUInt32LE(Math.floor(additionalBytes * 1.05), 4);
+      data.writeUInt32LE(Math.floor(additionalBytes * 1.05), 4); // Add 5% buffer to avoid underestimating
 
       const payer = new PublicKey(process.env.SQUADS_MULTISIG!);
 
@@ -195,13 +194,91 @@ const opts: shell.ExecOptions & { async: false } = {
         data,
       });
 
-      const connection = new Connection(process.env.RPC_URL!);
       const tx = new Transaction().add(ix);
       tx.feePayer = payer;
       tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
       const serialized = tx.serialize({ verifySignatures: false });
       console.log("Transaction:", {
+        b64: serialized.toString("base64"),
+        b58: bs58.encode(serialized),
+      });
+    });
+
+  program
+    .command("close-buffers")
+    .description("Close all buffer accounts")
+    .option(
+      "-r, --recipient <pubkey>",
+      "Refund recipient",
+      "D76ySoHPwD8U2nnTTDqXeUJQg5UkD9UD1PUE1rnvPAGm",
+    )
+    .action(async ({ recipient }) => {
+      const authorityPubkey = new PublicKey(process.env.SQUADS_MULTISIG!);
+      const recipientPubkey = new PublicKey(recipient);
+
+      const connection = new Connection(process.env.RPC_URL!);
+      const BPF_LOADER_UPGRADEABLE = new PublicKey(
+        "BPFLoaderUpgradeab1e11111111111111111111111",
+      );
+
+      // Find all buffer accounts owned by the authority
+      const accounts = await connection.getProgramAccounts(
+        BPF_LOADER_UPGRADEABLE,
+        {
+          filters: [
+            {
+              memcmp: {
+                offset: 0,
+                bytes: bs58.encode(Buffer.from([1, 0, 0, 0])),
+              },
+            }, // Buffer account type
+            {
+              memcmp: {
+                offset: 4,
+                bytes: bs58.encode(
+                  Buffer.concat([Buffer.from([1]), authorityPubkey.toBuffer()]),
+                ),
+              },
+            }, // Option::Some(authority)
+          ],
+          dataSlice: { offset: 0, length: 0 },
+        },
+      );
+
+      if (accounts.length === 0) {
+        console.log("No buffer accounts found for this authority");
+        return;
+      }
+
+      console.log(`Found ${accounts.length} buffer account(s):`);
+
+      // Close instruction discriminator (variant 5 of UpgradeableLoaderInstruction)
+      const data = Buffer.alloc(4);
+      data.writeUInt32LE(5, 0);
+
+      const instructions = accounts.map(
+        ({ pubkey }) =>
+          new TransactionInstruction({
+            programId: BPF_LOADER_UPGRADEABLE,
+            keys: [
+              { pubkey, isSigner: false, isWritable: true },
+              { pubkey: recipientPubkey, isSigner: false, isWritable: true },
+              { pubkey: authorityPubkey, isSigner: true, isWritable: false },
+            ],
+            data,
+          }),
+      );
+
+      const { blockhash } = await connection.getLatestBlockhash();
+
+      const tx = new Transaction().add(...instructions);
+      tx.feePayer = authorityPubkey;
+      tx.recentBlockhash = blockhash;
+
+      const serialized = tx.serialize({ verifySignatures: false });
+
+      console.log(`Transaction closing ${accounts.length} buffer(s):`, {
         b64: serialized.toString("base64"),
         b58: bs58.encode(serialized),
       });
