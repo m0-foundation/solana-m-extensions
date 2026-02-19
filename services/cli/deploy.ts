@@ -326,8 +326,6 @@ const opts: shell.ExecOptions & { async: false } = {
         );
       }
 
-      console.log(`Verifying program ${pubkey}...`);
-
       // Get on-chain program hash
       const onChainResult = shell.exec(
         `solana-verify get-program-hash -u ${process.env.RPC_URL} ${pubkey}`,
