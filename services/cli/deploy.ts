@@ -301,9 +301,7 @@ const opts: shell.ExecOptions & { async: false } = {
 
   program
     .command("verify-build")
-    .description(
-      "Compare the on-chain program hash against a local build hash",
-    )
+    .description("Compare the on-chain program hash against a local build hash")
     .option("-t, --type <type>", "Yield type", "scaled-ui")
     .option("-e, --extension <name>", "Extension program ID", "USDK")
     .option("-s, --swapProgram", "Verify swap program", false)
@@ -311,8 +309,14 @@ const opts: shell.ExecOptions & { async: false } = {
     .option("-m, --migrate", "Include migrate feature", false)
     .action(({ type, extension, swapProgram, skipBuild, migrate }) => {
       const [pid] = keysFromEnv([extension]);
-      const pubkey = pid.publicKey.toBase58();
-      const binaryPath = `target/verifiable/${swapProgram ? "ext_swap" : "m_ext"}.so`;
+
+      const pubkey = swapProgram
+        ? "MSwapi3WhNKMUGm9YrxGhypgUEt7wYQH3ZgG32XoWzH"
+        : pid.publicKey.toBase58();
+
+      const binaryPath = `target/verifiable/${
+        swapProgram ? "ext_swap" : "m_ext"
+      }.so`;
 
       if (!skipBuild) {
         buildProgram(pubkey, type, migrate, swapProgram);
@@ -324,17 +328,13 @@ const opts: shell.ExecOptions & { async: false } = {
         );
       }
 
-      console.log(`Verifying program ${pubkey}...`);
-
       // Get on-chain program hash
       const onChainResult = shell.exec(
         `solana-verify get-program-hash -u ${process.env.RPC_URL} ${pubkey}`,
         opts,
       );
       if (onChainResult.code !== 0) {
-        throw new Error(
-          `Failed to get on-chain hash: ${onChainResult.stderr}`,
-        );
+        throw new Error(`Failed to get on-chain hash: ${onChainResult.stderr}`);
       }
       const onChainHash = onChainResult.stdout.trim();
 
@@ -352,9 +352,13 @@ const opts: shell.ExecOptions & { async: false } = {
       console.log(`Local hash:    ${localHash}`);
 
       if (onChainHash === localHash) {
-        console.log("\n✅ Hashes match — local build is verified against the deployed program.");
+        console.log(
+          "\n✅ Hashes match — local build is verified against the deployed program.",
+        );
       } else {
-        console.log("\n❌ Hash mismatch — local build does NOT match the deployed program.");
+        console.log(
+          "\n❌ Hash mismatch — local build does NOT match the deployed program.",
+        );
         process.exit(1);
       }
     });
