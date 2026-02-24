@@ -82,7 +82,7 @@ const mints: { [key: string]: string } = {
   wMXX1K1nca5W4pZr1piETe78gcAVVrEFi9f4g46uXko:
     "mzeroXDoBpRVhnEXBra27qzAMdxgpWVY3DzQW7xMVJp",
   mexteGyWXgUR65XepNKtLJ2H66MmyLWrDSeA1bqzZ4C:
-    "xoUSD7HdezER6vVPbYETEpPR3G7CsCgzWioiDezxDsg",
+    "xoUSDq85Rjsb6SbUwJyreFgeWQvxdkT7R3c3g7s6p5Y",
   extUkDFf3HLekkxbcZ3XRUizMjbxMJgKBay3p9xGVmg:
     "usdsfJbX78ktZUnoRC7dwvvQz7xH3WdkpGne76gdUia",
 };
