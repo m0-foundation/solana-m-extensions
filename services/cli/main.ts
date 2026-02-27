@@ -375,17 +375,17 @@ async function main() {
         : payer.publicKey;
 
       // Setup wrap authorities list
-      // const swapGlobalSigner = PublicKey.findProgramAddressSync(
-      //   [Buffer.from("global")],
-      //   EXT_SWAP,
-      // )[0];
+      const swapGlobalSigner = PublicKey.findProgramAddressSync(
+        [Buffer.from("global")],
+        EXT_SWAP,
+      )[0];
       const portalTokenAuth = PublicKey.findProgramAddressSync(
         [Buffer.from("token_authority")],
         new PublicKey("mzp1q2j5Hr1QuLC3KFBCAUz5aUckT6qyuZKZ3WJnMmY"),
       )[0];
 
       const wrapAuthorities: PublicKey[] = [
-        // swapGlobalSigner,
+        swapGlobalSigner,
         portalTokenAuth,
         admin,
       ];
