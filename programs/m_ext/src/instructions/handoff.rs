@@ -10,7 +10,7 @@
 // `wrap_authorities` (wrap/unwrap are already dead without the mint
 // authority; the empty list is defense).
 
-use anchor_lang::prelude::*;
+use anchor_lang::{prelude::*, solana_program::program_option::COption};
 use anchor_spl::{
     token_2022::{
         close_account, set_authority, spl_token_2022::instruction::AuthorityType, CloseAccount,
@@ -96,14 +96,29 @@ pub struct Handoff<'info> {
 
 impl Handoff<'_> {
     fn validate(&self, gateway_program: &Pubkey) -> Result<()> {
+        // The gateway's complete_adoption requires the freeze authority to
+        // arrive at its PDA. If it sits at this program's own PDA, nothing can
+        // ever move it — refuse before the irreversible sweep.
+        if self.ext_mint.freeze_authority
+            == COption::Some(self.ext_mint_authority.key())
+        {
+            return err!(ExtError::FreezeAuthorityUnreachable);
+        }
+
         // Solvency: vault $M covers the outstanding ext supply (the migrate_m
         // check). $M is scaled-ui, so the vault principal converts through the
-        // live multiplier; the no-yield ext supply is already an amount.
+        // multiplier in force NOW — a scheduled future multiplier must not
+        // value an irreversible sweep.
         let m_scaled_ui_config = get_scaled_ui_config(&self.m_mint)?;
-        let vault_m_amount = principal_to_amount_down(
-            self.vault_m_token_account.amount,
-            m_scaled_ui_config.new_multiplier.into(),
-        )?;
+        let now = Clock::get()?.unix_timestamp;
+        let multiplier: f64 =
+            if now >= i64::from(m_scaled_ui_config.new_multiplier_effective_timestamp) {
+                m_scaled_ui_config.new_multiplier.into()
+            } else {
+                m_scaled_ui_config.multiplier.into()
+            };
+        let vault_m_amount =
+            principal_to_amount_down(self.vault_m_token_account.amount, multiplier)?;
         if vault_m_amount < self.ext_mint.supply {
             return err!(ExtError::InsufficientCollateral);
         }

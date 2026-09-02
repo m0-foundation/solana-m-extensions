@@ -18,8 +18,13 @@
 // [X] given a second call after a successful handoff    it reverts
 
 import { BN } from "@coral-xyz/anchor";
-import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
-import { TOKEN_2022_PROGRAM_ID, getMint } from "@solana/spl-token";
+import { Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import {
+  AuthorityType,
+  TOKEN_2022_PROGRAM_ID,
+  createSetAuthorityInstruction,
+  getMint,
+} from "@solana/spl-token";
 
 import { ExtensionTest, Variant } from "./ext_test_harness";
 
@@ -171,6 +176,22 @@ describe("handoff unit tests", () => {
   test("target not in AdoptionPending - reverts", async () => {
     const stablecoin = plantStablecoin({ mintOrigin: 2 }); // Adopted
     await $.expectAnchorError(handoff(stablecoin), "InvalidAccount");
+  });
+
+  test("freeze authority held by the program's own PDA - reverts", async () => {
+    const stablecoin = plantStablecoin();
+    // Park the freeze authority at the ext mint authority PDA: unreachable forever.
+    const parkIx = createSetAuthorityInstruction(
+      $.extMint.publicKey,
+      $.admin.publicKey,
+      AuthorityType.FreezeAccount,
+      $.getExtMintAuthority(),
+      [],
+      TOKEN_2022_PROGRAM_ID
+    );
+    await $.provider.sendAndConfirm!(new Transaction().add(parkIx), [$.admin]);
+
+    await $.expectAnchorError(handoff(stablecoin), "FreezeAuthorityUnreachable");
   });
 
   test("second call after a successful handoff - reverts", async () => {
